@@ -1,0 +1,128 @@
+# ============================================================
+# prek / pre-commit 配置文件
+# 用途：在 git commit 之前自动执行代码质量检查
+# 使用方式：运行 `prek install` 安装钩子，之后每次 commit 自动触发
+# 手动运行：`prek run --all-files`
+# ============================================================
+
+# ------------------------------
+# 第一部分：通用基础钩子（来自官方预定义仓库）
+# ------------------------------
+repos:
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    # 使用固定的 commit hash 锁定版本，确保所有人使用相同的钩子版本
+    # 可定期运行 `prek auto-update` 更新到最新
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
+    hooks:
+
+      # 钩子1：检查是否添加了大文件（默认超过 500KB 会阻止提交）
+      - id: check-added-large-files
+        # 修改阈值：允许最大 750KB（可根据项目调整）
+        args: ['--maxkb=750']
+        # 排除特定文件（如 uv.lock 可能较大，但属于依赖锁定文件，可放行）
+        exclude: ^uv.lock$
+
+      # 钩子2：检查 TOML 文件（如 pyproject.toml）语法是否正确
+      - id: check-toml
+
+      # 钩子3：检查 YAML 文件语法是否正确
+      - id: check-yaml
+        # --unsafe 允许解析复杂 YAML（如包含特殊标记），大多数项目需要开启
+        args: [--unsafe]
+
+      # 钩子4：确保每个文件末尾有且仅有一个换行符（符合 POSIX 规范）
+      - id: end-of-file-fixer
+
+      # 钩子5：删除行尾多余的空格（避免 diff 时出现无意义的变更）
+      - id: trailing-whitespace
+
+  # ------------------------------
+  # 第二部分：拼写检查（可选，但有助于发现注释/文档中的错字）
+  # ------------------------------
+  - repo: https://github.com/crate-ci/typos
+    rev: bee27e3a4fd1ea2111cf90ab89cd076c870fce14  # v1.48.0
+    hooks:
+      - id: typos
+        # --force-exclude：忽略 .gitignore 中定义的文件，避免检查生成文件
+        args: [--force-exclude]
+
+  # ------------------------------
+  # 第三部分：Python 代码质量检查（使用本地命令 + uv 执行）
+  # 注意：这种写法要求你已经在虚拟环境中安装了这些工具（通过 uv 或 pip）
+  # 优点：速度快，无需额外下载，完全复用当前开发环境
+  # 缺点：需要确保环境中有 `uv` 和对应的工具（ruff, mypy 等）
+  # ------------------------------
+  - repo: local                         # 表示钩子来自本地，不联网拉取
+    hooks:
+
+      # --- 钩子6：Ruff Lint 检查 ---
+      - id: local-ruff-check
+        name: ruff check                 # 显示在终端中的钩子名称
+        # entry：执行的命令
+        # uv run 表示使用 uv 虚拟环境运行；ruff check 是主命令
+        # --force-exclude：强制遵守 .gitignore 排除规则
+        # --fix：自动修复可修复的问题（如 import 排序、格式修正）
+        # --exit-non-zero-on-fix：如果有文件被修改，则退出码非0，阻止提交
+        entry: uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
+        require_serial: true             # 串行执行（避免资源冲突，ruff 可以并行，但建议保留）
+        language: unsupported            # 用户自行提供工具（通过 uv 环境）
+        types: [python]                  # 只针对 Python 文件运行
+
+      # --- 钩子7：Ruff 格式化（替代 Black） ---
+      - id: local-ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude --exit-non-zero-on-format
+        require_serial: true
+        language: unsupported
+        types: [python]
+
+      # --- 钩子8：Mypy 静态类型检查 ---
+      - id: local-mypy
+        name: mypy check (backend)
+        # 只检查后端代码（backend/ 目录），前端代码不含 Python 类型
+        entry: uv run mypy backend
+        require_serial: true
+        language: unsupported
+        # pass_filenames: false 表示始终检查整个 backend 目录而非仅变更的文件
+        # 这样能保证全局类型一致性，避免只检查局部导致的遗漏
+        pass_filenames: false
+
+      # --- 钩子9：Ty 类型检查（Astral 出品的快速类型检查器，可选） ---
+      - id: local-ty
+        name: ty check
+        entry: uv run ty check
+        require_serial: true
+        language: unsupported
+        pass_filenames: false
+
+  # ------------------------------
+  # 第四部分：commit-msg 钩子——检查提交消息是否符合约定式提交规范
+  # 需要安装 commitizen（已在 dev dependencies 中）
+  # ------------------------------
+  - repo: local
+    hooks:
+
+      # --- 钩子10：Commitizen 提交消息检查 ---
+      - id: local-commitizen
+        name: commitizen check commit message
+        # 每次 commit 时检查提交信息是否符合 Conventional Commits 规范
+        # 例如：feat: xxx, fix: xxx, docs: xxx, refactor: xxx 等
+        entry: uv run cz check --commit-msg-file
+        require_serial: true
+        language: unsupported
+        # stages: [commit-msg] 表示该钩子在 commit-msg 阶段运行
+        # commit-msg 阶段会在用户编辑完提交信息后运行
+        stages: [commit-msg]
+
+  # ------------------------------
+  # 额外说明：如果不想用 local 方式，也可以用预定义的 ruff 仓库（更简单）
+  # 但需要联网下载，且不能直接复用 uv 环境。两种方式二选一即可。
+  # 下面的配置是替代方式（注释掉，仅供参考）：
+  # ------------------------------
+  # - repo: https://github.com/astral-sh/ruff-pre-commit
+  #   rev: v0.15.17
+  #   hooks:
+  #     - id: ruff
+  #       args: [--fix, --exit-non-zero-on-fix]
+  #     - id: ruff-format

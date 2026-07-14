@@ -1,0 +1,76 @@
+[project]
+name = "tjll"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "commitizen>=4.16.4",
+    "mypy>=2.3.0",
+    "ruff>=0.15.21",
+    "ty>=0.0.59",
+    "pre-commit>=4.2.0",
+]
+
+
+# ============================================================
+# Commitizen 配置：约定式提交 (Conventional Commits)
+# 文档：https://commitizen-tools.github.io/commitizen/
+# ============================================================
+[tool.commitizen]
+# 使用的提交规范模板：cz_conventional_commits 是标准约定式提交
+name = "cz_conventional_commits"
+
+# 当前项目版本号（应与 [project].version 保持一致）
+version = "0.1.0"
+
+# 版本号所在的文件列表（cz bump 会自动更新这些文件中的版本号）
+# 格式：["文件路径:版本号模式"]
+version_files = [
+    "pyproject.toml:version",
+]
+
+# Git 标签格式（cz bump 创建 tag 时使用）
+tag_format = "v$version"
+
+# 版本号增长规则：
+#   - major：主版本号（不兼容的 API 变更）
+#   - minor：次版本号（向下兼容的功能性新增）
+#   - patch：修订号（向下兼容的问题修正）
+#   - bump：根据 commit 消息自动推断（推荐）
+bump_message = "bump: version $current_version → $new_version"
+
+# 更新 changelog 时的额外钩子
+# changelog_merge_hook = "echo 'changelog updated'"
+
+# 允许的提交类型（默认已包含 feat, fix 等标准类型）
+# 这里列出全部可用的类型供参考
+
+
+# ============================================================
+# Mypy 配置：仅检查后端代码
+# ============================================================
+[tool.mypy]
+# 只检查 backend/ 目录（前端代码不涉及 Python）
+files = "backend"
+
+# Python 版本
+python_version = "3.14"
+
+# 严格模式开关（建议逐步开启）
+strict = false
+
+# 允许未类型化的函数调用（逐步迁移时有用）
+# disallow_untyped_calls = true
+
+# 检查未类型化的函数定义
+# disallow_untyped_defs = true
+
+# 忽略缺少 import 的错误（某些第三方库没有类型 stub）
+ignore_missing_imports = true
+
+# 允许 redef 覆盖变量（应对特定模式）
+allow_redefinition = true
