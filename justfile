@@ -7,8 +7,11 @@
 
 # ============================================================
 # 设置
+# 注意：Windows 下默认的 sh 来自 Git Bash（Git 安装自带）
+# 如果 Git 安装路径不同，修改下面的路径
 # ============================================================
 set positional-arguments
+set shell := ["D:\\Software\\Git\\usr\\bin\\sh.exe", "-c"]
 
 # ============================================================
 # 一、项目初始化
@@ -17,12 +20,11 @@ set positional-arguments
 # 安装所有依赖 + 安装 prek/pre-commit 钩子
 # 新成员克隆项目后运行此命令即可开始开发
 install:
-    # 1. 安装 Python 依赖（uv 自动读取 pyproject.toml 的 dev 依赖）
     uv sync --all-groups
-    # 2. 安装 pre-commit / prek git 钩子
-    if command -v prek > /dev/null 2>&1; then prek install; else uv run pre-commit install; fi
-    if command -v prek > /dev/null 2>&1; then prek install --hook-type commit-msg; else uv run pre-commit install --hook-type commit-msg; fi
-    # 3. 成功提示
+    # 1. 安装 pre-commit 阶段钩子
+    prek install --overwrite
+    # 2. 手动创建 commit-msg 钩子，绕过 prek（Windows 上 prek 的 commit-msg 有 bug）
+    printf '#!/bin/sh\nexec uv run cz check --commit-msg-file "$@"\n' > .git/hooks/commit-msg
     @echo ""
     @echo "============================================"
     @echo "  ✓ 安装完成！"
@@ -39,23 +41,23 @@ install:
 lint: fix fmt-check mypy ty
     @echo "✓ 所有代码检查通过！"
 
-# 自动修复代码问题（ruff 自动修复 lint 错误）
+# ruff 自动修复 lint 问题
 fix:
     uv run ruff check --force-exclude --fix
 
-# 检查代码格式是否正确（不修改文件）
+# 检查代码格式（不修改文件）
 fmt-check:
     uv run ruff format --force-exclude --check
 
-# 自动格式化代码（ruff formatter 替代 black）
+# 自动格式化代码
 fmt:
     uv run ruff format --force-exclude
 
-# Mypy 静态类型检查（仅后端，前端不含 Python）
+# Mypy 后端类型检查
 mypy:
     uv run mypy backend
 
-# Ty 类型检查（Astral 出品的快速类型检查器，可选）
+# Ty 类型检查（可选）
 ty:
     uv run ty check
 
@@ -65,21 +67,21 @@ ty:
 
 # 运行所有钩子（作用于全部文件）
 check:
-    if command -v prek > /dev/null 2>&1; then prek run --all-files; else uv run pre-commit run --all-files; fi
+    prek run --all-files
 
 # 手动更新钩子版本到最新
 prek-update:
-    if command -v prek > /dev/null 2>&1; then prek auto-update; else uv run pre-commit autoupdate; fi
+    prek auto-update
 
 # ============================================================
 # 四、Commitizen 提交与版本管理
 # ============================================================
 
-# 交互式提交代码（推荐！自动引导你写符合规范的 commit 消息）
+# 交互式提交代码（自动引导符合规范的 commit 消息）
 cz:
     uv run cz commit
 
-# 查看提交规范帮助（列出所有可用 commit 类型：feat, fix, docs 等）
+# 查看提交规范帮助
 cz-help:
     uv run cz schema
 
@@ -114,7 +116,7 @@ push-tags:
     git push
     git push --tags
 
-# 删除远程分支（合并后清理用）
+# 删除远程分支
 # 用法：just branch-delete feat/user-auth
 branch-delete branch:
     git push origin --delete {{ branch }}
