@@ -53,8 +53,8 @@ class Business(Base):
     display_phone: Mapped[str] = mapped_column(String(30), default="")
 
     # ── 营业时间（JSON 存储） ──
-    business_hours: Mapped[str | None] = mapped_column(
-        Text, nullable=True, comment="JSON，business_hours 字段"
+    hours: Mapped[str | None] = mapped_column(
+        "business_hours", Text, nullable=True, comment="JSON，hours 字段"
     )
 
     # ── 其他 ──

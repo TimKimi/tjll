@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ============================================================
@@ -90,8 +90,16 @@ class YelpBusiness(BaseModel):
     display_phone: str = ""
 
     # ── 营业 ──
-    business_hours: YelpBusinessHours | None = Field(None, alias="hours")
+    hours: YelpBusinessHours | None = Field(None, alias="business_hours")
     special_hours: list[dict] | None = None
+
+    @field_validator("hours", mode="before")
+    @classmethod
+    def _normalize_hours(cls, v: object) -> object:
+        """Search 返回 list，Details 返回单对象，统一取第一个。"""
+        if isinstance(v, list):
+            return v[0] if v else None
+        return v
 
     # ── 其他 ──
     transactions: list[str] = []
@@ -169,7 +177,7 @@ class StoredBusiness(BaseModel):
     location: YelpLocation | None = None
     phone: str = ""
     display_phone: str = ""
-    business_hours: YelpBusinessHours | None = None
+    hours: YelpBusinessHours | None = None
     transactions: list[str] = []
     photos: list[str] = []
     yelp_menu_url: str | None = None

@@ -62,6 +62,22 @@ ty:
     uv run ty check
 
 # ============================================================
+# 七、测试
+# ============================================================
+
+# 运行单元测试（不调真实 API）
+test-unit:
+    uv run pytest -c pyproject.toml -m "not integration" -v --tb=short
+
+# 运行集成测试（调 Yelp 真实 API + 数据库）
+test-integration:
+    uv run pytest -c pyproject.toml -m integration -v --tb=short
+
+# 全量测试（单元 + 集成）
+test: test-unit test-integration
+
+
+# ============================================================
 # 三、pre-commit / prek 相关
 # ============================================================
 

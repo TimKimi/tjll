@@ -19,6 +19,9 @@ dev = [
     "ruff>=0.15.21",
     "ty>=0.0.59",
     "pre-commit>=4.2.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-httpx>=0.36.2",
 ]
 
 
@@ -64,6 +67,14 @@ extend-ignore-re = [
     # Yelp API 示例响应中的商家/评论 ID（非拼写错误）
     "IYWnA",
     "PnDKg",
+]
+
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["backend/tests"]
+markers = [
+    "integration: test that calls real Yelp API and database",
 ]
 
 
