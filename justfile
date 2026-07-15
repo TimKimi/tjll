@@ -99,8 +99,28 @@ show-version:
     uv run cz version
 
 # ============================================================
-# 五、Git 推送 & 分支管理
+# 五、Git 操作 & 分支管理
 # ============================================================
+
+# 切到 develop 分支并拉取最新
+dev-pull:
+    git checkout develop
+    git pull
+
+# 创建你本地的分支
+new-branch branch:
+    git checkout -b {{ branch }}
+
+# 拉取dev分支到最新并从dev分支创建本地分支
+dev-branch branch:
+    dev-pull
+    new-branch {{ branch }}
+
+# 删除本地及远程已完成的分支，并拉取dev分支到最新并创建新分支
+del-branch branch newbranch:
+    git branch -d {{ branch }}
+    just branch-delete {{ branch }}
+    dev-branch {{ newbranch }}
 
 # 推送当前分支到远程
 push:

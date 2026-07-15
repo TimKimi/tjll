@@ -112,13 +112,10 @@ git commit -m "chore: init project structure"
 git remote add origin https://github.com/<你的用户名>/tjll.git
 
 # 推送到远程
-just push-u main
+just push-u master
 ```
 
-> 如果远程仓库默认分支名为 `master`，先统一改为 `main`：
-> ```bash
-> git branch -M main
-> ```
+
 
 ### 4. 邀请协作者
 
@@ -194,16 +191,16 @@ just cz
 这会启动 Commitizen 交互式界面，引导你填写符合规范的 commit 消息：
 
 ```
-? Select the type of change you're committing:
-  feat     — 新功能
-  fix      — 修复 Bug
-  docs     — 文档更新
-  style    — 代码格式（不影响功能）
-  refactor — 重构（既不是修复也不是新功能）
-  perf     — 性能优化
-  test     — 测试相关
-  chore    — 构建/工具/依赖变更
-  ...
+? Select the type of change you are committing (Use arrow keys)
+ » fix: A bug fix. Correlates with PATCH in SemVer
+   feat: A new feature. Correlates with MINOR in SemVer
+   docs: Documentation only changes
+   style: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
+   refactor: A code change that neither fixes a bug nor adds a feature
+   perf: A code change that improves performance
+   test: Adding missing or correcting existing tests
+   build: Changes that affect the build system or external dependencies (example scopes: pip, docker, npm)
+   ci: Changes to CI configuration files and scripts (example scopes: GitLabCI)
 ? Tell us about this change: (提交描述)
 ```
 
@@ -257,7 +254,7 @@ just check
 ### 分支策略（Git Flow 简化版）
 
 ```
-main          ── 生产就绪代码，只从 develop / hotfix 合并
+master          ── 生产就绪代码，只从 develop / hotfix 合并
   │
 develop       ── 日常开发集成分支，功能分支从这里拉出
   │
@@ -265,7 +262,7 @@ develop       ── 日常开发集成分支，功能分支从这里拉出
   ├── fix/xxx        Bug 修复
   ├── refactor/xxx   重构
   ├── docs/xxx       文档
-  └── hotfix/xxx     生产环境紧急修复（直接从 main 拉出，修复后合并回 main 和 develop）
+  └── hotfix/xxx     生产环境紧急修复（直接从 master 拉出，修复后合并回 master 和 develop）
 ```
 
 ### 分支命名规范
@@ -307,12 +304,8 @@ graph TD
 #### 第一步：同步最新代码
 
 ```bash
-# 切到 develop 分支并拉取最新
-git checkout develop
-git pull
-
-# 创建你的功能分支
-git checkout -b feat/xxx
+# 从 develop 拉取最新并创建新分支（一步到位）
+just dev-branch feat/xxx
 ```
 
 #### 第二步：开发与提交
@@ -380,24 +373,24 @@ just push                       # 推送到同一分支，PR 自动更新
 PR 合并后：
 
 ```bash
-# 切回 develop，拉取最新
-git checkout develop
-git pull
+# 快捷操作，删除本地及远程feat/xxx并从远程develop拉取并创建feat/yyy
+just del-branch feat/xxx feat/yyy
 
+# 切回 develop，拉取最新
+just dev-pull
 # 删除本地已完成的分支（可选）
 git branch -d feat/xxx
-
 # 删除远程已合并的分支（可选）
 just branch-delete feat/xxx
 ```
 
-### 发布流程（develop → main）
+### 发布流程（develop → master）
 
 当 `develop` 累积了足够的功能，准备发布新版时：
 
 ```bash
-# 切到 main
-git checkout main
+# 切到 master
+git checkout master
 git pull
 
 # 合并 develop
@@ -406,17 +399,17 @@ git merge develop
 # 使用 Commitizen 打版本标签
 just cz-bump patch   # 或 minor / major，取决于变更范围
 
-# 推送 main 和 tag
+# 推送 master 和 tag
 just push-tags
 ```
 
-> 生产环境紧急修复走 `hotfix` 分支，直接从 `main` 拉出：
+> 生产环境紧急修复走 `hotfix` 分支，直接从 `master` 拉出：
 > ```bash
-> git checkout -b hotfix/xxx main
+> git checkout -b hotfix/xxx master
 > # 修复 → 检查 → 提交
 > just cz
-> # 合并到 main 和 develop
-> git checkout main && git merge hotfix/xxx
+> # 合并到 master 和 develop
+> git checkout master && git merge hotfix/xxx
 > git checkout develop && git merge hotfix/xxx
 > ```
 
@@ -424,7 +417,7 @@ just push-tags
 
 | 原则 | 说明 |
 |---|---|
-| **永远不要在 main 上直接开发** | main 只接受从 develop / hotfix 合并来的代码 |
+| **永远不要在 master 上直接开发** | master 只接受从 develop / hotfix 合并来的代码 |
 | **功能开发从 develop 拉分支** | 保证 develop 始终是最新的集成分支 |
 | **PR 必须经过 Code Review** | 至少一人 Approve 后才能合并 |
 | **推送前跑 just lint** | 避免无意义的 CI 失败 |
@@ -451,14 +444,14 @@ just push-tags
 
 | 类型 | 说明 | 版本影响 |
 |---|---|---|
-| `feat` | 新功能 | 次版本号+ |
 | `fix` | 修复 Bug | 修订号+ |
+| `feat` | 新功能 | 次版本号+ |
 | `docs` | 文档变更 | — |
 | `style` | 代码格式（空格、分号等） | — |
 | `refactor` | 重构 | — |
 | `perf` | 性能优化 | — |
 | `test` | 增加或修改测试 | — |
-| `chore` | 构建工具、依赖等变更 | — |
+| `build` | 构建系统或外部依赖变更 | — |
 | `ci` | CI/CD 配置变更 | — |
 
 ### 示例
@@ -532,9 +525,9 @@ just uv-outdated
 
 | 触发时机 | 任务 |
 |---|---|
-| push / PR → main 或 develop | ruff check, ruff format --check, mypy backend |
+| push / PR → master 或 develop | ruff check, ruff format --check, mypy backend |
 | 推标签 v* | 自动发布（构建 + 部署） |
-| push → main | 自动更新 CHANGELOG（可选） |
+| push → master | 自动更新 CHANGELOG（可选） |
 
 届时会补充 `.github/workflows/` 目录下的 workflow 文件。
 
@@ -565,7 +558,7 @@ just prek-update
 ### 如何创建新的贡献分支？
 
 ```bash
-git checkout -b feat/xxx   # 新功能
-git checkout -b fix/xxx    # 修复
-git checkout -b docs/xxx   # 文档
+just new-branch feat/xxx   # 新功能
+just new-branch fix/xxx    # 修复
+just new-branch docs/xxx   # 文档
 ```
