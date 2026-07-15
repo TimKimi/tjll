@@ -56,7 +56,6 @@ __screenshots__/
 .*_cache
 
 # Local machine configs (do not push)
-justfile
 .python-version.local
 
 # Root secrets (Yelp / DB); commit .env.example only

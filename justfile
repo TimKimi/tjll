@@ -7,11 +7,10 @@
 
 # ============================================================
 # 设置
-# 注意：Windows 下默认的 sh 来自 Git Bash（Git 安装自带）
-# 如果 Git 安装路径不同，修改下面的路径
+# Windows 下默认的 sh 来自 Git Bash（Git 安装自带）
 # ============================================================
 set positional-arguments
-set shell := ["D:\\Software\\Git\\usr\\bin\\sh.exe", "-c"]
+set shell := ["sh", "-c"]
 
 # ============================================================
 # 一、项目初始化
@@ -62,6 +61,22 @@ ty:
     uv run ty check
 
 # ============================================================
+# 七、测试
+# ============================================================
+
+# 运行单元测试（不调真实 API）
+test-unit:
+    uv run pytest -c pyproject.toml -m "not integration" -v --tb=short
+
+# 运行集成测试（调 Yelp 真实 API + 数据库）
+test-integration:
+    uv run pytest -c pyproject.toml -m integration -v --tb=short
+
+# 全量测试（单元 + 集成）
+test: test-unit test-integration
+
+
+# ============================================================
 # 三、pre-commit / prek 相关
 # ============================================================
 
@@ -99,8 +114,28 @@ show-version:
     uv run cz version
 
 # ============================================================
-# 五、Git 推送 & 分支管理
+# 五、Git 操作 & 分支管理
 # ============================================================
+
+# 切到 develop 分支并拉取最新
+dev-pull:
+    git checkout develop
+    git pull
+
+# 创建你本地的分支
+new-branch branch:
+    git checkout -b {{ branch }}
+
+# 拉取dev分支到最新并从dev分支创建本地分支
+dev-branch branch:
+    just dev-pull
+    just new-branch {{ branch }}
+
+# 删除本地及远程已完成的分支，并拉取dev分支到最新并创建新分支
+del-branch branch newbranch:
+    git branch -d {{ branch }}
+    just branch-delete {{ branch }}
+    just dev-branch {{ newbranch }}
 
 # 推送当前分支到远程
 push:
@@ -120,6 +155,15 @@ push-tags:
 # 用法：just branch-delete feat/user-auth
 branch-delete branch:
     git push origin --delete {{ branch }}
+
+# ============================================================
+# 七、后端开发
+# ============================================================
+
+# 启动后端开发服务器（热重载）
+serve:
+    uv run uvicorn backend.main:app --reload
+
 
 # ============================================================
 # 六、依赖管理
