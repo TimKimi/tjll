@@ -138,18 +138,23 @@ just install    # 安装依赖和钩子
 ```
 tjll/
 ├── backend/               # 后端代码（Python）
-│   ├── __init__.py
-│   └── main.py
+│   ├── config.py          # 配置（读同目录 .env）
+│   ├── .env.example       # 环境变量模板（提交）
+│   ├── main.py
+│   └── RAG/               # 文档 / 检索 / OpenSearch / 模型 / 基础设施
+│       ├── document/
+│       ├── retrieve/
+│       ├── opensearch/
+│       ├── models/        # 权重本地放置，不入 git
+│       └── infra/         # docker-compose / Dockerfile（*.example 入 git）
 ├── frontend/              # 前端代码（待定）
 │   └── .gitkeep
-├── .pre-commit-config.yaml  # pre-commit 钩子配置
-├── justfile               # 常用命令入口
-├── pyproject.toml         # Python 项目配置
-├── uv.lock                # 依赖锁定文件
+├── .pre-commit-config.yaml
+├── justfile
+├── pyproject.toml
+├── uv.lock
 └── README.md
 ```
-
-> 后续补充 `backend/` 内部的业务模块和 `frontend/` 的前端框架代码。
 
 ---
 
