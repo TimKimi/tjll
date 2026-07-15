@@ -49,3 +49,6 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Sources
+/frontend/public/images/
