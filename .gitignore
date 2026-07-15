@@ -11,6 +11,37 @@ wheels/
 
 # Local machine configs (do not push)
 justfile
-.env
-.env.*
 .python-version.local
+
+# Settings: commit .env.example only (backend root)
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Infra: commit *.example only; local compose/Dockerfile kept for personal use
+backend/RAG/infra/docker-compose.yml
+!backend/RAG/infra/docker-compose.yml.example
+backend/RAG/infra/opensearch/Dockerfile
+!backend/RAG/infra/opensearch/Dockerfile.example
+
+# Model weights under backend/RAG: keep placeholders only
+backend/RAG/models/**
+!backend/RAG/models/**/
+!backend/RAG/models/**/.gitkeep
+!backend/RAG/models/**/README.md
+!backend/RAG/models/README.md
+
+# ModelScope cache (never commit)
+modelscope/
+../modelscope/
+
+# Runtime outputs (backend-local)
+backend/data/
+data/
+
+# Local scratch scripts
+format.py
+*.local
+
+# Editor local settings (conda interpreter path is machine-specific)
+.vscode/

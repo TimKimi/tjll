@@ -43,6 +43,11 @@ dependencies = [
     "tiktoken==0.13.0",
     "numpy==2.4.6",
     "redis==7.4.1",
+    # ---- 配置 / 检索客户端 / 文档加载 ----
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "opensearch-py>=2.4.0",
+    "openpyxl>=3.1.0",
 ]
 
 [dependency-groups]
