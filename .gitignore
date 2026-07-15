@@ -9,11 +9,18 @@ wheels/
 # Virtual environments
 .venv
 
+# lint_cache
+.*_cache
+
 # Local machine configs (do not push)
 justfile
 .python-version.local
 
-# Settings: commit .env.example only (backend root)
+# Root secrets (Yelp / DB); commit .env.example only
+.env
+!.env.example
+
+# Backend settings: commit .env.example only
 backend/.env
 backend/.env.*
 !backend/.env.example

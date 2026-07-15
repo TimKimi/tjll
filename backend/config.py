@@ -1,11 +1,13 @@
-"""项目配置：应用根为 backend/；密钥读同目录 .env。"""
+"""应用配置：Yelp/DB + RAG；密钥读仓库根 .env 与 backend/.env。"""
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/config.py → 应用根 backend/
 PROJECT_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = PROJECT_ROOT.parent
 
 
 def _resolve_path(path: str) -> str:
@@ -17,10 +19,27 @@ def _resolve_path(path: str) -> str:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(PROJECT_ROOT / ".env"),
+        env_file=(
+            str(REPO_ROOT / ".env"),
+            str(PROJECT_ROOT / ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
+
+    # ---- Yelp API（develop）----
+    YELP_API_KEY: str = Field(default="", validation_alias="YELP_API")
+    YELP_CLIENT_ID: str = Field(default="", validation_alias="CLIENT_ID")
+    YELP_API_BASE_URL: str = "https://api.yelp.com/v3"
+
+    # ---- 数据库 ----
+    DATABASE_URL: str = "postgresql+asyncpg://tjll:tjll_dev@localhost:5432/tjll"
+    DATABASE_ECHO: bool = False
+
+    # ---- 服务器 ----
+    APP_HOST: str = "127.0.0.1"
+    APP_PORT: int = 8000
 
     # ---- LLM（后续生成；本期文档加载可空）----
     api_key: str = ""
@@ -47,7 +66,6 @@ class Settings(BaseSettings):
 
     # ---- MinerU / ModelScope ----
     mineru_model_source: str = "modelscope"
-    # 相对 backend/；例如 ../modelscope → SHIXUNDAXIANGMU/modelscope
     modelscope_cache_path: str = ""
     mineru_pipeline_model_path: str = (
         "models/OpenDataLab--PDF-Extract-Kit-1.0/snapshots/master"
@@ -68,9 +86,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 10
     rerank_top_n: int = 3
     embedding_dims: int = 768  # bge-base-zh-v1.5
-    # hybrid query + Search Pipeline（normalization-processor）
     hybrid_pipeline_name: str = "rag_hybrid_pipeline"
-    # pipeline weights 顺序：[bm25, vector]
     hybrid_bm25_weight: float = 0.3
     hybrid_vector_weight: float = 0.7
 
