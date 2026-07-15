@@ -22,8 +22,14 @@
 ```
 backend/
 ├── __init__.py              # 包标识
-├── main.py                  # FastAPI 应用入口，注册路由、挂载中间件
+├── main.py                  # FastAPI 应用入口，lifespan 管理建表
 ├── config.py                # 全局配置（环境变量 → Settings 对象）
+├── database.py              # 异步引擎 & 会话工厂
+├── models/                  # ORM 层 —— SQLAlchemy 表映射
+│   ├── __init__.py
+│   ├── base.py              # DeclarativeBase
+│   ├── business.py          # businesses 表
+│   └── review.py            # reviews 表
 ├── routers/                 # 路由层 —— 定义 API 端点
 │   ├── __init__.py
 │   └── ...                  # 按业务模块拆分文件
@@ -32,18 +38,24 @@ backend/
 │   └── ...                  # 一个模块一个文件
 └── schemas/                 # 模型层 —— Pydantic 请求/响应模型
     ├── __init__.py
+    ├── yelp.py              # Yelp API 响应 + 本地存储 Pydantic 模型
     └── ...                  # 一个模块一个文件
+
+docker-compose.yml           # PostgreSQL + pgvector 容器
+.env                         # 敏感配置（被 .gitignore 排除）
+.env.example                 # 配置模板（可提交）
 ```
 
 ### 各层职责
 
 | 层 | 目录 | 职责 | 依赖方向 |
 |---|---|---|---|
+| **ORM 层** | `models/` | SQLAlchemy 表映射，定义列、索引、外键 | → database |
 | **路由层** | `routers/` | 定义 HTTP 端点、参数校验、状态码、异常处理 | → services |
-| **服务层** | `services/` | 业务逻辑编排、外部 API 调用、数据处理 | → schemas |
-| **模型层** | `schemas/` | Pydantic 模型（请求参数、响应体） | 无（纯数据类） |
+| **服务层** | `services/` | 业务逻辑编排、外部 API 调用、数据库读写 | → schemas, models |
+| **模型层** | `schemas/` | Pydantic 模型（请求参数、响应体，与 ORM 分离） | 无（纯数据类） |
 
-**依赖规则：** `routers → services → schemas`，禁止逆向依赖。
+**依赖规则：** `routers → services → scheams + models`，`models` 不依赖其他层。
 
 ---
 
@@ -54,6 +66,10 @@ backend/
 | Web 框架 | FastAPI | 异步、自动生成 OpenAPI 文档 |
 | HTTP 客户端 | httpx | 异步、与 FastAPI 原生配合 |
 | 数据模型 | Pydantic | 内置 FastAPI，做请求/响应校验 |
+| 数据库 | PostgreSQL 17 + pgvector | 关系数据 + 向量检索（RAG 用） |
+| ORM | SQLAlchemy 2.0 (async) | 异步查询，后期可切换 PostgreSQL → SQLite |
+| 异步驱动 | asyncpg | PostgreSQL 高性能异步驱动 |
+| 容器 | Docker Compose | 本地一键启动数据库 |
 | 包管理 | uv | 通过 `just add` 添加依赖 |
 | 运行 | uvicorn | ASGI 服务器 |
 
@@ -65,10 +81,13 @@ backend/
 # 1. 安装所有依赖
 just install
 
-# 2. 启动开发服务器（热重载）
+# 2. 启动数据库（Docker）
+docker compose up -d
+
+# 3. 启动开发服务器（热重载，自动建表）
 just serve
 
-# 3. 浏览器打开
+# 4. 浏览器打开
 # http://127.0.0.1:8000/health   — 健康检查
 # http://127.0.0.1:8000/docs     — Swagger UI
 ```
@@ -147,6 +166,95 @@ async def get_user(user_id: str) -> UserResponse:
 from backend.routers import user  # ← 新增
 
 app.include_router(user.router)    # ← 注册
+```
+
+---
+
+## 数据库
+
+### 启动数据库
+
+项目使用 Docker Compose 运行 PostgreSQL 17，内置 pgvector 扩展（供 RAG 向量检索用）。
+
+```bash
+# 首次启动（自动拉取镜像）
+docker compose up -d
+
+# 查看状态
+docker compose ps
+
+# 停止
+docker compose down
+
+# 查看数据
+docker compose exec -T db psql -U tjll -d tjll -c "SELECT * FROM businesses;"
+```
+
+数据库连接配置在 `.env` 中：
+
+```
+DATABASE_URL=postgresql+asyncpg://tjll:tjll_dev@localhost:5432/tjll
+```
+
+### 自动建表
+
+`backend/main.py` 的 `lifespan` 中自动执行 `Base.metadata.create_all`，服务器启动时若表不存在则自动创建。
+
+### ORM 模型 vs Pydantic Schema
+
+| | ORM 模型 | Pydantic Schema |
+|---|---|---|
+| **文件** | `backend/models/*.py` | `backend/schemas/*.py` |
+| **基类** | `SQLAlchemy DeclarativeBase` | `pydantic.BaseModel` |
+| **用途** | 定义表结构、查询 | API 请求/响应校验、内存中数据交换 |
+| **存 JSON** | 存为 `Text` 字符串（如 `categories`、`address`） | `list[YelpCategory]`、`YelpLocation` |
+
+**转换流程：**
+
+```
+Yelp API 响应
+     ↓ 解析
+Pydantic Schema (schemas/yelp.py)
+     ↓ .model_dump()
+ORM 模型 (models/business.py)
+     ↓ async_session.add()
+PostgreSQL
+```
+
+### 当前表结构
+
+**`businesses` 表** — 商家
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | VARCHAR(22) PK | Yelp 商家 ID |
+| `name` | VARCHAR(255) | 商家名称，有索引 |
+| `rating` | FLOAT | 评分 |
+| `review_count` | INTEGER | 评论数 |
+| `categories` | TEXT (JSON) | 分类标签 |
+| `latitude` / `longitude` | FLOAT | 经纬度 |
+| `embedding` | TEXT | pgvector 向量（RAG 用） |
+| `stored_at` | TIMESTAMP | 首次入库时间（自动） |
+| `updated_at` | TIMESTAMP | 最近更新时间（自动） |
+
+**`reviews` 表** — 评论
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | VARCHAR(22) PK | Yelp 评论 ID |
+| `business_id` | VARCHAR(22) FK | 所属商家，CASCADE 删除 |
+| `text` | TEXT | 评论文本 |
+| `rating` | INTEGER | 评分 1~5 |
+| `embedding` | TEXT | pgvector 向量（RAG 用） |
+| `stored_at` | TIMESTAMP | 入库时间（自动） |
+
+### 如何修改表结构
+
+SQLAlchemy 不会自动执行 `ALTER TABLE`。如果要改表结构，需要手动连接数据库执行 DDL，或使用迁移工具（后续考虑 Alembic）。
+
+```bash
+# 手动连库
+docker compose exec -T db psql -U tjll -d tjll
 ```
 
 ---
@@ -324,8 +432,14 @@ uv sync          # 同步到 lock 文件版本
 ```
 backend/
 ├── __init__.py
-├── main.py
-├── config.py
+├── main.py                  # FastAPI 入口 + lifespan 建表
+├── config.py                # 配置
+├── database.py              # 异步引擎
+├── models/                  # ORM 表映射
+│   ├── __init__.py
+│   ├── base.py
+│   ├── business.py
+│   └── review.py
 ├── routers/
 │   ├── __init__.py
 │   ├── yelp.py        ← Yelp 商家搜索
@@ -334,13 +448,15 @@ backend/
 ├── services/
 │   ├── __init__.py
 │   ├── yelp.py
-│   ├── review.py
 │   └── ...
 └── schemas/
     ├── __init__.py
     ├── yelp.py
-    ├── review.py
     └── ...
+
+docker-compose.yml           # PostgreSQL 容器
+.env                         # 敏感配置（不提交）
+.env.example                 # 配置模板（可提交）
 ```
 
 > **原则：** 一个文件就是一个独立的工作单元，不同人不同文件，互不干扰。

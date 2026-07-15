@@ -1,4 +1,4 @@
-"""应用配置，从环境变量读取配置项。
+"""应用配置，从环境变量 + .env 文件读取配置项。
 
 使用方式：
     from backend.config import settings
@@ -24,6 +24,13 @@ class Settings:
     YELP_API_KEY: str = environ.get("YELP_API", "")
     YELP_CLIENT_ID: str = environ.get("CLIENT_ID", "")
     YELP_API_BASE_URL: str = "https://api.yelp.com/v3"
+
+    # ── 数据库 ─────────────────────────────────────────────
+    DATABASE_URL: str = environ.get(
+        "DATABASE_URL",
+        "postgresql+asyncpg://tjll:tjll_dev@localhost:5432/tjll",
+    )
+    DATABASE_ECHO: bool = environ.get("DATABASE_ECHO", "").lower() == "true"
 
     # ── 服务器 ─────────────────────────────────────────────
     APP_HOST: str = environ.get("APP_HOST", "127.0.0.1")
