@@ -1,0 +1,25 @@
+# PostgreSQL + pgvector — 数据 & 向量库
+# 启动：docker compose up -d
+# 停止：docker compose down
+
+services:
+  db:
+    image: postgres:17
+    container_name: tjll-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: tjll
+      POSTGRES_USER: tjll
+      POSTGRES_PASSWORD: tjll_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tjll -d tjll"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
