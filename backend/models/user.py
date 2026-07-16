@@ -21,7 +21,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255), comment="用户名")
     review_count: Mapped[int] = mapped_column(Integer, default=0, comment="评论数")
     yelping_since: Mapped[str] = mapped_column(
-        String(16), default="", comment="加入 Yelp 时间"
+        String(20), default="", comment="加入 Yelp 时间，格式 YYYY-MM-DD HH:MM:SS"
     )
     useful: Mapped[int] = mapped_column(Integer, default=0)
     funny: Mapped[int] = mapped_column(Integer, default=0)

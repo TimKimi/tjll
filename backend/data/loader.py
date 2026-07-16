@@ -182,7 +182,11 @@ def convert_review(raw: DatasetReview) -> ConvertedReview:
 
 
 def convert_user(raw: DatasetUser) -> ConvertedUser:
-    """将原始数据集用户数据转为 ORM 兼容格式。"""
+    """将原始数据集用户数据转为 ORM 兼容格式。
+
+    注意：elite、friends 在 JSON 中已是逗号分隔字符串，
+    直接存储，不做额外 JSON 编码。
+    """
     return ConvertedUser(
         id=raw.user_id,
         name=raw.name,
@@ -193,8 +197,8 @@ def convert_user(raw: DatasetUser) -> ConvertedUser:
         cool=raw.cool,
         fans=raw.fans,
         average_stars=raw.average_stars,
-        elite=dumps(raw.elite) if raw.elite else None,
-        friends=dumps(raw.friends) if raw.friends else None,
+        elite=raw.elite or None,
+        friends=raw.friends or None,
     )
 
 
