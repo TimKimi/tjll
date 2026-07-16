@@ -535,11 +535,20 @@ async def scan_phase(
             all_biz.append(raw)
     logger.info("  满足最低评论数的商家: %d", len(all_biz))
 
-    # 取一批候选商家（多取一些，后续可能被过滤掉）
+    # 按评论数降序排列，取评论数最高的商家
+    all_biz.sort(key=lambda b: b.review_count, reverse=True)
     pool_size = max(max_businesses * 3, max_businesses + 500)
     candidates = all_biz[:pool_size]
     candidate_ids = {b.business_id for b in candidates}
-    logger.info("  候选商家: %d (池大小=%d)", len(candidates), pool_size)
+    top_reviews = candidates[0].review_count if candidates else 0
+    bottom_reviews = candidates[-1].review_count if candidates else 0
+    logger.info(
+        "  候选商家: %d (池大小=%d, 评论数范围 %d~%d)",
+        len(candidates),
+        pool_size,
+        bottom_reviews,
+        top_reviews,
+    )
 
     # ── 步骤2: 扫描评论 ────────────────────────────────
     logger.info("扫描评论...")
