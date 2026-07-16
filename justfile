@@ -18,7 +18,7 @@ set shell := ["sh", "-c"]
 
 # 安装所有依赖 + 安装 prek/pre-commit 钩子
 # 新成员克隆项目后运行此命令即可开始开发
-install:
+install-b:
     uv sync --all-groups
     # 1. 安装 pre-commit 阶段钩子
     prek install --overwrite
@@ -32,6 +32,9 @@ install:
     @echo "  使用 just check    运行所有 pre-commit 钩子"
     @echo "============================================"
 
+install-f:
+    # 1.安装前端packages
+    npm install
 # ============================================================
 # 二、代码质量检查（lint / format / type-check）
 # ============================================================
