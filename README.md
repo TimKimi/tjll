@@ -15,6 +15,7 @@
 - [提交规范](#提交规范)
 - [版本发布](#版本发布)
 - [依赖管理](#依赖管理)
+- [命令参考](#命令参考)
 - [CI/CD（待配置）](#cicd待配置)
 - [常见问题](#常见问题)
 
@@ -139,9 +140,16 @@ just install    # 安装依赖和钩子
 tjll/
 ├── backend/               # 后端代码（Python）
 │   ├── config.py          # 配置（读同目录 .env）
-│   ├── .env.example       # 环境变量模板（提交）
+│   ├── data/              # Yelp 数据集加载 & 数据查询接口
+│   ├── database.py        # 异步引擎 & 会话工厂
+│   ├── docs/              # 后端文档（API、开发指南、数据指南）
 │   ├── main.py
-│   └── RAG/               # 文档 / 检索 / OpenSearch / 模型 / 基础设施
+│   ├── models/            # ORM 模型（businesses、reviews）
+│   ├── scripts/           # 一次性脚本（数据加载等）
+│   ├── services/          # 业务逻辑 & 外部 API 调用
+│   ├── tests/             # 测试
+│   └── RAG/               # 文档 / 检索 / OpenSearch / 模型
+├── docs/                  # 项目级文档基础设施
 │       ├── document/
 │       ├── retrieve/
 │       ├── opensearch/
@@ -173,19 +181,14 @@ graph LR
 
 ### 2. 代码检查
 
-提交前建议手动运行全套检查：
-
 ```bash
-# 一键运行所有检查（自动修复 + 格式检查 + 类型检查）
-just lint
-
-# 如果只想单独运行某项：
+just lint        # 全流程：自动修复 → 格式检查 → 类型检查
 just fix         # ruff 自动修复 lint
-just fmt-check   # 只检查格式，不修改
-just fmt         # 自动格式化
-just mypy        # 后端类型检查
-just ty          # 额外类型检查（可选）
+just fmt         # ruff 格式化
+just mypy        # 类型检查
 ```
+
+> 完整指令清单见 `docs/cli-reference.md`。
 
 ### 3. 提交代码
 
@@ -237,17 +240,10 @@ just cz
 ### 5. 推送代码
 
 ```bash
-# 推送到当前分支对应的远程分支
-just push
+just push                            # 推送到当前分支
 
-# 首次推送新分支（将本地分支与远程关联）
-just push-u <分支名>
-```
-
-### 6. 手动运行所有钩子
-
-```bash
-just check
+# 首次推送新分支：
+git push -u origin <分支名>
 ```
 
 ---
@@ -309,8 +305,13 @@ graph TD
 #### 第一步：同步最新代码
 
 ```bash
-# 从 develop 拉取最新并创建新分支（一步到位）
+# 一条命令完成：切 develop → 拉最新 → 创建新分支
 just dev-branch feat/xxx
+
+# 等价于手动执行：
+#   git checkout develop
+#   git pull
+#   git checkout -b feat/xxx
 ```
 
 #### 第二步：开发与提交
@@ -328,6 +329,8 @@ just cz          # 交互式提交，生成规范 commit
 ```bash
 # 推送你的分支到远程（首次用 -u）
 just push-u feat/xxx
+
+# 等价于：git push -u origin feat/xxx
 ```
 
 然后去 GitHub 网页操作：
@@ -375,18 +378,18 @@ just push                       # 推送到同一分支，PR 自动更新
 
 #### 第五步：合并到 develop
 
-PR 合并后：
+PR 合并后，开启下一个功能：
 
 ```bash
-# 快捷操作，删除本地及远程feat/xxx并从远程develop拉取并创建feat/yyy
+# 一条命令完成：删旧分支 → 切 develop → 拉最新 → 建新分支
 just del-branch feat/xxx feat/yyy
 
-# 切回 develop，拉取最新
-just dev-pull
-# 删除本地已完成的分支（可选）
-git branch -d feat/xxx
-# 删除远程已合并的分支（可选）
-just branch-delete feat/xxx
+# 或者手动操作：
+#   git checkout develop
+#   git pull
+#   git branch -d feat/xxx          # 删本地
+#   git push origin --delete feat/xxx  # 删远程
+#   git checkout -b feat/yyy
 ```
 
 ### 发布流程（develop → master）
@@ -402,10 +405,11 @@ git pull
 git merge develop
 
 # 使用 Commitizen 打版本标签
-just cz-bump patch   # 或 minor / major，取决于变更范围
+uv run cz bump --increment patch --changelog
+# 或 uv run cz bump --increment minor --changelog
 
 # 推送 master 和 tag
-just push-tags
+git push && git push --tags
 ```
 
 > 生产环境紧急修复走 `hotfix` 分支，直接从 `master` 拉出：
@@ -484,13 +488,12 @@ Fixes #18
 ## 版本发布
 
 ```bash
-# 自动推断版本增量（根据 commit 消息）
-just cz-bump
+# 根据 commit 消息自动推断版本增量
+uv run cz bump --changelog
 
-# 手动指定
-just cz-bump patch   # 1.0.0 → 1.0.1
-just cz-bump minor   # 1.0.0 → 1.1.0
-just cz-bump major   # 1.0.0 → 2.0.0
+# 手动指定版本增量
+uv run cz bump --increment patch --changelog   # 1.0.0 → 1.0.1
+uv run cz bump --increment minor --changelog   # 1.0.0 → 1.1.0
 ```
 
 `cz bump` 会自动：
@@ -499,28 +502,54 @@ just cz-bump major   # 1.0.0 → 2.0.0
 3. 创建 Git tag（格式：`v1.0.0`）
 4. 创建一个版本发布的 commit
 
-> 首次运行前请确保远程仓库已配置。后续可配合 CI/CD（GitHub Actions）实现推送 tag 自动发布。
+> 首次运行前请确保远程仓库已配置。后续可配合 CI/CD 实现推送 tag 自动发布。
 
 ---
 
 ## 依赖管理
 
 ```bash
-# 添加生产依赖
-just add fastapi
+just add fastapi              # 添加生产依赖
 
-# 添加开发依赖
-just add-dev pytest pytest-asyncio
-
-# 移除依赖
-just remove fastapi
-
-# 升级所有依赖
-just uv-upgrade
-
-# 查看过期依赖
-just uv-outdated
+# 以下操作未收入 justfile，直接用 uv：
+uv add --dev pytest           # 添加开发依赖
+uv remove fastapi             # 移除依赖
+uv sync                        # 同步依赖
+uv tree                        # 查看依赖树
+uv lock --upgrade              # 升级所有依赖
+uv outdated                    # 查看过期依赖
 ```
+
+---
+
+## 命令参考
+
+项目命令按使用频率分两层：
+
+### `just` 指令（最常用）
+
+| 指令 | 作用 |
+|---|---|
+| 指令 | 作用 |
+|---|---|
+| `just lint` | 全流程：自动修复→格式检查→类型检查 |
+| `just test` | 运行测试 |
+| `just serve` | 启动开发服务器 |
+| `just up` | 流水线：启动数据库→启动服务器 |
+| `just cz` | 交互式提交 |
+| `just push` | 推送代码 |
+| `just push-u feat/xxx` | 首次推送新分支到远程 |
+| `just db-up` / `just db-down` | 启动/停止数据库 |
+| `just data-load` | 全量加载 Yelp 数据 |
+| `just data-sample` | 小批量加载验证 |
+| `just data-check` | 查看数据库统计 |
+| `just install` | 首次初始化 |
+| `just add <包名>` | 添加生产依赖 |
+| `just dev-branch feat/xxx` | 从 develop 拉最新并创建新分支 |
+| `just del-branch old new` | 删除旧分支并创建新分支 |
+| `just new-branch feat/xxx` | 创建本地分支 |
+
+> 完整指令清单及 `uv run` / `docker` / `git` 等原生命令用法见 `docs/cli-reference.md`。
 
 ---
 
@@ -549,7 +578,7 @@ just uv-outdated
 ### 如何更新 pre-commit 钩子版本？
 
 ```bash
-just prek-update
+prek auto-update
 ```
 
 这会拉取所有仓库的最新版本并更新 `.pre-commit-config.yaml`。
