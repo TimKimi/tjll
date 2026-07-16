@@ -8,7 +8,7 @@
 
 - [数据集说明](#数据集说明)
 - [快速开始](#快速开始)
-- [数据加载流程](#数据加载流程)
+- [两阶段加载流程](#两阶段加载流程)
 - [字段映射](#字段映射)
 - [数据接口](#数据接口)
 - [加载脚本参考](#加载脚本参考)
@@ -24,13 +24,12 @@
 | 文件 | 大小 | 行数（约） | 说明 |
 |---|---|---|---|
 | `yelp_academic_dataset_business.json` | ~119 MB | 150k | 商家信息 |
-| `yelp_academic_dataset_review.json` | ~5.3 GB | 7M | 用户评论（主要数据集） |
+| `yelp_academic_dataset_review.json` | ~5.3 GB | 7M | 用户评论 |
 | `yelp_academic_dataset_user.json` | ~3.4 GB | 1.9M | 用户信息 |
-| `yelp_academic_dataset_tip.json` | ~181 MB | 1.1M | 商家小贴士 |
-| `yelp_academic_dataset_checkin.json` | ~287 MB | 130k | 签到记录 |
+| `yelp_academic_dataset_tip.json` | ~181 MB | 1.1M | 商家小贴士（暂未加载） |
+| `yelp_academic_dataset_checkin.json` | ~287 MB | 130k | 签到记录（暂未加载） |
 
-> 目前系统已加载 **商家** 和 **评论** 两张表到 PostgreSQL。
-> 用户、小贴士、签到数据待后续按需扩展。
+当前数据库表：**businesses**、**reviews**、**users**。
 
 ---
 
@@ -38,120 +37,107 @@
 
 ### 前置条件
 
-1. Docker PostgreSQL 运行中：
-   ```bash
-   docker compose up -d
-   ```
-
-2. 数据压缩包存在 `data/Yelp-JSON.zip`
-
-### 一键加载
-
 ```bash
-uv run python backend/scripts/extract_yelp_data.py
+docker compose up -d          # 启动 PostgreSQL
 ```
 
-### 测试加载（少量数据）
+### 加载数据
 
 ```bash
-uv run python backend/scripts/extract_yelp_data.py --max-businesses 100 --max-reviews 500
+just data-load 50 10          # 最多 50 个商家，每个至少 10 条有效评论
+# 等价于：
+uv run python -m backend.scripts.extract_yelp_data --max-businesses 50 --min-reviews 10
 ```
 
-### 仅解压，不加载
+脚本会自动：
+1. 扫描已有 JSONL 文件（不存在则从 `data/Yelp-JSON.zip` 解压）
+2. **第一阶段**：扫描三个 JSON 文件，按条件筛选出商家/评论/用户列表
+3. **第二阶段**：批量写入 PostgreSQL
+
+### 快速验证
 
 ```bash
-uv run python backend/scripts/extract_yelp_data.py --skip-load
+just data-sample              # 等价于 just data-load 5 1
 ```
 
 ---
 
-## 数据加载流程
+## 两阶段加载流程
 
 ```
-data/Yelp-JSON.zip
-       ↓ 解压
-yelp_dataset.tar
-       ↓ 提取
-yelp_academic_dataset_*.json  (JSONL 格式，每行一个 JSON)
-       ↓ 流式读取
-DatasetBusiness / DatasetReview  (Pydantic 模型)
-       ↓ 字段映射
-ConvertedBusiness / ConvertedReview  (ORM 兼容格式)
-       ↓ 批量 INSERT
-PostgreSQL (businesses / reviews 表)
+第一阶段（扫描，不写 DB）
+──────────────────────
+yelp_academic_dataset_business.json
+       ↓ 条件筛选（max_businesses, min_reviews）
+商家候选列表
+       ↓
+yelp_academic_dataset_review.json
+       ↓ 匹配商家 ID
+评论候选列表 + 需要加载的用户 ID 集合
+       ↓
+yelp_academic_dataset_user.json
+       ↓ 匹配用户 ID
+用户候选列表
+       ↓ 过滤
+         - 去掉用户不存在的评论
+         - 评论数不足 min_reviews 的商家丢弃
+         - 被丢弃的商家不计入 max_businesses 计数
+最终列表：商家 / 评论 / 用户
+
+第二阶段（写入 DB）
+──────────────────────
+ConvertedBusiness  →  INSERT INTO businesses
+ConvertedUser      →  INSERT INTO users
+ConvertedReview    →  INSERT INTO reviews（校验外键）
 ```
 
-### 加载特性
+### 过滤规则
 
-- **流式处理**：5.3GB 评论文件按 1MB 块读取，内存占用稳定
-- **批量写入**：每 500 条一次 `commit`，平衡吞吐和事务大小
-- **断点续传**：自动跳过已存在的 `id`（`PRIMARY KEY` 冲突检测）
-- **错误隔离**：单行解析失败仅跳过该行，不影响整体流程
-- **进度日志**：每秒输出处理进度
+- 商家 `review_count` ≥ `min_reviews` 才进入候选
+- 只加载候选商家的评论
+- 只加载候选评论涉及的用户
+- **评论的用户不存在** → 丢弃该评论，且不计入该商家的有效评论数
+- **商家有效评论数 < `min_reviews`** → 丢弃该商家（不计入 max_businesses）
 
 ---
 
-## 字段映射
+## 加载脚本参考
 
-### 商家字段映射
+### `backend/scripts/extract_yelp_data.py`
 
-Yelp 学术数据集的字段命名和结构与 Yelp Fusion API 不同。
-加载器会自动完成以下映射：
-
-| 学术数据集字段 | ORM 字段 | 转换说明 |
-|---|---|---|
-| `business_id` | `id` | 直接映射（22 字符主键） |
-| `name` | `name` | 直接映射 |
-| — | `alias` | 从 `name` 自动生成小写连字符形式 |
-| `stars` | `rating` | 浮点数评分映射 |
-| `review_count` | `review_count` | 直接映射 |
-| `is_open` (1/0) | `is_closed` | `is_open == 0` 时 `is_closed = True` |
-| `categories` (逗号分隔) | `categories` | 转为 `[{"alias": "...", "title": "..."}]` JSON |
-| `address` + `city` + `state` + `postal_code` | `address` | 合并为 `YelpLocation` 格式 JSON |
-| `latitude` / `longitude` | `latitude` / `longitude` | 直接映射 |
-| `hours` (day-based) | `business_hours` | 转为 Yelp API 格式 JSON |
-| `attributes` | — | 暂不存储 |
-
-### 评论字段映射
-
-| 学术数据集字段 | ORM 字段 | 转换说明 |
-|---|---|---|
-| `review_id` | `id` | 直接映射 |
-| `business_id` | `business_id` | 外键关联 `businesses.id` |
-| `stars` | `rating` | 整数评分 |
-| `text` | `text` | 直接映射 |
-| `date` | `time_created` | 直接映射 |
-| `user_id` | `user` | 转为 `{"id": "user_id"}` JSON |
-| `useful` / `funny` / `cool` | — | 暂不存储 |
-
-### 营业时间转换
-
-学术数据集使用天名称键（`"Monday": "8:0-18:30"`），
-加载器将其转为 Yelp Fusion API 格式：
-
-```json
-{
-  "open": [
-    {"is_overnight": false, "start": "0800", "end": "1830", "day": 1}
-  ],
-  "hours_type": "REGULAR",
-  "is_open_now": false
-}
+```bash
+uv run python -m backend.scripts.extract_yelp_data \
+    --max-businesses 100 \      # 最多加载的商家数
+    --min-reviews 20 \          # 商家最低有效评论数
+    --batch-size 500 \          # 每批写入行数
+    --skip-load                 # 仅解压不加载
 ```
 
-天数映射：`Monday=1, Tuesday=2, ..., Sunday=0`（与 Yelp API 一致）。
+### `backend/data/loader.py`
 
-### 分类转换
+```python
+import asyncio
+from backend.data.loader import load_all_yelp_data
 
-学术数据集使用逗号分隔字符串，加载器将其转为结构化 JSON：
-
+stats = asyncio.run(load_all_yelp_data(
+    max_businesses=50,
+    min_reviews=10,
+    batch_size=200,
+))
+print(stats["filtered"])   # {businesses: 50, reviews: 1234, users: 567}
+print(stats["scan"])       # {biz_total: 150000, rev_total: ...}
 ```
-输入: "Doctors, Traditional Chinese Medicine, Acupuncture"
-输出: [
-  {"alias": "doctors", "title": "Doctors"},
-  {"alias": "traditional-chinese-medicine", "title": "Traditional Chinese Medicine"},
-  {"alias": "acupuncture", "title": "Acupuncture"}
-]
+
+也可单独调用两阶段：
+
+```python
+from backend.data.loader import scan_phase, load_phase
+
+# 第一阶段：扫描（不写 DB）
+scan = await scan_phase(max_businesses=50, min_reviews=10)
+
+# 第二阶段：写入
+result = await load_phase(**scan)
 ```
 
 ---
@@ -160,81 +146,28 @@ Yelp 学术数据集的字段命名和结构与 Yelp Fusion API 不同。
 
 ### Python 数据接口（函数调用）
 
-`backend.data.service.DataService` 是其他模块访问 Yelp 数据库数据的统一入口。
-直接在代码中 import 使用，无需经过 HTTP。
-
 ```python
 from backend.data.service import DataService
 
 svc = DataService()
 
-# 获取商家详情
+# 商家
 biz = await svc.get_business("some-id")
+businesses, total = await svc.list_businesses(keyword="pizza", min_rating=4.0)
 
-# 搜索商家
-businesses, total = await svc.list_businesses(
-    keyword="pizza",
-    min_rating=4.0,
-    sort_by="rating",
-)
-
-# 获取评论
+# 评论
 reviews, total = await svc.get_reviews_by_business("some-id")
+review = await svc.get_review("review-id")
 
-# 获取统计
+# 统计
 stats = await svc.get_stats()
 
-# 供 RAG 使用的批量接口
-all_ids = await svc.get_all_business_ids()
+# RAG 批量
+ids = await svc.get_all_business_ids()
 texts = await svc.get_reviews_texts_by_business("some-id")
 ```
 
-接口说明：
-
-| 方法 | 返回 | 说明 |
-|---|---|---|
-| `get_business(business_id)` | `Business \| None` | 按 ID 获取商家 |
-| `list_businesses(keyword, min_rating, category, sort_by, skip, limit)` | `(list[Business], int)` | 搜索/列出商家，支持过滤排序分页 |
-| `get_business_with_reviews(business_id)` | `dict \| None` | 商家详情 + 所有评论 |
-| `get_reviews_by_business(business_id, skip, limit)` | `(list[Review], int)` | 某商家的评论列表 |
-| `get_review(review_id)` | `Review \| None` | 单条评论 |
-| `get_stats()` | `dict` | 数据库统计 |
-| `get_all_business_ids()` | `list[str]` | 所有商家 ID（供 RAG 批量处理） |
-| `get_reviews_texts_by_business(business_id, limit)` | `list[str]` | 评论文本列表（供 RAG 检索） |
-
----
-
-## 加载脚本参考
-
-### `backend/scripts/extract_yelp_data.py`
-
-```
-用法:
-  uv run python backend/scripts/extract_yelp_data.py
-
-选项:
-  --max-businesses N    限制商家数（默认全部）
-  --max-reviews N       限制评论数（默认全部）
-  --batch-size N        每批写入行数（默认 500）
-  --skip-extract        跳过解压
-  --skip-load           仅解压不加载
-```
-
-### `backend/data/loader.py`
-
-模块化加载器，也可在其他脚本中直接调用：
-
-```python
-import asyncio
-from backend.data.loader import load_all_yelp_data
-
-stats = asyncio.run(load_all_yelp_data(
-    max_businesses=1000,
-    max_reviews=5000,
-    batch_size=200,
-))
-print(stats)
-```
+接口说明见 `backend/data/service.py`。
 
 ---
 
@@ -242,26 +175,22 @@ print(stats)
 
 ### Q: 如何检查数据已正确加载？
 
-使用检查脚本：
-
 ```bash
-uv run python backend/tests/scripts/check_db.py
+just data-check
 ```
 
-### Q: 数据量太大，加载太慢怎么办？
+### Q: 加载太慢怎么办？
 
-建议：
-1. 先用 `--max-businesses 1000 --max-reviews 5000` 测试
-2. 全量加载评论（5.3GB）预计需要 20~60 分钟，取决于机器性能
-3. 加载器支持断点续传，可以中断后重跑
+两阶段加载只处理指定数量的商家及其关联数据，比全量加载快得多。
 
-### Q: 业务数据 `is_closed` 的含义？
+```bash
+# 先小批量验证
+just data-sample
 
-学术数据集的 `is_open` 字段：`1`=营业中，`0`=已关闭。
-ORM 中的 `is_closed` 是其取反：`is_open == 0 → is_closed = True`。
+# 再逐步增加
+just data-load 200 20
+```
 
-### Q: 为什么有些 JSON 字段存为字符串？
+### Q: `is_closed` 的含义？
 
-本项目的 ORM 模型将 `categories`、`address`、`hours` 等复杂结构存为
-`TEXT` 类型的 JSON 字符串，与原有 Yelp Fusion API 数据的存储方式一致。
-使用时通过 `json.loads()` 解析为 Python 对象。
+学术数据集的 `is_open`（1=营业，0=关闭）→ ORM 中 `is_closed` 取反。
