@@ -1,6 +1,9 @@
-# PostgreSQL + pgvector — 数据 & 向量库
+# 本地开发基础设施：PostgreSQL + OpenSearch + Dashboards + Redis
 # 启动：docker compose up -d
 # 停止：docker compose down
+# OpenSearch 镜像构建上下文：backend/RAG/infra/opensearch（含 IK 插件 Dockerfile）
+#
+# 统一密码：Jianyan_01（Postgres / OpenSearch admin / Dashboards / Redis）
 
 services:
   db:
@@ -12,7 +15,7 @@ services:
     environment:
       POSTGRES_DB: tjll
       POSTGRES_USER: tjll
-      POSTGRES_PASSWORD: tjll_dev
+      POSTGRES_PASSWORD: Jianyan_01
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,5 +24,61 @@ services:
       timeout: 5s
       retries: 5
 
+  opensearch:
+    build:
+      context: ./backend/RAG/infra/opensearch
+      dockerfile: Dockerfile
+    container_name: opensearch-node
+    restart: unless-stopped
+    environment:
+      - cluster.name=opensearch-cluster
+      - node.name=opensearch-node
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Jianyan_01
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+
+  dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: opensearch-dashboards
+    restart: unless-stopped
+    depends_on:
+      - opensearch
+    ports:
+      - "5601:5601"
+    environment:
+      - 'OPENSEARCH_HOSTS=["https://opensearch-node:9200"]'
+      - 'OPENSEARCH_SSL_VERIFICATIONMODE=none'
+      - 'OPENSEARCH_USERNAME=admin'
+      - 'OPENSEARCH_PASSWORD=Jianyan_01'
+
+  redis:
+    image: redis/redis-stack:7.4.0-v0
+    container_name: tjll-redis
+    restart: unless-stopped
+    environment:
+      - REDIS_ARGS=--requirepass Jianyan_01
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "Jianyan_01", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   pgdata:
+  opensearch-data:
+  redis-data:

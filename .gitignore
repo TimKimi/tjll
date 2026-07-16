@@ -67,12 +67,6 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 
-# Infra: commit *.example only; local compose/Dockerfile kept for personal use
-backend/RAG/infra/docker-compose.yml
-!backend/RAG/infra/docker-compose.yml.example
-backend/RAG/infra/opensearch/Dockerfile
-!backend/RAG/infra/opensearch/Dockerfile.example
-
 # Model weights under backend/RAG: keep placeholders only
 backend/RAG/models/**
 !backend/RAG/models/**/
@@ -90,7 +84,6 @@ data/
 
 # Local scratch scripts
 format.py
-*.local
 
 # Editor local settings (conda interpreter path is machine-specific)
 .vscode/
