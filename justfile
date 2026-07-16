@@ -91,21 +91,18 @@ db-down:
 # Yelp 数据加载
 # ============================================================
 
-# 全量解压 Yelp 数据集并加载到 PostgreSQL
-# 包含：商家 ~15 万条，评论 ~700 万条
-# 耗时：20~60 分钟，支持断点续传（已存在的记录自动跳过）
+# 全量加载 Yelp 数据到 PostgreSQL（已有文件则跳过解压）
+# 包含：商家 ~15 万条，评论 ~700 万条，支持断点续传
 data-load:
-    uv run python backend/scripts/extract_yelp_data.py
+    uv run python -m backend.scripts.extract_yelp_data
 
-# 小批量加载（快速验证数据通路是否正常）
-# 只加载 100 个商家 + 500 条评论
+# 只加载 100 个商家 + 500 条评论（快速验证）
 data-sample:
-    uv run python backend/scripts/extract_yelp_data.py --max-businesses 100 --max-reviews 500
+    uv run python -m backend.scripts.extract_yelp_data --max-businesses 100 --max-reviews 500
 
 # 查看数据库中已加载的 Yelp 数据统计
-# 显示：商家总数、评论总数、平均评分、最热门商家
 data-check:
-    uv run python backend/tests/scripts/check_db.py
+    uv run python -m backend.tests.scripts.check_db
 
 
 # ============================================================
