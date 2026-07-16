@@ -140,3 +140,22 @@ class ConvertedReview(BaseModel):
     rating: int
     time_created: str
     user: str | None = None  # JSON 字符串
+
+
+class ConvertedUser(BaseModel):
+    """从 DatasetUser 转换后，准备写入 ORM 的数据。
+
+    字段名和类型与 ORM User 模型对齐。
+    """
+
+    id: str
+    name: str
+    review_count: int = 0
+    yelping_since: str = ""
+    useful: int = 0
+    funny: int = 0
+    cool: int = 0
+    fans: int = 0
+    average_stars: float = 0.0
+    elite: str | None = None  # JSON 字符串
+    friends: str | None = None  # JSON 字符串

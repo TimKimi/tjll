@@ -27,11 +27,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import async_session
 from backend.models.business import Business
 from backend.models.review import Review
+from backend.models.user import User
 from backend.data.schemas import (
     ConvertedBusiness,
     ConvertedReview,
+    ConvertedUser,
     DatasetBusiness,
     DatasetReview,
+    DatasetUser,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,6 +181,27 @@ def convert_review(raw: DatasetReview) -> ConvertedReview:
     )
 
 
+def convert_user(raw: DatasetUser) -> ConvertedUser:
+    """将原始数据集用户数据转为 ORM 兼容格式。
+
+    注意：elite、friends 在 JSON 中已是逗号分隔字符串，
+    直接存储，不做额外 JSON 编码。
+    """
+    return ConvertedUser(
+        id=raw.user_id,
+        name=raw.name,
+        review_count=raw.review_count,
+        yelping_since=raw.yelping_since,
+        useful=raw.useful,
+        funny=raw.funny,
+        cool=raw.cool,
+        fans=raw.fans,
+        average_stars=raw.average_stars,
+        elite=raw.elite or None,
+        friends=raw.friends or None,
+    )
+
+
 # ============================================================
 # JSONL 流式读取
 # ============================================================
@@ -286,6 +310,34 @@ async def _insert_review_batch(
             user=rec.user,
         )
         session.add(review)
+        inserted += 1
+    await session.commit()
+    return inserted
+
+
+async def _insert_user_batch(
+    session: AsyncSession, records: list[ConvertedUser]
+) -> int:
+    """批量插入用户（跳过已存在的）。"""
+    inserted = 0
+    for rec in records:
+        existing = await session.get(User, rec.id)
+        if existing:
+            continue
+        user = User(
+            id=rec.id,
+            name=rec.name,
+            review_count=rec.review_count,
+            yelping_since=rec.yelping_since,
+            useful=rec.useful,
+            funny=rec.funny,
+            cool=rec.cool,
+            fans=rec.fans,
+            average_stars=rec.average_stars,
+            elite=rec.elite,
+            friends=rec.friends,
+        )
+        session.add(user)
         inserted += 1
     await session.commit()
     return inserted
@@ -440,32 +492,251 @@ async def load_reviews(
     return stats
 
 
+# ============================================================
+# 两阶段加载：先扫描 JSON 构建列表，再批量写入数据库
+# ============================================================
+
+
+async def scan_phase(
+    business_file: Path | None = BUSINESS_FILE,
+    review_file: Path | None = REVIEW_FILE,
+    user_file: Path | None = None,
+    max_businesses: int = 100,
+    min_reviews: int = 10,
+) -> dict[str, Any]:
+    """第一阶段：扫描 JSON 文件，构建待入库的三个列表（不写数据库）。
+
+    Args:
+        business_file: 商家 JSONL 路径。
+        review_file: 评论 JSONL 路径。
+        user_file: 用户 JSONL 路径（为 None 时不加载用户）。
+        max_businesses: 最大商家数。
+        min_reviews: 商家最低有效评论数（不足则丢弃该商家）。
+
+    Returns:
+        {"businesses": [...], "reviews": [...], "users": [...]}
+        均为 Converted* 对象的列表。
+    """
+    if not business_file or not review_file:
+        raise FileNotFoundError("需要商家和评论 JSONL 文件路径")
+    if user_file is None:
+        user_file = DATA_DIR / "yelp_academic_dataset_user.json"
+
+    t0 = time.time()
+    logger.info("=" * 60)
+    logger.info("第一阶段：扫描 JSON 文件")
+    logger.info("=" * 60)
+
+    # ── 步骤1: 扫描商家 ────────────────────────────────
+    logger.info("扫描商家 (最低评论数=%d)...", min_reviews)
+    all_biz: list[DatasetBusiness] = []
+    async for raw in iter_jsonl(business_file, DatasetBusiness):
+        if raw.review_count >= min_reviews:
+            all_biz.append(raw)
+    logger.info("  满足最低评论数的商家: %d", len(all_biz))
+
+    # 按评论数降序排列，取评论数最高的商家
+    all_biz.sort(key=lambda b: b.review_count, reverse=True)
+    pool_size = max(max_businesses * 3, max_businesses + 500)
+    candidates = all_biz[:pool_size]
+    candidate_ids = {b.business_id for b in candidates}
+    top_reviews = candidates[0].review_count if candidates else 0
+    bottom_reviews = candidates[-1].review_count if candidates else 0
+    logger.info(
+        "  候选商家: %d (池大小=%d, 评论数范围 %d~%d)",
+        len(candidates),
+        pool_size,
+        bottom_reviews,
+        top_reviews,
+    )
+
+    # ── 步骤2: 扫描评论 ────────────────────────────────
+    logger.info("扫描评论...")
+    biz_reviews: dict[str, list[DatasetReview]] = {bid: [] for bid in candidate_ids}
+    needed_users: set[str] = set()
+    rev_total = 0
+    async for raw in iter_jsonl(review_file, DatasetReview):
+        if raw.business_id in candidate_ids:
+            biz_reviews[raw.business_id].append(raw)
+            needed_users.add(raw.user_id)
+            rev_total += 1
+    logger.info("  匹配评论: %d, 涉及用户: %d", rev_total, len(needed_users))
+
+    # ── 步骤3: 扫描用户 ────────────────────────────────
+    logger.info("扫描用户...")
+    found_users: set[str] = set()
+    user_pool: list[DatasetUser] = []
+    if user_file and user_file.exists():
+        async for raw in iter_jsonl(user_file, DatasetUser):
+            if raw.user_id in needed_users:
+                user_pool.append(raw)
+                found_users.add(raw.user_id)
+    logger.info("  找到用户: %d / %d", len(found_users), len(needed_users))
+
+    # ── 步骤4: 过滤——去掉用户不存在的评论 ─────────────
+    valid_reviews: list[DatasetReview] = []
+    for bid, revs in biz_reviews.items():
+        for rev in revs:
+            if rev.user_id in found_users:
+                valid_reviews.append(rev)
+    logger.info("  用户存在的评论: %d / %d", len(valid_reviews), rev_total)
+
+    # ── 步骤5: 过滤——按最低有效评论数筛选商家 ─────────
+    rev_count: dict[str, int] = {}
+    for rev in valid_reviews:
+        rev_count[rev.business_id] = rev_count.get(rev.business_id, 0) + 1
+
+    final_biz: list[DatasetBusiness] = []
+    final_biz_ids: set[str] = set()
+    dropped = 0
+    for biz in candidates:
+        cnt = rev_count.get(biz.business_id, 0)
+        if cnt >= min_reviews:
+            final_biz.append(biz)
+            final_biz_ids.add(biz.business_id)
+            if len(final_biz) >= max_businesses:
+                break
+        else:
+            dropped += 1
+    logger.info(
+        "有效商家: %d (丢弃 %d，需满足 %d+ 条有效评论)",
+        len(final_biz),
+        dropped,
+        min_reviews,
+    )
+
+    # ── 步骤6: 裁切评论和用户，只保留最终商家相关的 ────
+    final_reviews = [r for r in valid_reviews if r.business_id in final_biz_ids]
+    final_user_ids = {r.user_id for r in final_reviews}
+    final_users = [u for u in user_pool if u.user_id in final_user_ids]
+
+    logger.info(
+        "最终统计: 商家=%d, 评论=%d, 用户=%d",
+        len(final_biz),
+        len(final_reviews),
+        len(final_users),
+    )
+    logger.info("第一阶段扫描完成, 耗时 %.1f秒", time.time() - t0)
+
+    # 转换成 ORM 兼容格式
+    return {
+        "businesses": [convert_business(b) for b in final_biz],
+        "reviews": [convert_review(r) for r in final_reviews],
+        "users": [convert_user(u) for u in final_users],
+        "raw": {
+            "biz_total": len(all_biz),
+            "rev_total": rev_total,
+            "user_found": len(found_users),
+            "user_needed": len(needed_users),
+        },
+    }
+
+
+async def load_phase(
+    biz_list: list[ConvertedBusiness],
+    review_list: list[ConvertedReview],
+    user_list: list[ConvertedUser],
+    batch_size: int = BATCH_SIZE,
+) -> dict[str, Any]:
+    """第二阶段：将扫描结果批量写入数据库。"""
+    t0 = time.time()
+    logger.info("=" * 60)
+    logger.info("第二阶段：写入数据库")
+    logger.info("=" * 60)
+
+    stats: dict[str, Any] = {
+        "businesses": {"total": len(biz_list), "inserted": 0},
+        "users": {"total": len(user_list), "inserted": 0},
+        "reviews": {"total": len(review_list), "inserted": 0},
+    }
+
+    async with async_session() as session:
+        # 写入商家
+        if biz_list:
+            logger.info("写入 %d 个商家...", len(biz_list))
+            for i in range(0, len(biz_list), batch_size):
+                batch = biz_list[i : i + batch_size]
+                inserted = await _insert_business_batch(session, batch)
+                stats["businesses"]["inserted"] += inserted
+                if (i // batch_size) % 5 == 0:
+                    logger.info(
+                        "  商家: %d/%d",
+                        min(i + batch_size, len(biz_list)),
+                        len(biz_list),
+                    )
+
+        # 写入用户
+        if user_list:
+            logger.info("写入 %d 个用户...", len(user_list))
+            for i in range(0, len(user_list), batch_size):
+                batch = user_list[i : i + batch_size]
+                inserted = await _insert_user_batch(session, batch)
+                stats["users"]["inserted"] += inserted
+
+        # 写入评论
+        if review_list:
+            logger.info("写入 %d 条评论...", len(review_list))
+            for i in range(0, len(review_list), batch_size):
+                batch = review_list[i : i + batch_size]
+                try:
+                    inserted = await _insert_review_batch(session, batch)
+                    stats["reviews"]["inserted"] += inserted
+                except Exception as exc:
+                    await session.rollback()
+                    logger.warning("评论批处理出错 (已回滚): %s", exc)
+
+    elapsed = time.time() - t0
+    logger.info("第二阶段完成, 耗时 %.1f秒", elapsed)
+    stats["elapsed_seconds"] = round(elapsed, 1)
+    return stats
+
+
 async def load_all_yelp_data(
-    business_file: Path = BUSINESS_FILE,
-    review_file: Path = REVIEW_FILE,
+    business_file: Path | None = BUSINESS_FILE,
+    review_file: Path | None = REVIEW_FILE,
+    user_file: Path | None = None,
     batch_size: int = BATCH_SIZE,
     max_businesses: int | None = None,
-    max_reviews: int | None = None,
+    min_reviews: int = 0,
 ) -> dict:
-    """加载所有 Yelp 数据（商家 + 评论）。
+    """两阶段加载 Yelp 数据。
+
+    Args:
+        business_file: 商家 JSONL 路径。
+        review_file: 评论 JSONL 路径。
+        user_file: 用户 JSONL 路径。
+        batch_size: 每批写入行数。
+        max_businesses: 最大商家数（None=全部）。
+        min_reviews: 商家最低有效评论数。
 
     Returns:
         合并的统计信息。
     """
-    overall: dict[str, Any] = {"businesses": None, "reviews": None}
+    if not business_file or not review_file:
+        raise FileNotFoundError("需要商家和评论 JSONL 文件路径")
+    if max_businesses is None:
+        raise ValueError("请指定 --max-businesses")
 
-    logger.info("=" * 60)
-    logger.info("开始加载商家数据...")
-    logger.info("=" * 60)
-    overall["businesses"] = await load_businesses(
-        file_path=business_file, batch_size=batch_size, max_rows=max_businesses
+    scan_result = await scan_phase(
+        business_file=business_file,
+        review_file=review_file,
+        user_file=user_file,
+        max_businesses=max_businesses,
+        min_reviews=min_reviews,
     )
 
-    logger.info("=" * 60)
-    logger.info("开始加载评论数据...")
-    logger.info("=" * 60)
-    overall["reviews"] = await load_reviews(
-        file_path=review_file, batch_size=batch_size, max_rows=max_reviews
+    # 第二阶段：写入
+    load_stats = await load_phase(
+        biz_list=scan_result["businesses"],
+        review_list=scan_result["reviews"],
+        user_list=scan_result["users"],
+        batch_size=batch_size,
     )
 
-    return overall
+    load_stats["scan"] = scan_result["raw"]
+    load_stats["filtered"] = {
+        "businesses": len(scan_result["businesses"]),
+        "reviews": len(scan_result["reviews"]),
+        "users": len(scan_result["users"]),
+    }
+    return load_stats

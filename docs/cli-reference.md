@@ -40,17 +40,17 @@ docker compose exec -T db psql -U tjll -d tjll
 ### Yelp 数据加载
 
 ```bash
-just data-load     # 全量解压 + 加载到数据库
-just data-sample   # 小批量验证（100 商家 + 500 评论）
-just data-check    # 查看数据库统计
+just data-load 100 10    # 最多 100 商家，每商家至少 10 条有效评论
+just data-sample          # 小批量验证（等价于 just data-load 5 1）
+just data-check           # 查看数据库统计
 
 # 仅解压（不加载）
-uv run python backend/scripts/extract_yelp_data.py --skip-load
+uv run python -m backend.scripts.extract_yelp_data --skip-load
 
-# 自定义加载参数
-uv run python backend/scripts/extract_yelp_data.py \
-    --max-businesses 1000 \
-    --max-reviews 5000 \
+# 自定义参数
+uv run python -m backend.scripts.extract_yelp_data \
+    --max-businesses 100 \
+    --min-reviews 20 \
     --batch-size 200
 ```
 
@@ -95,15 +95,16 @@ uv outdated          # 查看过期依赖
 
 ## 数据加载细节
 
-### 全量流程
+### 两阶段加载流程
 
 ```bash
 # 1. 确保数据库运行
 docker compose up -d
 
-# 2. 加载全部数据
-just data-load
-# 商家 ~150k 条，评论 ~700 万条，耗时 20~60 分钟
+# 2. 加载数据（指定商家数和最低评论数）
+just data-load 50 10
+# 第一阶段：扫描 JSON，筛选商家/评论/用户
+# 第二阶段：批量写入数据库
 
 # 3. 验证
 just data-check
@@ -121,6 +122,7 @@ just data-check
 | `address+city+state+postal_code` → | `address` (JSON) | 合并为 YelpLocation |
 | `date` → | `time_created` | 直接映射 |
 | `user_id` → | `user` (JSON) | 存为 `{"id": user_id}` |
+| `user_id` + `name` + ... → | `users` 表 | 完整用户信息 |
 
 ### 代码接口（给其他模块调用）
 

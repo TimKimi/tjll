@@ -91,14 +91,16 @@ db-down:
 # Yelp 数据加载
 # ============================================================
 
-# 全量加载 Yelp 数据到 PostgreSQL（已有文件则跳过解压）
-# 包含：商家 ~15 万条，评论 ~700 万条，支持断点续传
-data-load:
-    uv run python -m backend.scripts.extract_yelp_data
+# 两阶段加载：just data-load <商家数> <最低评论数>
+# 自动筛选关联的评论和用户，不足最低评论数的商家会被丢弃
+# 用法：just data-load 100 50
+data-load biz rev:
+    uv run python -m backend.scripts.extract_yelp_data --max-businesses {{ biz }} --min-reviews {{ rev }}
 
-# 只加载 100 个商家 + 500 条评论（快速验证）
+# 小批量加载（快速验证）：just data-sample
+# 等价于 just data-load 5 1
 data-sample:
-    uv run python -m backend.scripts.extract_yelp_data --max-businesses 100 --max-reviews 500
+    uv run python -m backend.scripts.extract_yelp_data --max-businesses 5 --min-reviews 1
 
 # 查看数据库中已加载的 Yelp 数据统计
 data-check:
