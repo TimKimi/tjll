@@ -101,6 +101,12 @@ async def run_load(
     logger.info("确保数据库表存在...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 修正已有列的长度（SQLAlchemy create_all 不修改已存在列）
+        from sqlalchemy import text
+
+        await conn.execute(
+            text("ALTER TABLE users ALTER COLUMN yelping_since TYPE VARCHAR(20)")
+        )
     logger.info("  表已就绪")
 
     from backend.data.loader import load_all_yelp_data

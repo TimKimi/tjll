@@ -64,8 +64,8 @@ class TestDatasetBusiness:
         assert biz.stars == 0.0
         assert biz.review_count == 0
         assert biz.is_open == 0
-        assert biz.attributes == {}
-        assert biz.categories == ""
+        assert biz.attributes is None
+        assert biz.categories is None
         assert biz.hours is None
 
     def test_is_open_int_bool(self):
