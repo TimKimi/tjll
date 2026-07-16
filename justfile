@@ -58,6 +58,21 @@ mypy:
 test:
     uv run pytest -c pyproject.toml -v --tb=short
 
+# 只运行指定模块的测试
+# 用法：just test-mod data              → 测试 data 模块
+# 用法：just test-mod data_get          → 测试数据获取模块
+# 用法：just test-mod data/test_loader  → 测试加载器转换函数
+test-mod module:
+    uv run pytest -c pyproject.toml backend/tests/{{ module }} -v --tb=short
+
+# 只跑单元测试（不依赖数据库）
+test-unit:
+    uv run pytest -c pyproject.toml -m "not integration" -v --tb=short
+
+# 只跑集成测试（依赖数据库）
+test-integration:
+    uv run pytest -c pyproject.toml -m integration -v --tb=short
+
 
 # ============================================================
 # 数据库（Docker PostgreSQL）

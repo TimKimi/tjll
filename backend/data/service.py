@@ -29,6 +29,9 @@ class DataService:
     """Yelp 数据查询服务。
 
     所有方法直接操作数据库（PostgreSQL），数据来源为 Yelp 学术数据集。
+
+    注意：所有方法都接受可选的 session 参数。传入外部 session 时，
+    直接使用该 session（不创建新事务、不关闭它）；不传时自动创建和关闭会话。
     """
 
     # ============================================================
@@ -70,67 +73,68 @@ class DataService:
             (商家列表, 总数)
         """
         limit = min(limit, 100)
+        conditions: list[Any] = []
+        if keyword:
+            conditions.append(Business.name.ilike(f"%{keyword}%"))
+        if min_rating is not None:
+            conditions.append(Business.rating >= min_rating)
+        if category and category.strip():
+            conditions.append(Business.categories.ilike(f"%{category.strip()}%"))
 
-        async with session or async_session() as s:
-            # 基础查询
-            base_query = select(Business)
+        base_query = select(Business)
+        if conditions:
+            base_query = base_query.where(*conditions)
 
-            # 过滤条件
-            conditions: list[Any] = []
-            if keyword:
-                conditions.append(Business.name.ilike(f"%{keyword}%"))
-            if min_rating is not None:
-                conditions.append(Business.rating >= min_rating)
-            if category and category.strip():
-                conditions.append(Business.categories.ilike(f"%{category.strip()}%"))
+        count_query = select(func.count()).select_from(base_query.subquery())
 
-            if conditions:
-                base_query = base_query.where(*conditions)
+        sort_map: dict[str, Any] = {
+            "review_count": Business.review_count.desc(),
+            "rating": Business.rating.desc(),
+            "name": Business.name.asc(),
+            "stored_at": Business.stored_at.desc(),
+        }
+        base_query = base_query.order_by(
+            sort_map.get(sort_by, Business.review_count.desc())
+        )
+        base_query = base_query.offset(skip).limit(limit)
 
-            # 总数
-            count_query = select(func.count()).select_from(base_query.subquery())
+        if session:
+            total = await session.scalar(count_query) or 0
+            result = await session.execute(base_query)
+            businesses = list(result.scalars().all())
+            return businesses, total
+
+        async with async_session() as s:
             total = await s.scalar(count_query) or 0
-
-            # 排序
-            sort_map: dict[str, Any] = {
-                "review_count": Business.review_count.desc(),
-                "rating": Business.rating.desc(),
-                "name": Business.name.asc(),
-                "stored_at": Business.stored_at.desc(),
-            }
-            base_query = base_query.order_by(
-                sort_map.get(sort_by, Business.review_count.desc())
-            )
-            base_query = base_query.offset(skip).limit(limit)
-
             result = await s.execute(base_query)
             businesses = list(result.scalars().all())
-
-            if session:
-                return businesses, total
             await s.commit()
             return businesses, total
 
     async def get_business_with_reviews(
-        self, business_id: str
+        self, business_id: str, session: AsyncSession | None = None
     ) -> dict[str, Any] | None:
         """获取商家详情及其所有评论。"""
-        async with async_session() as session:
-            stmt = (
-                select(Business)
-                .where(Business.id == business_id)
-                .options(selectinload(Business.reviews))
-            )
-            result = await session.execute(stmt)
-            biz = result.scalar_one_or_none()
-            if biz is None:
-                return None
+        stmt = (
+            select(Business)
+            .where(Business.id == business_id)
+            .options(selectinload(Business.reviews))
+        )
 
-            # 解析 JSON 字段为 Python 对象
-            return {
-                "business": _business_to_dict(biz),
-                "reviews": [_review_to_dict(r) for r in biz.reviews],
-            }
+        if session:
+            result = await session.execute(stmt)
+        else:
+            async with async_session() as s:
+                result = await s.execute(stmt)
+
+        biz = result.scalar_one_or_none()
+        if biz is None:
+            return None
+
+        return {
+            "business": _business_to_dict(biz),
+            "reviews": [_review_to_dict(r) for r in biz.reviews],
+        }
 
     # ============================================================
     # 评论查询
@@ -150,7 +154,6 @@ class DataService:
             (评论列表, 总数)
         """
         limit = min(limit, 100)
-
         base_query = (
             select(Review)
             .where(Review.business_id == business_id)
@@ -162,73 +165,96 @@ class DataService:
             .where(Review.business_id == business_id)
         )
 
-        async with session or async_session() as s:
+        if session:
+            total = await session.scalar(count_query) or 0
+            result = await session.execute(base_query.offset(skip).limit(limit))
+            return list(result.scalars().all()), total
+
+        async with async_session() as s:
             total = await s.scalar(count_query) or 0
             result = await s.execute(base_query.offset(skip).limit(limit))
-            reviews = list(result.scalars().all())
-            return reviews, total
+            return list(result.scalars().all()), total
 
-    async def get_review(self, review_id: str) -> Review | None:
+    async def get_review(
+        self, review_id: str, session: AsyncSession | None = None
+    ) -> Review | None:
         """根据 ID 获取单条评论。"""
-        async with async_session() as session:
+        if session:
             return await session.get(Review, review_id)
+        async with async_session() as s:
+            return await s.get(Review, review_id)
 
     # ============================================================
     # 统计
     # ============================================================
 
-    async def get_stats(self) -> dict[str, Any]:
+    async def get_stats(self, session: AsyncSession | None = None) -> dict[str, Any]:
         """获取数据统计信息。"""
-        async with async_session() as session:
-            biz_count = (
-                await session.execute(text("SELECT COUNT(*) FROM businesses"))
-            ).scalar() or 0
-            rev_count = (
-                await session.execute(text("SELECT COUNT(*) FROM reviews"))
-            ).scalar() or 0
-            avg_rating = (
-                await session.execute(
-                    text(
-                        "SELECT ROUND(AVG(rating)::numeric, 2) "
-                        "FROM businesses WHERE rating > 0"
-                    )
-                )
-            ).scalar()
-            closed_count = (
-                await session.execute(
-                    text("SELECT COUNT(*) FROM businesses WHERE is_closed = TRUE")
-                )
-            ).scalar() or 0
+        if session:
+            return await self._query_stats(session)
+        async with async_session() as s:
+            return await self._query_stats(s)
 
-            return {
-                "businesses": biz_count,
-                "reviews": rev_count,
-                "avg_rating": float(avg_rating) if avg_rating else 0.0,
-                "closed_businesses": closed_count,
-            }
+    @staticmethod
+    async def _query_stats(session: AsyncSession) -> dict[str, Any]:
+        """在给定会话中查询统计。"""
+        biz_count = (
+            await session.execute(text("SELECT COUNT(*) FROM businesses"))
+        ).scalar() or 0
+        rev_count = (
+            await session.execute(text("SELECT COUNT(*) FROM reviews"))
+        ).scalar() or 0
+        avg_rating = (
+            await session.execute(
+                text(
+                    "SELECT ROUND(AVG(rating)::numeric, 2) "
+                    "FROM businesses WHERE rating > 0"
+                )
+            )
+        ).scalar()
+        closed_count = (
+            await session.execute(
+                text("SELECT COUNT(*) FROM businesses WHERE is_closed = TRUE")
+            )
+        ).scalar() or 0
+
+        return {
+            "businesses": biz_count,
+            "reviews": rev_count,
+            "avg_rating": float(avg_rating) if avg_rating else 0.0,
+            "closed_businesses": closed_count,
+        }
 
     # ============================================================
     # 批量 / 原始查询（供 RAG 等其他模块使用）
     # ============================================================
 
-    async def get_all_business_ids(self) -> list[str]:
+    async def get_all_business_ids(
+        self, session: AsyncSession | None = None
+    ) -> list[str]:
         """获取所有商家 ID（供 RAG 批量处理用）。"""
-        async with async_session() as session:
-            result = await session.execute(select(Business.id))
-            return [row[0] for row in result.all()]
+        stmt = select(Business.id)
+        if session:
+            result = await session.execute(stmt)
+        else:
+            async with async_session() as s:
+                result = await s.execute(stmt)
+        return [row[0] for row in result.all()]
 
     async def get_reviews_texts_by_business(
-        self, business_id: str, limit: int = 50
+        self,
+        business_id: str,
+        limit: int = 50,
+        session: AsyncSession | None = None,
     ) -> list[str]:
         """获取某商家的评论文本列表（供 RAG 检索用）。"""
-        async with async_session() as session:
-            stmt = (
-                select(Review.text)
-                .where(Review.business_id == business_id)
-                .limit(limit)
-            )
+        stmt = select(Review.text).where(Review.business_id == business_id).limit(limit)
+        if session:
             result = await session.execute(stmt)
-            return [row[0] for row in result.all()]
+        else:
+            async with async_session() as s:
+                result = await s.execute(stmt)
+        return [row[0] for row in result.all()]
 
 
 # ============================================================
