@@ -1,16 +1,16 @@
 <template>
-    <div class="login-view">
-      <div class="login-container">
+    <div class="register-view">
+      <div class="register-container">
         <!-- 返回按钮 -->
         <button class="back-btn" @click="goHome">
           <i class="fas fa-arrow-left"></i>
           <span>返回首页</span>
         </button>
   
-        <!-- 登录卡片 -->
-        <div class="login-card">
+        <!-- 注册卡片 -->
+        <div class="register-card">
           <!-- Logo 区域 -->
-          <div class="login-header">
+          <div class="register-header">
             <div class="logo-icon">
               <img
                 src="/images/2.png"
@@ -18,32 +18,52 @@
                 style="width: 56px; height: 56px; object-fit: contain;"
               />
             </div>
-            <h1 class="login-title">欢迎回来</h1>
-            <p class="login-subtitle">登录你的探店助手账号，开启智能探店之旅</p>
+            <h1 class="register-title">创建账号</h1>
+            <p class="register-subtitle">加入探店助手，发现身边好店</p>
           </div>
   
-          <!-- 登录表单 -->
-          <form class="login-form" @submit.prevent="handleLogin">
-            <!-- 账号输入 -->
+          <!-- 注册表单 -->
+          <form class="register-form" @submit.prevent="handleRegister">
+            <!-- 用户名 -->
             <div class="form-group">
               <label for="username">
                 <i class="fas fa-user"></i>
-                账号
+                用户名
               </label>
               <div class="input-wrapper">
                 <i class="fas fa-user input-icon"></i>
                 <input
                   id="username"
-                  v-model="loginForm.username"
+                  v-model="registerForm.username"
                   type="text"
-                  placeholder="请输入用户名或手机号"
+                  placeholder="请设置用户名（2-16位字母、数字或中文）"
                   autocomplete="username"
                   required
                 />
               </div>
+              <span v-if="usernameError" class="field-error">{{ usernameError }}</span>
             </div>
   
-            <!-- 密码输入 -->
+            <!-- 手机号 -->
+            <div class="form-group">
+              <label for="phone">
+                <i class="fas fa-phone"></i>
+                手机号
+              </label>
+              <div class="input-wrapper">
+                <i class="fas fa-phone input-icon"></i>
+                <input
+                  id="phone"
+                  v-model="registerForm.phone"
+                  type="tel"
+                  placeholder="请输入手机号（选填）"
+                  autocomplete="tel"
+                />
+              </div>
+              <span v-if="phoneError" class="field-error">{{ phoneError }}</span>
+            </div>
+  
+            <!-- 密码 -->
             <div class="form-group">
               <label for="password">
                 <i class="fas fa-lock"></i>
@@ -53,10 +73,10 @@
                 <i class="fas fa-lock input-icon"></i>
                 <input
                   id="password"
-                  v-model="loginForm.password"
+                  v-model="registerForm.password"
                   :type="showPassword ? 'text' : 'password'"
-                  placeholder="请输入密码"
-                  autocomplete="current-password"
+                  placeholder="请设置密码（至少8位）"
+                  autocomplete="new-password"
                   required
                 />
                 <button
@@ -67,27 +87,67 @@
                   <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
                 </button>
               </div>
+              <div class="password-strength" v-if="registerForm.password">
+                <div class="strength-bar">
+                  <div
+                    class="strength-fill"
+                    :style="{ width: passwordStrength + '%', background: strengthColor }"
+                  ></div>
+                </div>
+                <span class="strength-label" :style="{ color: strengthColor }">
+                  {{ strengthText }}
+                </span>
+              </div>
             </div>
   
-            <!-- 选项 -->
-            <div class="form-options">
-              <label class="remember-me">
-                <input type="checkbox" v-model="loginForm.remember" />
-                <span>记住我</span>
+            <!-- 确认密码 -->
+            <div class="form-group">
+              <label for="confirmPassword">
+                <i class="fas fa-check-circle"></i>
+                确认密码
               </label>
-              <a href="#" class="forgot-link" @click.prevent="handleForgotPassword">
-                忘记密码？
-              </a>
+              <div class="input-wrapper">
+                <i class="fas fa-check-circle input-icon"></i>
+                <input
+                  id="confirmPassword"
+                  v-model="registerForm.confirmPassword"
+                  :type="showConfirmPassword ? 'text' : 'password'"
+                  placeholder="请再次输入密码"
+                  autocomplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  class="toggle-password"
+                  @click="showConfirmPassword = !showConfirmPassword"
+                >
+                  <i :class="showConfirmPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                </button>
+              </div>
+              <span v-if="confirmPasswordError" class="field-error">{{ confirmPasswordError }}</span>
             </div>
   
-            <!-- 登录按钮 -->
+            <!-- 用户协议 -->
+            <div class="form-agreement">
+              <label class="agreement-checkbox">
+                <input type="checkbox" v-model="registerForm.agreed" required />
+                <span>
+                  我已阅读并同意
+                  <a href="#" @click.prevent="showTerms">《用户协议》</a>
+                  和
+                  <a href="#" @click.prevent="showPrivacy">《隐私政策》</a>
+                </span>
+              </label>
+            </div>
+  
+            <!-- 注册按钮 -->
             <button
               type="submit"
-              class="login-btn"
-              :disabled="isLoading"
+              class="register-btn"
+              :disabled="isLoading || !registerForm.agreed"
             >
               <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
-              <span v-else>登录</span>
+              <span v-else>立即注册</span>
             </button>
   
             <!-- 错误提示 -->
@@ -97,33 +157,15 @@
             </div>
           </form>
   
-          <!-- 注册入口 -->
-          <div class="register-section">
-            <span>还没有账号？</span>
-            <a href="#" @click.prevent="goToRegister">立即注册</a>
-          </div>
-  
-          <!-- 社交登录 -->
-          <div class="social-login">
-            <div class="divider">
-              <span>其他登录方式</span>
-            </div>
-            <div class="social-buttons">
-              <button class="social-btn wechat" @click="handleSocialLogin('wechat')">
-                <i class="fab fa-weixin"></i>
-              </button>
-              <button class="social-btn qq" @click="handleSocialLogin('qq')">
-                <i class="fab fa-qq"></i>
-              </button>
-              <button class="social-btn weibo" @click="handleSocialLogin('weibo')">
-                <i class="fab fa-weibo"></i>
-              </button>
-            </div>
+          <!-- 登录入口 -->
+          <div class="login-section">
+            <span>已有账号？</span>
+            <a href="#" @click.prevent="goToLogin">立即登录</a>
           </div>
         </div>
   
         <!-- 底部版权 -->
-        <div class="login-footer">
+        <div class="register-footer">
           <p>&copy; 2026 探店助手 · 让选择更简单</p>
         </div>
       </div>
@@ -131,7 +173,7 @@
   </template>
   
   <script setup lang="ts">
-  import { ref, reactive } from 'vue'
+  import { ref, reactive, computed, watch } from 'vue'
   import { useRouter } from 'vue-router'
   
   const router = useRouter()
@@ -139,79 +181,160 @@
   // ============================================
   // 表单数据
   // ============================================
-  const loginForm = reactive({
+  const registerForm = reactive({
     username: '',
+    phone: '',
     password: '',
-    remember: false,
+    confirmPassword: '',
+    agreed: false,
   })
   
   const showPassword = ref(false)
+  const showConfirmPassword = ref(false)
   const isLoading = ref(false)
   const errorMessage = ref('')
   
   // ============================================
-  // 登录逻辑（只调用真实 API，无模拟）
+  // 表单验证
   // ============================================
-  const handleLogin = async () => {
+  const usernameError = ref('')
+  const phoneError = ref('')
+  const confirmPasswordError = ref('')
+  
+  // 密码强度计算
+  const passwordStrength = computed(() => {
+    const pwd = registerForm.password
+    if (!pwd) return 0
+    let strength = 0
+    if (pwd.length >= 8) strength += 25
+    if (/[a-z]/.test(pwd)) strength += 25
+    if (/[A-Z]/.test(pwd)) strength += 25
+    if (/[0-9]/.test(pwd) || /[^a-zA-Z0-9]/.test(pwd)) strength += 25
+    return Math.min(strength, 100)
+  })
+  
+  const strengthText = computed(() => {
+    const s = passwordStrength.value
+    if (s === 0) return ''
+    if (s <= 30) return '弱'
+    if (s <= 60) return '中'
+    if (s <= 80) return '强'
+    return '非常强'
+  })
+  
+  const strengthColor = computed(() => {
+    const s = passwordStrength.value
+    if (s === 0) return '#94a3b8'
+    if (s <= 30) return '#ef4444'
+    if (s <= 60) return '#f59e0b'
+    if (s <= 80) return '#3b82f6'
+    return '#22c55e'
+  })
+  
+  // 实时验证
+  watch(() => registerForm.username, (val) => {
+    if (val && !/^[a-zA-Z0-9\u4e00-\u9fa5]{2,16}$/.test(val)) {
+      usernameError.value = '用户名需为2-16位字母、数字或中文'
+    } else {
+      usernameError.value = ''
+    }
+  })
+  
+  watch(() => registerForm.phone, (val) => {
+    if (val && !/^1[3-9]\d{9}$/.test(val)) {
+      phoneError.value = '请输入正确的手机号'
+    } else {
+      phoneError.value = ''
+    }
+  })
+  
+  watch(() => registerForm.confirmPassword, (val) => {
+    if (val && val !== registerForm.password) {
+      confirmPasswordError.value = '两次密码输入不一致'
+    } else {
+      confirmPasswordError.value = ''
+    }
+  })
+  
+  // ============================================
+  // 工具函数：获取当前日期
+  // ============================================
+  const getCurrentDate = (): string => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
+  // ============================================
+  // 注册逻辑
+  // ============================================
+  const handleRegister = async () => {
     errorMessage.value = ''
   
-    if (!loginForm.username.trim() || !loginForm.password.trim()) {
-      errorMessage.value = '请输入用户名和密码'
+    // 验证用户名（支持中文）
+    if (!/^[a-zA-Z0-9\u4e00-\u9fa5]{2,16}$/.test(registerForm.username)) {
+      errorMessage.value = '用户名需为2-16位字母、数字或中文'
+      return
+    }
+  
+    // 验证手机号（如果有填写）
+    if (registerForm.phone && !/^1[3-9]\d{9}$/.test(registerForm.phone)) {
+      errorMessage.value = '请输入正确的手机号'
+      return
+    }
+  
+    // 验证密码
+    if (registerForm.password.length < 8) {
+      errorMessage.value = '密码长度至少为8位'
+      return
+    }
+  
+    // 验证确认密码
+    if (registerForm.password !== registerForm.confirmPassword) {
+      errorMessage.value = '两次密码输入不一致'
+      return
+    }
+  
+    // 验证协议
+    if (!registerForm.agreed) {
+      errorMessage.value = '请先同意用户协议和隐私政策'
       return
     }
   
     isLoading.value = true
   
     try {
-      const response = await fetch('/api/auth/login', {
+      // 调用注册 API
+      const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: loginForm.username.trim(),
-          password: loginForm.password.trim(),
-          remember: loginForm.remember,
+          username: registerForm.username.trim(),
+          phone: registerForm.phone.trim() || '',
+          password: registerForm.password,
         }),
       })
   
       if (response.ok) {
         const data = await response.json()
         
-        // 保存 token 到本地存储
-        if (data.token) {
-          localStorage.setItem('token', data.token)
-        }
+        // ✅ 注册成功，跳转到登录页
+        // 可以显示成功提示
+        alert('注册成功！请登录')
         
-        // 保存用户信息
-        if (data.user) {
-          localStorage.setItem('userInfo', JSON.stringify(data.user))
-        }
-        
-        // 获取重定向地址并跳转
-        const redirect = router.currentRoute.value.query.redirect as string || '/'
-        router.push(redirect)
+        // 跳转到登录页
+        router.push('/login')
       } else {
-        // 处理错误响应
-        let errorMsg = '登录失败，请检查账号和密码'
-        try {
-          const error = await response.json()
-          errorMsg = error.message || errorMsg
-        } catch (e) {
-          // 如果响应不是 JSON 格式
-          errorMsg = `登录失败 (${response.status})`
-        }
-        errorMessage.value = errorMsg
+        const error = await response.json()
+        errorMessage.value = error.message || '注册失败，请稍后重试'
       }
     } catch (error) {
-      console.error('登录请求异常:', error)
-      
-      // 判断是否为网络错误
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        errorMessage.value = '网络连接失败，请检查网络后重试'
-      } else {
-        errorMessage.value = '登录失败，请稍后重试'
-      }
+      console.error('注册请求异常:', error)
+      errorMessage.value = '网络异常，请稍后重试'
     } finally {
       isLoading.value = false
     }
@@ -224,19 +347,16 @@
     router.push('/')
   }
   
-  const goToRegister = () => {
-    router.push('/register')
+  const goToLogin = () => {
+    router.push('/login')
   }
   
-  const handleForgotPassword = () => {
-    // 跳转到忘记密码页面
-    alert('请联系管理员重置密码')
+  const showTerms = () => {
+    alert('用户协议内容...')
   }
   
-  const handleSocialLogin = (platform: string) => {
-    console.log(`使用 ${platform} 登录`)
-    // 跳转到第三方授权
-    alert(`${platform} 登录功能开发中...`)
+  const showPrivacy = () => {
+    alert('隐私政策内容...')
   }
   </script>
   
@@ -244,7 +364,7 @@
   /* ============================================
      全局布局
      ============================================ */
-  .login-view {
+  .register-view {
     width: 100%;
     min-height: 100vh;
     min-height: 100dvh;
@@ -261,9 +381,9 @@
     background-size: 40px 40px, 50px 50px;
   }
   
-  .login-container {
+  .register-container {
     width: 100%;
-    max-width: 440px;
+    max-width: 460px;
     position: relative;
   }
   
@@ -302,9 +422,9 @@
   }
   
   /* ============================================
-     登录卡片
+     注册卡片
      ============================================ */
-  .login-card {
+  .register-card {
     background: #ffffff;
     border-radius: 1.5rem;
     padding: 2.5rem 2rem 2rem;
@@ -312,10 +432,21 @@
     border: 1px solid #e2e8f0;
     position: relative;
     overflow: hidden;
+    max-height: 90vh;
+    overflow-y: auto;
   }
   
-  /* 顶部装饰光晕 */
-  .login-card::before {
+  .register-card::-webkit-scrollbar {
+    width: 3px;
+  }
+  
+  .register-card::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+  
+  /* 顶部装饰 */
+  .register-card::before {
     content: '';
     position: absolute;
     top: -80px;
@@ -327,7 +458,7 @@
     pointer-events: none;
   }
   
-  .login-card::after {
+  .register-card::after {
     content: '';
     position: absolute;
     bottom: -60px;
@@ -342,9 +473,9 @@
   /* ============================================
      头部
      ============================================ */
-  .login-header {
+  .register-header {
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: 1.8rem;
     position: relative;
     z-index: 1;
   }
@@ -352,21 +483,21 @@
   .logo-icon {
     display: flex;
     justify-content: center;
-    margin-bottom: 0.8rem;
+    margin-bottom: 0.6rem;
   }
   
   .logo-icon img {
     filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.15));
   }
   
-  .login-title {
+  .register-title {
     font-size: 1.6rem;
     font-weight: 700;
     color: #0f172a;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.2rem;
   }
   
-  .login-subtitle {
+  .register-subtitle {
     font-size: 0.85rem;
     color: #94a3b8;
     font-weight: 400;
@@ -375,13 +506,13 @@
   /* ============================================
      表单
      ============================================ */
-  .login-form {
+  .register-form {
     position: relative;
     z-index: 1;
   }
   
   .form-group {
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
   }
   
   .form-group label {
@@ -391,7 +522,7 @@
     font-size: 0.85rem;
     font-weight: 500;
     color: #334155;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.3rem;
   }
   
   .form-group label i {
@@ -415,6 +546,10 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
   }
   
+  .input-wrapper.error {
+    border-color: #ef4444;
+  }
+  
   .input-icon {
     color: #94a3b8;
     font-size: 0.9rem;
@@ -423,7 +558,7 @@
   
   .input-wrapper input {
     flex: 1;
-    padding: 0.7rem 0.6rem;
+    padding: 0.65rem 0.5rem;
     border: none;
     outline: none;
     background: transparent;
@@ -451,53 +586,84 @@
     color: #64748b;
   }
   
-  /* ============================================
-     表单选项
-     ============================================ */
-  .form-options {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
+  /* 字段错误 */
+  .field-error {
+    display: block;
+    font-size: 0.75rem;
+    color: #ef4444;
+    margin-top: 0.2rem;
   }
   
-  .remember-me {
+  /* ============================================
+     密码强度
+     ============================================ */
+  .password-strength {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    font-size: 0.85rem;
+    gap: 0.8rem;
+    margin-top: 0.4rem;
+  }
+  
+  .strength-bar {
+    flex: 1;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  
+  .strength-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease, background 0.3s ease;
+  }
+  
+  .strength-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    min-width: 2.5rem;
+    text-align: right;
+  }
+  
+  /* ============================================
+     用户协议
+     ============================================ */
+  .form-agreement {
+    margin: 1rem 0 1.2rem;
+  }
+  
+  .agreement-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.8rem;
     color: #64748b;
     cursor: pointer;
+    line-height: 1.5;
   }
   
-  .remember-me input[type="checkbox"] {
+  .agreement-checkbox input[type="checkbox"] {
     width: 1rem;
     height: 1rem;
     accent-color: #3b82f6;
     cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
   }
   
-  .remember-me span {
-    user-select: none;
-  }
-  
-  .forgot-link {
-    font-size: 0.85rem;
+  .agreement-checkbox a {
     color: #3b82f6;
     text-decoration: none;
-    font-weight: 500;
-    transition: color 0.2s;
   }
   
-  .forgot-link:hover {
-    color: #1d4ed8;
+  .agreement-checkbox a:hover {
     text-decoration: underline;
   }
   
   /* ============================================
-     登录按钮
+     注册按钮
      ============================================ */
-  .login-btn {
+  .register-btn {
     width: 100%;
     padding: 0.8rem;
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
@@ -516,7 +682,7 @@
     overflow: hidden;
   }
   
-  .login-btn::before {
+  .register-btn::before {
     content: '';
     position: absolute;
     top: 0;
@@ -527,25 +693,21 @@
     transition: left 0.6s ease;
   }
   
-  .login-btn:hover:not(:disabled)::before {
+  .register-btn:hover:not(:disabled)::before {
     left: 100%;
   }
   
-  .login-btn:hover:not(:disabled) {
+  .register-btn:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 6px 24px rgba(59, 130, 246, 0.3);
   }
   
-  .login-btn:active:not(:disabled) {
-    transform: translateY(0);
-  }
-  
-  .login-btn:disabled {
-    opacity: 0.7;
+  .register-btn:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
   }
   
-  .login-btn i {
+  .register-btn i {
     font-size: 1rem;
   }
   
@@ -571,9 +733,9 @@
   }
   
   /* ============================================
-     注册入口
+     登录入口
      ============================================ */
-  .register-section {
+  .login-section {
     text-align: center;
     margin-top: 1.5rem;
     font-size: 0.9rem;
@@ -582,105 +744,22 @@
     z-index: 1;
   }
   
-  .register-section a {
+  .login-section a {
     color: #3b82f6;
     text-decoration: none;
     font-weight: 600;
     transition: color 0.2s;
   }
   
-  .register-section a:hover {
+  .login-section a:hover {
     color: #1d4ed8;
     text-decoration: underline;
   }
   
   /* ============================================
-     社交登录
-     ============================================ */
-  .social-login {
-    margin-top: 1.8rem;
-    position: relative;
-    z-index: 1;
-  }
-  
-  .divider {
-    display: flex;
-    align-items: center;
-    text-align: center;
-    margin-bottom: 1.2rem;
-  }
-  
-  .divider::before,
-  .divider::after {
-    content: '';
-    flex: 1;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
-  .divider span {
-    padding: 0 1rem;
-    font-size: 0.75rem;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  
-  .social-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-  }
-  
-  .social-btn {
-    width: 2.8rem;
-    height: 2.8rem;
-    border-radius: 50%;
-    border: 1px solid #e2e8f0;
-    background: white;
-    font-size: 1.2rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .social-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  }
-  
-  .social-btn.wechat {
-    color: #07c160;
-  }
-  
-  .social-btn.wechat:hover {
-    background: #f0faf4;
-    border-color: #07c160;
-  }
-  
-  .social-btn.qq {
-    color: #12b7f5;
-  }
-  
-  .social-btn.qq:hover {
-    background: #f0f7fe;
-    border-color: #12b7f5;
-  }
-  
-  .social-btn.weibo {
-    color: #ff8200;
-  }
-  
-  .social-btn.weibo:hover {
-    background: #fff5ed;
-    border-color: #ff8200;
-  }
-  
-  /* ============================================
      底部版权
      ============================================ */
-  .login-footer {
+  .register-footer {
     text-align: center;
     margin-top: 1.5rem;
     font-size: 0.7rem;
@@ -693,11 +772,11 @@
      平板端 (768px - 1024px)
      ============================================ */
   @media (max-width: 1024px) {
-    .login-view {
+    .register-view {
       padding: 1.5rem;
     }
   
-    .login-card {
+    .register-card {
       padding: 2rem 1.8rem 1.8rem;
     }
   }
@@ -706,13 +785,13 @@
      手机端 (最大768px)
      ============================================ */
   @media (max-width: 768px) {
-    .login-view {
+    .register-view {
       padding: 1rem;
       align-items: flex-start;
       padding-top: 2rem;
     }
   
-    .login-container {
+    .register-container {
       max-width: 100%;
     }
   
@@ -726,21 +805,22 @@
       display: none;
     }
   
-    .login-card {
+    .register-card {
       padding: 1.8rem 1.2rem 1.5rem;
       border-radius: 1.2rem;
+      max-height: 85vh;
     }
   
-    .login-title {
+    .register-title {
       font-size: 1.4rem;
     }
   
-    .login-subtitle {
+    .register-subtitle {
       font-size: 0.8rem;
     }
   
     .form-group {
-      margin-bottom: 1rem;
+      margin-bottom: 0.8rem;
     }
   
     .input-wrapper {
@@ -749,40 +829,31 @@
     }
   
     .input-wrapper input {
-      padding: 0.6rem 0.4rem;
+      padding: 0.55rem 0.4rem;
       font-size: 0.85rem;
     }
   
-    .form-options {
-      margin-bottom: 1.2rem;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-    }
-  
-    .login-btn {
+    .register-btn {
       padding: 0.7rem;
       font-size: 0.95rem;
-      border-radius: 0.7rem;
     }
   
-    .register-section {
+    .login-section {
       margin-top: 1.2rem;
       font-size: 0.85rem;
     }
   
-    .social-login {
-      margin-top: 1.5rem;
-    }
-  
-    .social-btn {
-      width: 2.4rem;
-      height: 2.4rem;
-      font-size: 1rem;
-    }
-  
-    .login-footer {
+    .register-footer {
       margin-top: 1rem;
       font-size: 0.65rem;
+    }
+  
+    .form-agreement {
+      margin: 0.8rem 0 1rem;
+    }
+  
+    .agreement-checkbox {
+      font-size: 0.75rem;
     }
   }
   
@@ -790,14 +861,15 @@
      小屏手机 (最大480px)
      ============================================ */
   @media (max-width: 480px) {
-    .login-view {
+    .register-view {
       padding: 0.8rem;
       padding-top: 1.5rem;
     }
   
-    .login-card {
+    .register-card {
       padding: 1.5rem 1rem 1.2rem;
       border-radius: 1rem;
+      max-height: 80vh;
     }
   
     .logo-icon img {
@@ -805,11 +877,11 @@
       height: 44px;
     }
   
-    .login-title {
+    .register-title {
       font-size: 1.2rem;
     }
   
-    .login-subtitle {
+    .register-subtitle {
       font-size: 0.75rem;
     }
   
@@ -817,7 +889,7 @@
       font-size: 0.8rem;
     }
   
-    .login-btn {
+    .register-btn {
       font-size: 0.9rem;
       padding: 0.6rem;
     }
@@ -827,47 +899,58 @@
      横屏手机优化
      ============================================ */
   @media (max-height: 500px) and (orientation: landscape) {
-    .login-view {
+    .register-view {
       padding: 0.8rem;
       align-items: center;
     }
   
-    .login-card {
-      padding: 1.2rem 1.5rem;
+    .register-card {
+      padding: 1rem 1.5rem;
       border-radius: 1rem;
+      max-height: 90vh;
     }
   
-    .login-header {
-      margin-bottom: 1rem;
+    .register-header {
+      margin-bottom: 0.8rem;
     }
   
     .logo-icon img {
-      width: 36px;
-      height: 36px;
+      width: 32px;
+      height: 32px;
     }
   
-    .login-title {
-      font-size: 1.2rem;
-      margin-bottom: 0.1rem;
+    .register-title {
+      font-size: 1.1rem;
+      margin-bottom: 0;
     }
   
-    .login-subtitle {
+    .register-subtitle {
       display: none;
     }
   
     .form-group {
-      margin-bottom: 0.6rem;
+      margin-bottom: 0.4rem;
     }
   
-    .form-options {
-      margin-bottom: 0.8rem;
+    .form-group label {
+      font-size: 0.75rem;
+      margin-bottom: 0.1rem;
     }
   
-    .social-login {
-      margin-top: 1rem;
+    .input-wrapper input {
+      padding: 0.35rem 0.3rem;
+      font-size: 0.8rem;
     }
   
-    .login-footer {
+    .password-strength {
+      display: none;
+    }
+  
+    .form-agreement {
+      margin: 0.4rem 0 0.6rem;
+    }
+  
+    .register-footer {
       display: none;
     }
   }
