@@ -101,6 +101,24 @@ ConvertedReview    →  INSERT INTO reviews（校验外键）
 
 ---
 
+## 字段映射
+
+### 用户字段映射
+
+| 数据集字段 | ORM 字段 | 说明 |
+|---|---|---|
+| `user_id` | `id` | 22 字符主键 |
+| `name` | `name` | 用户名 |
+| `review_count` | `review_count` | 该用户的评论数 |
+| `yelping_since` | `yelping_since` | 加入 Yelp 时间，完整时间戳 |
+| `average_stars` | `average_stars` | 平均评分 |
+| `fans` | `fans` | 粉丝数 |
+| `elite` (逗号字符串) | `elite` | 精英年份，原始字符串 |
+| `friends` (逗号字符串) | `friends` | 好友 ID 列表，原始字符串 |
+| `useful` / `funny` / `cool` | `useful` / `funny` / `cool` | 投票计数 |
+
+---
+
 ## 加载脚本参考
 
 ### `backend/scripts/extract_yelp_data.py`
