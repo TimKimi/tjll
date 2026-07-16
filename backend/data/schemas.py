@@ -28,8 +28,8 @@ class DatasetBusiness(BaseModel):
     stars: float = 0.0
     review_count: int = 0
     is_open: int = Field(..., description="1=营业, 0=关闭")
-    attributes: dict | None = None  # 可能为 null
-    categories: str = ""  # 逗号分隔的字符串
+    attributes: dict | None = None
+    categories: str | None = None  # 逗号分隔的字符串，可能为 null
     hours: dict | None = None  # { "Monday": "8:0-18:30", ... }
 
 

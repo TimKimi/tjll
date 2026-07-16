@@ -69,7 +69,7 @@ def _make_alias(name: str) -> str:
     return s[:255] or "unknown"
 
 
-def _parse_categories(cat_str: str) -> str | None:
+def _parse_categories(cat_str: str | None) -> str | None:
     """将逗号分隔的分类字符串转为 Yelp API 格式的 JSON 数组。
 
     输入: "Doctors, Traditional Chinese Medicine, Acupuncture"
@@ -263,11 +263,18 @@ async def _insert_business_batch(
 async def _insert_review_batch(
     session: AsyncSession, records: list[ConvertedReview]
 ) -> int:
-    """批量插入评论（跳过已存在的）。"""
+    """批量插入评论（跳过已存在的和无效外键的）。
+
+    逐条检查 business_id 是否存在，避免 ForeignKeyViolation 导致整个 batch 回滚。
+    """
     inserted = 0
     for rec in records:
         existing = await session.get(Review, rec.id)
         if existing:
+            continue
+        # 检查商家是否存在（避免外键冲突）
+        biz = await session.get(Business, rec.business_id)
+        if biz is None:
             continue
         review = Review(
             id=rec.id,
@@ -386,9 +393,14 @@ async def load_reviews(
                 stats["total"] += 1
 
                 if len(batch) >= batch_size:
-                    inserted = await _insert_review_batch(session, batch)
-                    stats["inserted"] += inserted
-                    stats["skipped"] += len(batch) - inserted
+                    try:
+                        inserted = await _insert_review_batch(session, batch)
+                        stats["inserted"] += inserted
+                        stats["skipped"] += len(batch) - inserted
+                    except Exception as exc:
+                        await session.rollback()
+                        stats["errors"] += len(batch)
+                        logger.warning("评论批处理出错 (已回滚): %s", exc)
                     batch.clear()
 
                     elapsed = time.time() - start_time
@@ -406,9 +418,14 @@ async def load_reviews(
                 logger.warning("评论处理出错: %s", exc)
 
         if batch:
-            inserted = await _insert_review_batch(session, batch)
-            stats["inserted"] += inserted
-            stats["skipped"] += len(batch) - inserted
+            try:
+                inserted = await _insert_review_batch(session, batch)
+                stats["inserted"] += inserted
+                stats["skipped"] += len(batch) - inserted
+            except Exception as exc:
+                await session.rollback()
+                stats["errors"] += len(batch)
+                logger.warning("评论批处理出错 (已回滚): %s", exc)
 
     elapsed = time.time() - start_time
     stats["elapsed_seconds"] = round(elapsed, 1)
