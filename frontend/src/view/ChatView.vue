@@ -141,7 +141,69 @@
 
           <div :class="['message-bubble', msg.role]">
             <div class="message-content">{{ msg.content }}</div>
-            <div class="message-time">{{ msg.time }}</div>
+  
+  <!-- 推荐卡片 - 点击进入详情页 -->
+  <div v-if="msg.shop" class="recommend-card" @click="viewShopDetail(msg.shop.id)">
+    <div class="card-image">
+      <img :src="msg.shop.image" :alt="msg.shop.name" loading="lazy" />
+      <span class="card-badge">推荐</span>
+    </div>
+    <div class="card-body">
+      <div class="card-header-info">
+        <h3 class="shop-name">{{ msg.shop.name }}</h3>
+        <div class="shop-rating">
+          <i class="fas fa-star"></i>
+          <span>{{ msg.shop.rating }}</span>
+          <span class="review-count">({{ msg.shop.reviewCount }}条)</span>
+        </div>
+      </div>
+      
+      <div class="reason">
+        <i class="fas fa-lightbulb"></i>
+        <span>{{ msg.shop.reason }}</span>
+      </div>
+      
+      <div class="shop-info-grid">
+        <div class="info-item">
+          <i class="fas fa-coins"></i>
+          <span>人均 ¥{{ msg.shop.price }}</span>
+        </div>
+        <div class="info-item">
+          <i class="fas fa-map-pin"></i>
+          <span>{{ msg.shop.address }}</span>
+        </div>
+        <div class="info-item">
+          <i class="fas fa-clock"></i>
+          <span>{{ msg.shop.hours }}</span>
+        </div>
+        <div class="info-item">
+          <i class="fas fa-phone"></i>
+          <span>{{ msg.shop.phone }}</span>
+        </div>
+      </div>
+      
+      <div class="shop-tags">
+        <span v-for="tag in msg.shop.tags" :key="tag" class="tag">
+          {{ tag }}
+        </span>
+      </div>
+      
+      <div class="shop-summary">
+        <i class="fas fa-quote-left"></i>
+        <span>{{ msg.shop.summary }}</span>
+      </div>
+      
+      <!-- 只有一个操作按钮 -->
+      <div class="card-action">
+        <button class="detail-btn">
+          <i class="fas fa-arrow-right"></i>
+          查看餐厅详情
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="message-time">{{ msg.time }}</div>
           </div>
 
           <!-- 用户头像 - 修改为使用用户注册的头像 -->
@@ -205,10 +267,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, nextTick, onMounted, watch } from 'vue'
+import { useRouter , useRoute} from 'vue-router'
 
 const router = useRouter()
+const route = useRoute()
 
 // ============================================
 // 1. 类型定义
@@ -219,6 +282,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   time: string
+  shop?: RecommendShop  // 添加推荐卡片数据
 }
 
 interface Conversation {
@@ -234,6 +298,21 @@ interface UserInfo {
   name: string
   avatar: string
   isOnline: boolean
+}
+
+interface RecommendShop {
+  id: number
+  name: string
+  image: string
+  rating: number
+  reviewCount: number
+  reason: string
+  price: number
+  address: string
+  hours: string
+  phone: string
+  tags: string[]
+  summary: string
 }
 
 // ============================================
@@ -254,6 +333,7 @@ const isLoading = ref(false)
 const isOnline = ref(true)
 const isLoadingConversations = ref(false)
 const chatContainer = ref<HTMLElement | null>(null)
+const hasProcessedQuery = ref(false) // 防止重复处理
 
 // 用户信息（从后端 API 获取）
 const userInfo = ref<UserInfo>({
@@ -668,18 +748,25 @@ const callAIApi = async (userInput: string, conversationId: number): Promise<voi
     const data = await response.json()
     const assistantContent = data.content || data.message || data.reply || '收到回复'
 
+    // 生成推荐卡片
+    let shopData: RecommendShop | undefined = undefined
+    
+    // 如果后端返回了商家数据
+    if (data.shop) {
+      shopData = data.shop
+    } 
+
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
       content: assistantContent,
       time: getCurrentTime(),
+      shop: shopData
     })
 
-    // 更新对话列表（更新标题和时间）
     await loadConversations()
   } catch (error) {
     console.error('AI 调用失败:', error)
-
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
@@ -696,11 +783,13 @@ const callAIApi = async (userInput: string, conversationId: number): Promise<voi
 // 14. 生命周期钩子
 // ============================================
 
-onMounted(() => {
+onMounted(async () => {
   // 并行获取用户信息和对话列表
   Promise.all([getUserInfo(), loadConversations()]).catch((error) => {
     console.error('初始化数据加载失败:', error)
   })
+    // 处理查询参数
+    await processQueryParam()
 })
 
 // ============================================
@@ -722,6 +811,54 @@ const handleNewConversation = async (): Promise<void> => {
 
   await createNewConversation()
 }
+
+// ============================================
+// 16. 处理从首页传递过来的查询参数
+// ============================================
+const processQueryParam = async (): Promise<void> => {
+  // 防止重复处理
+  if (hasProcessedQuery.value) return
+  
+  const query = route.query.q as string
+  if (query && query.trim()) {
+    hasProcessedQuery.value = true
+    // 等待对话框加载完成
+    await nextTick()
+    // 延迟一点确保所有初始化完成
+    setTimeout(() => {
+      sendMessage(query.trim())
+    }, 300)
+  }
+}
+
+// ============================================
+// 17. 监听路由变化（处理从其他页面跳转过来的查询参数）
+// ============================================
+watch(
+  () => route.query.q,
+  (newQuery) => {
+    // 如果已经有消息或者正在加载，不处理
+    if (messages.value.length > 0 || isLoading.value) return
+    if (newQuery && typeof newQuery === 'string' && newQuery.trim()) {
+      // 重置标记，允许处理新的查询
+      hasProcessedQuery.value = false
+      processQueryParam()
+    }
+  },
+  { immediate: false }
+)
+
+// ============================================
+// 18. 推荐卡片交互方法
+// ============================================
+
+// 查看商家详情 - 跳转到详情页
+const viewShopDetail = (shopId: number): void => {
+  // TODO: 跳转到商家详情页
+  console.log('查看商家详情:', shopId)
+  router.push(`/shop/${shopId}`)
+}
+
 </script>
 
 
@@ -1755,5 +1892,233 @@ const handleNewConversation = async (): Promise<void> => {
   .input-area {
     padding: 0.5rem 1rem 0.6rem;
   }
+}
+
+/* ============================================
+   推荐卡片样式
+   ============================================ */
+   .recommend-card {
+  background: white;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  margin: 0.5rem 0;
+  border: 1px solid #f1f5f9;
+  transition: all 0.3s ease;
+  max-width: 420px;
+  cursor: pointer;
+}
+
+.recommend-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+/* 卡片图片 */
+.card-image {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.recommend-card:hover .card-image img {
+  transform: scale(1.03);
+}
+
+.card-badge {
+  position: absolute;
+  top: 0.8rem;
+  left: 0.8rem;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  padding: 0.2rem 0.8rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 卡片主体 */
+.card-body {
+  padding: 1rem 1.2rem;
+}
+
+.card-header-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.shop-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.shop-rating {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.shop-rating span {
+  color: #334155;
+  font-weight: 600;
+}
+
+.shop-rating .review-count {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* 推荐理由 */
+.reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  background: #f0fdf4;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.8rem;
+  border-left: 3px solid #22c55e;
+}
+
+.reason i {
+  color: #22c55e;
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.reason span {
+  font-size: 0.85rem;
+  color: #166534;
+  line-height: 1.4;
+}
+
+/* 信息网格 */
+.shop-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.info-item i {
+  color: #94a3b8;
+  width: 0.9rem;
+  font-size: 0.7rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.info-item span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 特色标签 */
+.shop-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+
+.shop-tags .tag {
+  background: #f1f5f9;
+  padding: 0.15rem 0.6rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  color: #475569;
+  border: none;
+  cursor: default;
+}
+
+.shop-tags .tag:hover {
+  background: #e2e8f0;
+  transform: none;
+}
+
+/* 用户摘要 */
+.shop-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  background: #f8fafc;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.8rem;
+  border-left: 3px solid #3b82f6;
+}
+
+.shop-summary i {
+  color: #3b82f6;
+  font-size: 0.7rem;
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.shop-summary span {
+  font-size: 0.8rem;
+  color: #475569;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+/* 操作按钮 */
+.card-action {
+  margin-top: 0.2rem;
+}
+
+.detail-btn {
+  width: 100%;
+  padding: 0.5rem;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+}
+
+.detail-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  transform: scale(1.01);
+}
+
+.detail-btn i {
+  font-size: 0.8rem;
 }
 </style>
