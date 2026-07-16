@@ -94,6 +94,7 @@ ConvertedReview    →  INSERT INTO reviews（校验外键）
 ### 过滤规则
 
 - 商家 `review_count` ≥ `min_reviews` 才进入候选
+- 候选商家按 `review_count` 降序排列，优先选取评论数最高的
 - 只加载候选商家的评论
 - 只加载候选评论涉及的用户
 - **评论的用户不存在** → 丢弃该评论，且不计入该商家的有效评论数
