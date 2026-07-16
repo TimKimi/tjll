@@ -1,193 +1,189 @@
 # ============================================================
-# Justfile — 项目常用命令入口
-# 用途：统一管理开发命令，避免记忆复杂的命令行参数
+# TJLL 常用指令入口
+# 用途：把复杂的多步操作变成一条命令
+# 说明：justfile 只收录最常用的指令，完整清单见 docs/cli-reference.md
 # 安装 just：https://github.com/casey/just
-# 文档：https://just.systems/man/en/
 # ============================================================
 
-# ============================================================
-# 设置
-# Windows 下默认的 sh 来自 Git Bash（Git 安装自带）
-# ============================================================
 set positional-arguments
 set shell := ["sh", "-c"]
 
+
 # ============================================================
-# 一、项目初始化
+# 安装
 # ============================================================
 
-# 安装所有依赖 + 安装 prek/pre-commit 钩子
-# 新成员克隆项目后运行此命令即可开始开发
-install-b:
+# 首次初始化项目
+# 作用：安装所有 Python 依赖 + 配置 git 提交前检查钩子
+# 用法：just install
+# 注意：新成员克隆仓库后先跑这条命令
+install:
     uv sync --all-groups
-    # 1. 安装 pre-commit 阶段钩子
     prek install --overwrite
-    # 2. 手动创建 commit-msg 钩子，绕过 prek（Windows 上 prek 的 commit-msg 有 bug）
     printf '#!/bin/sh\nexec uv run cz check --commit-msg-file "$@"\n' > .git/hooks/commit-msg
-    @echo ""
-    @echo "============================================"
-    @echo "  ✓ 安装完成！"
-    @echo "  使用 just cz       交互式提交代码"
-    @echo "  使用 just lint     手动运行代码质量检查"
-    @echo "  使用 just check    运行所有 pre-commit 钩子"
-    @echo "============================================"
 
-install-f:
-    # 1.安装前端packages
-    npm install
+
 # ============================================================
-# 二、代码质量检查（lint / format / type-check）
+# 代码质量检查
 # ============================================================
 
-# 运行所有代码检查（自动修复 + 格式检查 + 类型检查）
-lint: fix fmt-check mypy ty
-    @echo "✓ 所有代码检查通过！"
+# 全套代码检查（最常用）
+# 自动执行：ruff 自动修复 → ruff 格式检查 → mypy 类型检查
+# 用法：just lint
+# 提示：提交前务必跑一次，确保 CI 不红
+lint: fix fmt-check mypy
 
-# ruff 自动修复 lint 问题
+# ruff 自动修复 lint 问题（如未使用的导入、拼写错误等）
 fix:
     uv run ruff check --force-exclude --fix
 
-# 检查代码格式（不修改文件）
-fmt-check:
-    uv run ruff format --force-exclude --check
-
-# 自动格式化代码
+# ruff 格式化代码（修改文件缩进、空行等风格）
 fmt:
     uv run ruff format --force-exclude
 
-# Mypy 后端类型检查
+# 只检查格式是否正确，不修改文件（CI 流程用）
+fmt-check:
+    uv run ruff format --force-exclude --check
+
+# mypy 类型检查（只扫描 backend/ 目录）
 mypy:
     uv run mypy backend
 
-# Ty 类型检查（可选）
-ty:
-    uv run ty check
 
 # ============================================================
-# 七、测试
+# 测试
 # ============================================================
 
-# 运行单元测试（不调真实 API）
+# 运行所有 pytest 测试（含单元测试 + 集成测试）
+test:
+    uv run pytest -c pyproject.toml -v --tb=short
+
+# 只运行指定模块的测试
+# 用法：just test-mod data              → 测试 data 模块
+# 用法：just test-mod data_get          → 测试数据获取模块
+# 用法：just test-mod data/test_loader  → 测试加载器转换函数
+test-mod module:
+    uv run pytest -c pyproject.toml backend/tests/{{ module }} -v --tb=short
+
+# 只跑单元测试（不依赖数据库）
 test-unit:
     uv run pytest -c pyproject.toml -m "not integration" -v --tb=short
 
-# 运行集成测试（调 Yelp 真实 API + 数据库）
+# 只跑集成测试（依赖数据库）
 test-integration:
     uv run pytest -c pyproject.toml -m integration -v --tb=short
 
-# 全量测试（单元 + 集成）
-test: test-unit test-integration
+
+# ============================================================
+# 数据库（Docker PostgreSQL）
+# ============================================================
+
+# 启动 PostgreSQL 容器（后台运行）
+db-up:
+    docker compose up -d
+
+# 停止 PostgreSQL 容器
+db-down:
+    docker compose down
 
 
 # ============================================================
-# 三、pre-commit / prek 相关
+# Yelp 数据加载
 # ============================================================
 
-# 运行所有钩子（作用于全部文件）
-check:
-    prek run --all-files
+# 全量解压 Yelp 数据集并加载到 PostgreSQL
+# 包含：商家 ~15 万条，评论 ~700 万条
+# 耗时：20~60 分钟，支持断点续传（已存在的记录自动跳过）
+data-load:
+    uv run python backend/scripts/extract_yelp_data.py
 
-# 手动更新钩子版本到最新
-prek-update:
-    prek auto-update
+# 小批量加载（快速验证数据通路是否正常）
+# 只加载 100 个商家 + 500 条评论
+data-sample:
+    uv run python backend/scripts/extract_yelp_data.py --max-businesses 100 --max-reviews 500
 
-# ============================================================
-# 四、Commitizen 提交与版本管理
-# ============================================================
+# 查看数据库中已加载的 Yelp 数据统计
+# 显示：商家总数、评论总数、平均评分、最热门商家
+data-check:
+    uv run python backend/tests/scripts/check_db.py
 
-# 交互式提交代码（自动引导符合规范的 commit 消息）
-cz:
-    uv run cz commit
-
-# 查看提交规范帮助
-cz-help:
-    uv run cz schema
-
-# 版本发布：自动更新版本号 + 生成 CHANGELOG.md + 创建 git tag
-# 用法：
-#   just cz-bump          自动推断版本增量
-#   just cz-bump patch    手动指定修订号
-#   just cz-bump minor    手动指定次版本号
-# just cz-bump major    手动指定主版本号
-cz-bump increment="":
-    uv run cz bump{{ if increment != "" { " --increment=" + increment } else { "" } }} --changelog
-
-# 查看当前版本号
-show-version:
-    uv run cz version
 
 # ============================================================
-# 五、Git 操作 & 分支管理
+# 开发服务器
 # ============================================================
 
-# 切到 develop 分支并拉取最新
-dev-pull:
-    git checkout develop
-    git pull
-
-# 创建你本地的分支
-new-branch branch:
-    git checkout -b {{ branch }}
-
-# 拉取dev分支到最新并从dev分支创建本地分支
-dev-branch branch:
-    just dev-pull
-    just new-branch {{ branch }}
-
-# 删除本地及远程已完成的分支，并拉取dev分支到最新并创建新分支
-del-branch branch newbranch:
-    git branch -d {{ branch }}
-    just branch-delete {{ branch }}
-    just dev-branch {{ newbranch }}
-
-# 推送当前分支到远程
-push:
-    git push
-
-# 首次推送新分支（自动关联远程）
-# 用法：just push-u feat/user-auth
-push-u branch:
-    git push -u origin {{ branch }}
-
-# 推送并同时推送 tag（版本发布时使用）
-push-tags:
-    git push
-    git push --tags
-
-# 删除远程分支
-# 用法：just branch-delete feat/user-auth
-branch-delete branch:
-    git push origin --delete {{ branch }}
-
-# ============================================================
-# 七、后端开发
-# ============================================================
-
-# 启动后端开发服务器（热重载）
+# 启动 FastAPI 开发服务器（修改代码后自动重载）
 serve:
     uv run uvicorn backend.main:app --reload
 
+# 一条命令启动完整开发环境
+# 自动先启动数据库，再启动开发服务器
+up:
+    docker compose up -d && uv run uvicorn backend.main:app --reload
+
 
 # ============================================================
-# 六、依赖管理
+# 提交 & 推送
 # ============================================================
 
-# 添加生产依赖：just add requests
+# 交互式提交代码（自动引导填写 Conventional Commits 格式）
+# 会提示选择类型（feat/fix/docs 等）、填写描述
+cz:
+    uv run cz commit
+
+# 推送当前分支到远程（已关联远程的分支）
+push:
+    git push
+
+# 首次推送新分支到远程（自动关联上下游）
+# 用法：just push-u feat/user-auth
+# 等价于：git push -u origin feat/user-auth
+push-u branch:
+    git push -u origin {{ branch }}
+
+
+# ============================================================
+# 分支管理流水线
+# ============================================================
+
+# 从 develop 分支拉取最新代码，并创建新功能分支
+# 用法：just dev-branch feat/xxx
+# 等价于依次执行：
+#   git checkout develop
+#   git pull
+#   git checkout -b feat/xxx
+dev-branch branch:
+    git checkout develop
+    git pull
+    git checkout -b {{ branch }}
+
+# 删除已完成的分支，并开启新功能分支
+# 参数 1：要删除的旧分支名
+# 参数 2：要创建的新分支名
+# 用法：just del-branch feat/old-feat feat/new-feat
+# 等价于依次执行：
+#   git branch -d feat/old-feat
+#   git push origin --delete feat/old-feat
+#   git checkout develop && git pull
+#   git checkout -b feat/new-feat
+del-branch branch newbranch:
+    git branch -d {{ branch }}
+    git push origin --delete {{ branch }}
+    git checkout develop
+    git pull
+    git checkout -b {{ newbranch }}
+
+# 基于当前 HEAD 创建新分支（不切换分支）
+# 用法：just new-branch feat/my-feature
+new-branch branch:
+    git checkout -b {{ branch }}
+
+
+# ============================================================
+# 依赖管理
+# ============================================================
+
+# 添加生产依赖
+# 用法：just add fastapi
 add pkg:
     uv add {{ pkg }}
-
-# 添加开发依赖：just add-dev pytest
-add-dev pkg:
-    uv add --dev {{ pkg }}
-
-# 移除依赖：just remove requests
-remove pkg:
-    uv remove {{ pkg }}
-
-# 升级所有依赖到最新兼容版本
-uv-upgrade:
-    uv lock --upgrade
-
-# 查看过期的依赖
-uv-outdated:
-    uv outdated
