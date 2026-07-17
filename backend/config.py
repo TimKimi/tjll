@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     YELP_CLIENT_ID: str = Field(default="", validation_alias="CLIENT_ID")
     YELP_API_BASE_URL: str = "https://api.yelp.com/v3"
 
+    # ---- Yelp 数据集加载（路径相对仓库根目录）----
+    YELP_DATASET_DIR: str = "data/yelp-dataset"
+    YELP_ZIP_PATH: str = "data/Yelp-JSON.zip"
+    YELP_BATCH_SIZE: int = 500
+
     # ---- 数据库 ----
     DATABASE_URL: str = "postgresql+asyncpg://tjll:tjll_dev@localhost:5432/tjll"
     DATABASE_ECHO: bool = False
@@ -94,6 +99,14 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = "Jianyan_01"
     redis_history_ttl: int = 86400  # 24h
+
+    @property
+    def yelp_dataset_dir(self) -> Path:
+        return REPO_ROOT / self.YELP_DATASET_DIR
+
+    @property
+    def yelp_zip_path(self) -> Path:
+        return REPO_ROOT / self.YELP_ZIP_PATH
 
     @property
     def redis_url(self) -> str:

@@ -29,6 +29,8 @@ import time
 import zipfile
 from pathlib import Path
 
+from backend.config import settings
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 os.chdir(str(_REPO_ROOT))
 
@@ -39,9 +41,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ZIP_PATH = Path("data/Yelp-JSON.zip")
+ZIP_PATH = settings.yelp_zip_path
 TAR_NAME = "Yelp JSON/yelp_dataset.tar"
-EXTRACT_DIR = Path("data/yelp-dataset")
+EXTRACT_DIR = settings.yelp_dataset_dir
 
 
 def extract_zip_and_tar(zip_path: Path, extract_dir: Path) -> dict[str, Path]:

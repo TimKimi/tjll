@@ -24,6 +24,7 @@ from typing import Any, AsyncIterator, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import settings
 from backend.database import async_session
 from backend.models.business import Business
 from backend.models.review import Review
@@ -40,10 +41,11 @@ from backend.data.schemas import (
 logger = logging.getLogger(__name__)
 
 # ── 常量 ──────────────────────────────────────────────────────
-BATCH_SIZE = 500  # 每批写入的行数
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "yelp-dataset"
+BATCH_SIZE = settings.YELP_BATCH_SIZE
+DATA_DIR = settings.yelp_dataset_dir
 BUSINESS_FILE = DATA_DIR / "yelp_academic_dataset_business.json"
 REVIEW_FILE = DATA_DIR / "yelp_academic_dataset_review.json"
+USER_FILE = DATA_DIR / "yelp_academic_dataset_user.json"
 
 T = TypeVar("T")
 
@@ -500,7 +502,7 @@ async def load_reviews(
 async def scan_phase(
     business_file: Path | None = BUSINESS_FILE,
     review_file: Path | None = REVIEW_FILE,
-    user_file: Path | None = None,
+    user_file: Path | None = USER_FILE,
     max_businesses: int = 100,
     min_reviews: int = 10,
 ) -> dict[str, Any]:
@@ -517,10 +519,8 @@ async def scan_phase(
         {"businesses": [...], "reviews": [...], "users": [...]}
         均为 Converted* 对象的列表。
     """
-    if not business_file or not review_file:
-        raise FileNotFoundError("需要商家和评论 JSONL 文件路径")
-    if user_file is None:
-        user_file = DATA_DIR / "yelp_academic_dataset_user.json"
+    if not business_file or not review_file or not user_file:
+        raise FileNotFoundError("需要商家、评论、用户 JSONL 文件路径")
 
     t0 = time.time()
     logger.info("=" * 60)
@@ -694,7 +694,7 @@ async def load_phase(
 async def load_all_yelp_data(
     business_file: Path | None = BUSINESS_FILE,
     review_file: Path | None = REVIEW_FILE,
-    user_file: Path | None = None,
+    user_file: Path | None = USER_FILE,
     batch_size: int = BATCH_SIZE,
     max_businesses: int | None = None,
     min_reviews: int = 0,
