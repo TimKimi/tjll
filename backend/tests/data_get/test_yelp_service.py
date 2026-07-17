@@ -5,16 +5,17 @@ from __future__ import annotations
 
 import pytest
 
+_FAKE_KEY = "test-fake-api-key"
+
 
 @pytest.mark.asyncio
 async def test_yelp_service_init():
-    """YelpService 初始化时使用正确的配置。"""
-    from backend.config import settings
+    """YelpService 初始化时使用传入的 API key。"""
     from backend.services.yelp import YelpService
 
-    svc = YelpService()
-    assert svc._base_url == settings.YELP_API_BASE_URL
-    assert svc._headers["Authorization"].startswith("Bearer ")
+    svc = YelpService(api_key=_FAKE_KEY)
+    assert svc._base_url == "https://api.yelp.com/v3"
+    assert svc._headers["Authorization"] == f"Bearer {_FAKE_KEY}"
 
 
 class TestYelpServiceMocked:
@@ -88,7 +89,7 @@ class TestYelpServiceMocked:
         )
         from backend.services.yelp import YelpService
 
-        svc = YelpService()
+        svc = YelpService(api_key=_FAKE_KEY)
         result = await svc.search_businesses(location="New York")
         assert result.total == 1
         assert len(result.businesses) == 1
@@ -103,7 +104,7 @@ class TestYelpServiceMocked:
         )
         from backend.services.yelp import YelpService
 
-        svc = YelpService()
+        svc = YelpService(api_key=_FAKE_KEY)
         biz = await svc.get_business("test-biz-1")
         assert biz.id == "test-biz-1"
         assert biz.is_claimed is True
@@ -118,7 +119,7 @@ class TestYelpServiceMocked:
         )
         from backend.services.yelp import YelpService
 
-        svc = YelpService()
+        svc = YelpService(api_key=_FAKE_KEY)
         result = await svc.get_reviews("test-biz-1")
         assert result.total == 1
         assert result.reviews[0].text == "Amazing!"
@@ -135,7 +136,7 @@ class TestYelpServiceMocked:
         )
         from backend.services.yelp import YelpError, YelpService
 
-        svc = YelpService()
+        svc = YelpService(api_key=_FAKE_KEY)
         with pytest.raises(YelpError) as excinfo:
             await svc.search_businesses(location="Nowhere")
         assert excinfo.value.status_code == 400
@@ -151,7 +152,7 @@ class TestYelpServiceMocked:
         )
         from backend.services.yelp import YelpError, YelpService
 
-        svc = YelpService()
+        svc = YelpService(api_key=_FAKE_KEY)
         with pytest.raises(YelpError) as excinfo:
             await svc.search_businesses(location="NYC")
         assert excinfo.value.status_code == 401
