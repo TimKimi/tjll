@@ -1,11 +1,11 @@
-"""应用配置：Yelp/DB + RAG；密钥读仓库根 .env 与 backend/.env。"""
+"""应用配置：Yelp/DB + RAG；密钥读仓库根目录 `.env`。"""
 
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# backend/config.py → 应用根 backend/
+# backend/config.py → 应用根 backend/（模型与数据路径相对此目录）
 PROJECT_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_ROOT.parent
 
@@ -19,10 +19,7 @@ def _resolve_path(path: str) -> str:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(
-            str(REPO_ROOT / ".env"),
-            str(PROJECT_ROOT / ".env"),
-        ),
+        env_file=str(REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
@@ -45,7 +42,8 @@ class Settings(BaseSettings):
     api_key: str = ""
     base_url: str = "https://api.deepseek.com/v1"
     llm_model: str = "deepseek-v4-flash"
-    llm_temperature: float = 0.7
+    llm_generate_temperature: float = 0.7
+    llm_rewrite_temperature: float = 0.3
     llm_timeout: int = 120
     llm_max_retries: int = 2
 
@@ -89,6 +87,20 @@ class Settings(BaseSettings):
     hybrid_pipeline_name: str = "rag_hybrid_pipeline"
     hybrid_bm25_weight: float = 0.3
     hybrid_vector_weight: float = 0.7
+
+    # ---- Redis（对话历史，需 redis-stack）----
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = "Jianyan_01"
+    redis_history_ttl: int = 86400  # 24h
+
+    @property
+    def redis_url(self) -> str:
+        return (
+            f"redis://:{self.redis_password}"
+            f"@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        )
 
     @property
     def embedding_model_dir(self) -> str:
@@ -141,7 +153,7 @@ class Settings(BaseSettings):
             "api_key": self.api_key,
             "base_url": self.base_url,
             "model": self.llm_model,
-            "temperature": self.llm_temperature,
+            "temperature": self.llm_generate_temperature,
             "timeout": self.llm_timeout,
             "max_retries": self.llm_max_retries,
         }
