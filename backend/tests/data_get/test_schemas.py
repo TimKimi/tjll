@@ -178,10 +178,68 @@ class TestYelpBusiness:
             business_hours=None,
         )
         assert biz.id == "test-id-123"
-        assert biz.rating == 0.0  # 默认值
-        assert biz.review_count == 0  # 默认值
-        assert biz.is_closed is False  # 默认值
-        assert biz.categories == []  # 默认值
+        assert biz.rating == 0.0
+        assert biz.review_count == 0
+        assert biz.is_closed is False
+        assert biz.categories == []
+
+    def test_hours_normalized_from_list(self):
+        """hours 字段是 list 时取第一个。"""
+        biz = YelpBusiness.model_validate(
+            {
+                "id": "b",
+                "alias": "b",
+                "name": "B",
+                "location": {"display_address": ["A"]},
+                "phone": "",
+                "display_phone": "",
+                "coordinates": {"latitude": 0.0, "longitude": 0.0},
+                "business_hours": [
+                    {
+                        "open": [
+                            {
+                                "is_overnight": False,
+                                "start": "0900",
+                                "end": "2100",
+                                "day": 0,
+                            }
+                        ],
+                        "hours_type": "REGULAR",
+                        "is_open_now": True,
+                    },
+                    {
+                        "open": [
+                            {
+                                "is_overnight": False,
+                                "start": "0900",
+                                "end": "2100",
+                                "day": 0,
+                            }
+                        ],
+                        "hours_type": "REGULAR",
+                        "is_open_now": False,
+                    },
+                ],
+            }
+        )
+        assert biz.hours is not None
+        assert biz.hours.is_open_now is True  # 取 list 第一个
+
+    def test_hours_normalized_from_empty_list(self):
+        """hours 是空 list 时返回 None。"""
+        biz = YelpBusiness.model_validate(
+            {
+                "id": "b",
+                "alias": "b",
+                "name": "B",
+                "location": {"display_address": ["A"]},
+                "phone": "",
+                "display_phone": "",
+                "coordinates": {"latitude": 0.0, "longitude": 0.0},
+                "business_hours": [],
+            }
+        )
+        assert biz.hours is None
 
 
 class TestYelpBusinessSearchResponse:
@@ -258,6 +316,49 @@ class TestYelpReview:
             ),
         )
         assert review.user.image_url is None
+
+
+class TestStoredBusiness:
+    """StoredBusiness 模型。"""
+
+    def test_from_yelp(self):
+        from backend.schemas.yelp import StoredBusiness
+
+        biz = YelpBusiness(
+            id="b-1",
+            alias="test",
+            name="Test",
+            location=YelpLocation(display_address=["Addr"]),
+            phone="123",
+            display_phone="123",
+            coordinates=YelpCoordinates(latitude=1.0, longitude=2.0),
+            business_hours=None,
+        )
+        stored = StoredBusiness.from_yelp(biz)
+        assert stored.yelp_id == "b-1"
+        assert stored.name == "Test"
+        assert stored.coordinates is not None
+        assert stored.coordinates.latitude == 1.0
+
+
+class TestStoredReview:
+    """StoredReview 模型。"""
+
+    def test_from_yelp(self):
+        from backend.schemas.yelp import StoredReview
+
+        review = YelpReview(
+            id="r-1",
+            url="https://r.com/1",
+            text="Good",
+            rating=4,
+            time_created="2020-01-01",
+            user=YelpReviewUser(id="u1", profile_url="https://u.com/1", name="Alice"),
+        )
+        stored = StoredReview.from_yelp(review, business_id="b-1")
+        assert stored.id == "r-1"
+        assert stored.business_id == "b-1"
+        assert stored.user.name == "Alice"
 
 
 class TestYelpReviewsResponse:

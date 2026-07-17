@@ -1,24 +1,22 @@
 #!/usr/bin/env python
-"""Yelp 学术数据集 — 一次性解压 & 加载脚本。
+"""Yelp 学术数据集 — 两阶段加载脚本。
 
-使用方法：
-    # 1. 确保 Docker PostgreSQL 正在运行
-    docker compose up -d
+两阶段流程：
+  第一阶段：扫描 JSON 文件，按条件筛选商家/评论/用户，构建三个待入库列表（不写 DB）
+  第二阶段：将三个列表批量写入 PostgreSQL
 
-    # 2. 运行提取和加载（全部数据）
-    uv run python backend/scripts/extract_yelp_data.py
+用法：
+    # 两阶段加载（推荐）：指定商家数和最低评论数
+    uv run python backend/scripts/extract_yelp_data.py --max-businesses 50 --min-reviews 20
 
-    # 3. 仅加载少量数据进行测试
-    uv run python backend/scripts/extract_yelp_data.py --max-businesses 100 --max-reviews 500
-
-    # 4. 查看帮助
+    # 查看帮助
     uv run python backend/scripts/extract_yelp_data.py --help
 
 处理流程：
     1. 解压 data/Yelp-JSON.zip → 获取 yelp_dataset.tar
     2. 从 tar 中提取 JSONL 文件到 data/yelp-dataset/
-    3. 流式读取 JSONL 并映射到 ORM 模型
-    4. 批量写入 PostgreSQL
+    3. 第一阶段：扫描 JSON，构建商家/评论/用户列表，按条件过滤
+    4. 第二阶段：批量写入 PostgreSQL
 """
 
 from __future__ import annotations
@@ -31,7 +29,8 @@ import time
 import zipfile
 from pathlib import Path
 
-# 确保 backend 包可导入
+from backend.config import settings
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 os.chdir(str(_REPO_ROOT))
 
@@ -42,51 +41,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ZIP_PATH = Path("data/Yelp-JSON.zip")
+ZIP_PATH = settings.yelp_zip_path
 TAR_NAME = "Yelp JSON/yelp_dataset.tar"
-EXTRACT_DIR = Path("data/yelp-dataset")
-
-
-# ============================================================
-# 第一步：解压
-# ============================================================
+EXTRACT_DIR = settings.yelp_dataset_dir
 
 
 def extract_zip_and_tar(zip_path: Path, extract_dir: Path) -> dict[str, Path]:
-    """解压 zip → tar → JSONL 文件。
-
-    Args:
-        zip_path: 压缩包路径。
-        extract_dir: 提取目标目录。
-
-    Returns:
-        JSONL 文件路径字典: {名称: 路径}
-    """
+    """解压 zip → tar → JSONL 文件。"""
     extract_dir.mkdir(parents=True, exist_ok=True)
     jsonl_files: dict[str, Path] = {}
 
     logger.info("步骤 1/2: 解压 %s", zip_path)
-
     with zipfile.ZipFile(str(zip_path), "r") as zf:
-        # 检查 tar 是否在 zip 中
         if TAR_NAME not in zf.namelist():
-            # 也许直接包含 JSONL 文件
             for name in zf.namelist():
                 if name.endswith(".json") and not name.startswith("__MACOSX"):
-                    logger.info("  发现 JSONL: %s", name)
                     target = extract_dir / Path(name).name
                     if not target.exists():
                         with zf.open(name) as src, open(target, "wb") as dst:
                             dst.write(src.read())
-                        logger.info("  解压到: %s", target)
                     jsonl_files[Path(name).stem] = target
             return jsonl_files
 
-        # 从 zip 中读取 tar
         tar_data = zf.read(TAR_NAME)
         logger.info("  tar 大小: %.1f MB", len(tar_data) / (1024 * 1024))
 
-        # 从 tar 中提取 JSONL
         with tarfile.open(fileobj=__import__("io").BytesIO(tar_data)) as tf:
             for member in tf.getmembers():
                 if not member.isfile() or not member.name.endswith(".json"):
@@ -111,151 +90,129 @@ def extract_zip_and_tar(zip_path: Path, extract_dir: Path) -> dict[str, Path]:
     return jsonl_files
 
 
-# ============================================================
-# 第二步：加载到数据库
-# ============================================================
-
-
-async def load_to_database(
+async def run_load(
     jsonl_files: dict[str, Path],
     max_businesses: int | None = None,
-    max_reviews: int | None = None,
+    min_reviews: int = 0,
     batch_size: int = 500,
 ) -> dict:
-    """将解压后的 JSONL 数据加载到 PostgreSQL。
-
-    Args:
-        jsonl_files: 文件路径字典。
-        max_businesses: 限制最大商家数。
-        max_reviews: 限制最大评论数。
-        batch_size: 每批写入数量。
-
-    Returns:
-        加载统计信息。
-    """
+    """执行两阶段加载。"""
     from backend.database import engine
     from backend.models.base import Base
 
-    # 确保表存在
-    logger.info("步骤 2/2: 确保数据库表存在...")
+    logger.info("确保数据库表存在...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 修正已有列的长度（SQLAlchemy create_all 不修改已存在列）
+        from sqlalchemy import text
+
+        await conn.execute(
+            text("ALTER TABLE users ALTER COLUMN yelping_since TYPE VARCHAR(20)")
+        )
     logger.info("  表已就绪")
 
-    # 加载商家
-    from backend.data.loader import load_businesses, load_reviews
+    from backend.data.loader import load_all_yelp_data
 
-    stats = {}
-
-    biz_file = jsonl_files.get("yelp_academic_dataset_business")
-    if biz_file:
-        logger.info("加载商家数据: %s", biz_file)
-        stats["businesses"] = await load_businesses(
-            file_path=biz_file, batch_size=batch_size, max_rows=max_businesses
-        )
-    else:
-        logger.warning("未找到商家数据文件")
-
-    rev_file = jsonl_files.get("yelp_academic_dataset_review")
-    if rev_file:
-        logger.info("加载评论数据: %s", rev_file)
-        stats["reviews"] = await load_reviews(
-            file_path=rev_file, batch_size=batch_size, max_rows=max_reviews
-        )
-    else:
-        logger.warning("未找到评论数据文件")
+    biz_file: Path | None = jsonl_files.get("yelp_academic_dataset_business")
+    rev_file: Path | None = jsonl_files.get("yelp_academic_dataset_review")
+    usr_file: Path | None = jsonl_files.get("yelp_academic_dataset_user")
+    if not biz_file or not rev_file:
+        raise FileNotFoundError("缺少商家或评论 JSONL 文件")
+    stats = await load_all_yelp_data(
+        business_file=biz_file,
+        review_file=rev_file,
+        user_file=usr_file,
+        batch_size=batch_size,
+        max_businesses=max_businesses,
+        min_reviews=min_reviews,
+    )
 
     await engine.dispose()
     return stats
 
 
-# ============================================================
-# 主入口
-# ============================================================
-
-
 async def main():
     parser = argparse.ArgumentParser(
-        description="Yelp 学术数据集 — 解压并加载到 PostgreSQL",
+        description="Yelp 学术数据集 — 两阶段加载到 PostgreSQL",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  uv run python backend/scripts/extract_yelp_data.py
-  uv run python backend/scripts/extract_yelp_data.py --max-businesses 1000 --batch-size 200
-  uv run python backend/scripts/extract_yelp_data.py --skip-extract
+  # 指定商家数和最低评论数
+  uv run python backend/scripts/extract_yelp_data.py --max-businesses 50 --min-reviews 20
+
+  # 仅解压，不加载
   uv run python backend/scripts/extract_yelp_data.py --skip-load
         """,
     )
     parser.add_argument(
         "--max-businesses",
         type=int,
-        default=None,
-        help="最大商家数（默认全部）",
+        default=50,
+        help="最大商家数（默认 50）",
     )
     parser.add_argument(
-        "--max-reviews",
+        "--min-reviews",
         type=int,
-        default=None,
-        help="最大评论数（默认全部）",
+        default=10,
+        help="商家最低有效评论数（不足则丢弃，默认 10）",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
         default=500,
-        help="每批写入数据库的行数（默认 500）",
-    )
-    parser.add_argument(
-        "--skip-extract",
-        action="store_true",
-        help="跳过解压，假定 data/yelp-dataset/ 中已有 JSONL",
+        help="每批写入行数（默认 500）",
     )
     parser.add_argument(
         "--skip-load",
         action="store_true",
-        help="仅解压，不加载到数据库",
+        help="仅解压不加载",
     )
     args = parser.parse_args()
 
     start_time = time.time()
     logger.info("=" * 60)
-    logger.info("Yelp 学术数据集 — 加载开始")
+    logger.info("Yelp 学术数据集 — 两阶段加载")
+    logger.info(
+        "  商家上限: %s, 最低评论数: %d",
+        args.max_businesses or "全部",
+        args.min_reviews,
+    )
     logger.info("=" * 60)
 
-    # 步骤 1: 解压
+    # 优先使用已解压的文件，不存在则解压
     jsonl_files = {}
-    if not args.skip_extract:
-        jsonl_files = extract_zip_and_tar(ZIP_PATH, EXTRACT_DIR)
-    else:
-        logger.info("跳过解压，扫描 %s", EXTRACT_DIR)
+    if EXTRACT_DIR.exists():
         for f in EXTRACT_DIR.iterdir():
             if f.suffix == ".json":
                 jsonl_files[f.stem] = f
-        logger.info("  发现 %d 个 JSONL 文件", len(jsonl_files))
 
-    # 步骤 2: 加载
+    if not jsonl_files:
+        if ZIP_PATH.exists():
+            jsonl_files = extract_zip_and_tar(ZIP_PATH, EXTRACT_DIR)
+        else:
+            logger.error(
+                "JSONL 文件不存在 (%s)，压缩包也不存在 (%s)", EXTRACT_DIR, ZIP_PATH
+            )
+            return
+
+    # 加载
     if not args.skip_load:
         if not jsonl_files:
             logger.error("没有 JSONL 文件可加载！")
             return
-        stats = await load_to_database(
+        stats = await run_load(
             jsonl_files,
             max_businesses=args.max_businesses,
-            max_reviews=args.max_reviews,
+            min_reviews=args.min_reviews,
             batch_size=args.batch_size,
         )
         elapsed = time.time() - start_time
-
         logger.info("=" * 60)
-        logger.info("加载完成！耗时 %.1f 秒", elapsed)
+        logger.info("全部完成！耗时 %.1f 秒", elapsed)
         logger.info("=" * 60)
-
-        biz_stat = stats.get("businesses", {})
-        rev_stat = stats.get("reviews", {})
+        filtered = stats.get("filtered", {})
         logger.info(
-            "  商家: 总计 %(total)s, 插入 %(inserted)s, 跳过 %(skipped)s", biz_stat
-        )
-        logger.info(
-            "  评论: 总计 %(total)s, 插入 %(inserted)s, 跳过 %(skipped)s", rev_stat
+            "  入库: %(businesses)s 商家, %(reviews)s 评论, %(users)s 用户", filtered
         )
     else:
         logger.info("跳过数据库加载（--skip-load）")

@@ -28,10 +28,10 @@ install:
 # ============================================================
 
 # 全套代码检查（最常用）
-# 自动执行：ruff 自动修复 → ruff 格式检查 → mypy 类型检查
+# 自动执行：ruff 自动修复 → ruff 格式检查 → mypy 类型检查 → 单元测试覆盖率
 # 用法：just lint
 # 提示：提交前务必跑一次，确保 CI 不红
-lint: fix fmt-check mypy
+lint: fix fmt-check mypy coverage
 
 # ruff 自动修复 lint 问题（如未使用的导入、拼写错误等）
 fix:
@@ -48,6 +48,10 @@ fmt-check:
 # mypy 类型检查（只扫描 backend/ 目录）
 mypy:
     uv run mypy backend
+
+# 单元测试覆盖率（跳过集成测试）
+coverage:
+    uv run pytest -c pyproject.toml -m "not integration" --cov --cov-report=term-missing --cov-fail-under=60 -q --tb=short
 
 
 # ============================================================
@@ -91,14 +95,16 @@ db-down:
 # Yelp 数据加载
 # ============================================================
 
-# 全量加载 Yelp 数据到 PostgreSQL（已有文件则跳过解压）
-# 包含：商家 ~15 万条，评论 ~700 万条，支持断点续传
-data-load:
-    uv run python -m backend.scripts.extract_yelp_data
+# 两阶段加载：just data-load <商家数> <最低评论数>
+# 自动筛选关联的评论和用户，不足最低评论数的商家会被丢弃
+# 用法：just data-load 100 50
+data-load biz rev:
+    uv run python -m backend.scripts.extract_yelp_data --max-businesses {{ biz }} --min-reviews {{ rev }}
 
-# 只加载 100 个商家 + 500 条评论（快速验证）
+# 小批量加载（快速验证）：just data-sample
+# 等价于 just data-load 5 1
 data-sample:
-    uv run python -m backend.scripts.extract_yelp_data --max-businesses 100 --max-reviews 500
+    uv run python -m backend.scripts.extract_yelp_data --max-businesses 5 --min-reviews 1
 
 # 查看数据库中已加载的 Yelp 数据统计
 data-check:

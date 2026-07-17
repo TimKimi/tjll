@@ -41,6 +41,7 @@ class TestDatasetBusiness:
         assert biz.stars == 4.5
         assert biz.review_count == 1198
         assert biz.is_open == 1
+        assert biz.categories is not None
         assert "Mexican" in biz.categories
         assert biz.hours is not None
         assert biz.hours["Monday"] == "10:00-21:00"
@@ -63,8 +64,8 @@ class TestDatasetBusiness:
         assert biz.stars == 0.0
         assert biz.review_count == 0
         assert biz.is_open == 0
-        assert biz.attributes == {}
-        assert biz.categories == ""
+        assert biz.attributes is None
+        assert biz.categories is None
         assert biz.hours is None
 
     def test_is_open_int_bool(self):
@@ -171,7 +172,7 @@ class TestConvertedBusiness:
         assert biz.is_closed is False
         assert biz.latitude == 37.78
         assert biz.categories is not None
-        assert "mexican" in biz.categories
+        assert "Mexican" in biz.categories
 
     def test_defaults(self):
         """可选字段的默认值。"""

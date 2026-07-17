@@ -1,4 +1,4 @@
-"""Rerank：FlagEmbedding bge-reranker（无 Redis / 无查询重述）。"""
+"""Rerank：FlagEmbedding bge-reranker。"""
 
 from __future__ import annotations
 
