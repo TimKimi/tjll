@@ -1,11 +1,11 @@
-"""应用配置：Yelp/DB + RAG；密钥读仓库根 .env 与 backend/.env。"""
+"""应用配置：Yelp/DB + RAG；密钥读仓库根目录 `.env`。"""
 
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# backend/config.py → 应用根 backend/
+# backend/config.py → 应用根 backend/（模型与数据路径相对此目录）
 PROJECT_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_ROOT.parent
 
@@ -19,10 +19,7 @@ def _resolve_path(path: str) -> str:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(
-            str(REPO_ROOT / ".env"),
-            str(PROJECT_ROOT / ".env"),
-        ),
+        env_file=str(REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
@@ -34,7 +31,7 @@ class Settings(BaseSettings):
     YELP_API_BASE_URL: str = "https://api.yelp.com/v3"
 
     # ---- 数据库 ----
-    DATABASE_URL: str = "postgresql+asyncpg://tjll:Jianyan_01@localhost:5432/tjll"
+    DATABASE_URL: str = "postgresql+asyncpg://tjll:tjll_dev@localhost:5432/tjll"
     DATABASE_ECHO: bool = False
 
     # ---- 服务器 ----

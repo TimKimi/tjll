@@ -11,7 +11,7 @@ Copy-Item "$src\bge-base-zh-v1.5\*" "$dst\bge-base-zh-v1.5\" -Recurse -Force
 Copy-Item "$src\bge-reranker-v2-m3\*" "$dst\bge-reranker-v2-m3\" -Recurse -Force
 ```
 
-配置：`backend/.env.example` → 本地 `backend/.env`（勿提交）。
+配置：仓库根 `.env.example` → 本地 `.env`（勿提交）。
 代码：`from backend.config import settings`。
 
 Docker：根目录 `docker-compose.yml`（Postgres + OpenSearch）；OpenSearch Dockerfile 在 `backend/RAG/infra/opensearch/`。

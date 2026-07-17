@@ -58,14 +58,11 @@ __screenshots__/
 # Local machine configs (do not push)
 .python-version.local
 
-# Root secrets (Yelp / DB); commit .env.example only
+# Root secrets; commit .env.example only
 .env
 !.env.example
-
-# Backend settings: commit .env.example only
 backend/.env
 backend/.env.*
-!backend/.env.example
 
 # Model weights under backend/RAG: keep placeholders only
 backend/RAG/models/**

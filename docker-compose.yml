@@ -3,7 +3,7 @@
 # 停止：docker compose down
 # OpenSearch 镜像构建上下文：backend/RAG/infra/opensearch（含 IK 插件 Dockerfile）
 #
-# 统一密码：Jianyan_01（Postgres / OpenSearch admin / Dashboards / Redis）
+# Postgres 密码：tjll_dev；OpenSearch / Dashboards / Redis：Jianyan_01
 
 services:
   db:
@@ -15,7 +15,7 @@ services:
     environment:
       POSTGRES_DB: tjll
       POSTGRES_USER: tjll
-      POSTGRES_PASSWORD: Jianyan_01
+      POSTGRES_PASSWORD: tjll_dev
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
