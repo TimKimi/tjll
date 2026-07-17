@@ -42,5 +42,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-groups
 
-      - name: Run unit tests
-        run: uv run pytest -c pyproject.toml -m "not integration" -v --tb=short
+      - name: Run unit tests with coverage
+        run: uv run pytest -c pyproject.toml -m "not integration" --cov --cov-report=term-missing --cov-fail-under=80 -v --tb=short
