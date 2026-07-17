@@ -190,6 +190,61 @@
               </div>
             </div>
   
+            <!-- 我的收藏 -->
+<div v-if="activeMenu === 'favorites'" class="content-panel">
+  <div class="panel-header">
+    <h3>我的收藏</h3>
+    <span class="panel-count">
+      {{ favoritesList.length }} 家店铺
+      <span v-if="isLoadingFavorites" class="loading-text">加载中...</span>
+    </span>
+  </div>
+
+  <!-- 加载状态 -->
+  <div v-if="isLoadingFavorites" class="loading-state">
+    <i class="fas fa-spinner fa-spin"></i>
+    <p>加载收藏列表...</p>
+  </div>
+
+  <!-- 空状态 -->
+  <div v-else-if="favoritesList.length === 0" class="empty-state">
+    <i class="fas fa-heart" style="color: #cbd5e1;"></i>
+    <p>还没有收藏的店铺</p>
+    <span class="empty-hint">去探索发现好店吧！</span>
+  </div>
+
+  <!-- 收藏列表 -->
+  <div v-else class="favorites-grid">
+    <div
+      v-for="shop in favoritesList"
+      :key="shop.id"
+      class="favorite-card"
+      @click="goToRestaurant(shop.id)"
+    >
+      <div class="favorite-img">
+        <img :src="shop.image" :alt="shop.name" />
+        <button class="favorite-remove" @click.stop="removeFavorite(shop.id)">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="favorite-info">
+        <h4>{{ shop.name }}</h4>
+        <div class="favorite-meta">
+          <span class="shop-rating">
+            <i class="fas fa-star" style="color: #f59e0b;"></i>
+            {{ shop.rating }}
+          </span>
+          <span class="shop-price">¥{{ shop.price }}/人</span>
+          <span v-if="shop.category" class="shop-category-tag">{{ shop.category }}</span>
+        </div>
+        <div class="shop-address">
+          <i class="fas fa-map-pin"></i>
+          <span>{{ shop.address }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
             <!-- 设置 -->
             <div v-if="activeMenu === 'settings'" class="content-panel">
               <div class="panel-header">
@@ -264,6 +319,17 @@
     icon?: string
     active?: boolean
   }
+
+  // 收藏店铺类型
+interface FavoriteShop {
+  id: number
+  name: string
+  image: string
+  rating: number
+  price: number
+  address: string
+  category?: string
+}
   
   // ============================================
   // 状态
@@ -297,12 +363,16 @@
   const menuItems = [
     { key: 'profile', label: '个人信息', icon: 'fas fa-user' },
     { key: 'history', label: '对话历史', icon: 'fas fa-comment-dots', badge: true },
+    { key: 'favorites', label: '我的收藏', icon: 'fas fa-heart', badge: true },
     { key: 'settings', label: '设置', icon: 'fas fa-cog' },
   ]
   
   // 对话列表（与 ChatView 共享数据源）
   const conversationList = ref<Conversation[]>([])
   
+  // 收藏列表
+const favoritesList = ref<FavoriteShop[]>([])
+const isLoadingFavorites = ref(false)
   // ============================================
   // 计算属性
   // ============================================
@@ -317,6 +387,7 @@
   onMounted(() => {
     loadUserInfo()
     loadConversations()
+    loadFavorites()
   })
   
   // ============================================
@@ -531,9 +602,93 @@
     if (confirm('确定要退出登录吗？')) {
       localStorage.removeItem('token')
       localStorage.removeItem('userInfo')
+      localStorage.removeItem('favorites')
       router.push('/')
     }
   }
+
+  // ============================================
+// 收藏功能
+// ============================================
+
+// 加载收藏列表
+const loadFavorites = async (): Promise<void> => {
+  isLoadingFavorites.value = true
+  try {
+    const response = await fetch('/api/favorites', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+      },
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      favoritesList.value = data.data || data || []
+    } else {
+      console.warn('获取收藏列表失败')
+      // 从本地缓存加载
+      loadFavoritesFromCache()
+    }
+  } catch (error) {
+    console.error('获取收藏列表异常:', error)
+    loadFavoritesFromCache()
+  } finally {
+    isLoadingFavorites.value = false
+  }
+}
+
+// 从本地缓存加载收藏
+const loadFavoritesFromCache = (): void => {
+  try {
+    const cached = localStorage.getItem('favorites')
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      if (Array.isArray(parsed)) {
+        favoritesList.value = parsed
+        return
+      }
+    }
+  } catch (e) {
+    console.warn('读取缓存收藏失败:', e)
+  }
+  favoritesList.value = []
+}
+
+// 移除收藏
+const removeFavorite = async (shopId: number): Promise<void> => {
+  const shop = favoritesList.value.find(s => s.id === shopId)
+  if (!shop) return
+
+  if (confirm(`确定要移除"${shop.name}"的收藏吗？`)) {
+    try {
+      const response = await fetch(`/api/favorites/${shopId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      })
+
+      if (response.ok || response.status === 204) {
+        // 从列表中移除
+        favoritesList.value = favoritesList.value.filter(s => s.id !== shopId)
+        // 更新缓存
+        localStorage.setItem('favorites', JSON.stringify(favoritesList.value))
+      } else {
+        throw new Error('移除收藏失败')
+      }
+    } catch (error) {
+      console.error('移除收藏失败:', error)
+      alert('移除收藏失败，请稍后重试')
+    }
+  }
+}
+
+// 跳转到餐厅详情页
+const goToRestaurant = (shopId: number): void => {
+  router.push(`/restaurant/${shopId}`)
+}
   </script>
   
   <style scoped>
@@ -1241,4 +1396,158 @@
       gap: 0.4rem;
     }
   }
+
+  /* ============================================
+   收藏列表样式
+   ============================================ */
+.favorites-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.favorite-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.8rem;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.favorite-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.favorite-img {
+  position: relative;
+  height: 140px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.favorite-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.favorite-remove {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 1.8rem;
+  height: 1.8rem;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  transition: all 0.2s;
+}
+
+.favorite-remove:hover {
+  background: rgba(220, 38, 38, 0.8);
+}
+
+.favorite-info {
+  padding: 0.6rem 0.8rem;
+}
+
+.favorite-info h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.3rem 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.favorite-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.favorite-meta .shop-rating {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.favorite-meta .shop-price {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.favorite-meta .shop-category-tag {
+  background: #f1f5f9;
+  padding: 0.1rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  color: #475569;
+}
+
+.shop-address {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.shop-address i {
+  font-size: 0.6rem;
+}
+
+.shop-address span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================
+   响应式 - 收藏
+   ============================================ */
+@media (max-width: 768px) {
+  .favorites-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.8rem;
+  }
+
+  .favorite-img {
+    height: 110px;
+  }
+}
+
+@media (max-width: 480px) {
+  .favorites-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+
+  .favorite-img {
+    height: 90px;
+  }
+
+  .favorite-info h4 {
+    font-size: 0.85rem;
+  }
+
+  .favorite-meta {
+    font-size: 0.7rem;
+  }
+}
   </style>

@@ -1243,6 +1243,8 @@ const viewShopDetail = (shopId: number): void => {
   flex-direction: column;
   min-width: 0;
   background: #ffffff;
+  position: relative;
+  overflow: hidden;
 }
 
 /* ============================================
@@ -1387,22 +1389,21 @@ const viewShopDetail = (shopId: number): void => {
   flex-direction: column;
   gap: 1.2rem;
   position: relative;
-  /* 只保留网格纹理作为背景 */
-  background-image:
-    radial-gradient(circle at 30% 20%, #f1f5f9 1px, transparent 1px),
-    radial-gradient(circle at 70% 80%, #f1f5f9 1px, transparent 1px);
-  background-size: 40px 40px, 50px 50px;
 }
 
 /* 用伪元素加载背景图 */
 .chat-container::before {
   content: '';
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 0;
   background:
     url('/images/1.png') center / cover no-repeat fixed;
   opacity: 0.4;  /* 控制透明度，0-1 之间调整 */
+  pointer-events: none;
 }
 
 /* 所有子元素在背景之上 */
