@@ -6,6 +6,7 @@ import LoginView from '../view/LoginView.vue'
 import RegisterView from '../view/RegisterView.vue'
 import PersonalProfileView from '../view/PersonalProfileView.vue'
 import RestaurantView from '../view/RestaurantView.vue'
+import AdminView from '../view/AdminView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,6 +36,16 @@ const router = createRouter({
       meta: {
         title: '探店助手 - 登录',
         requiresAuth: false,
+      }
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: AdminView,
+      meta: {
+        title: '探店助手 - 管理后台',
+        // requiresAuth: true,
+        // requiresAdmin: true,  // 新增：需要管理员权限
       }
     },
     {
@@ -77,31 +88,37 @@ const router = createRouter({
   ]
 })
 
-// // 路由守卫：设置页面标题 + 登录验证
+// //路由守卫
 // router.beforeEach((to, from, next) => {
-//   // 设置页面标题
 //   if (to.meta?.title) {
 //     document.title = to.meta.title as string
 //   }
 
-//   // 检查是否需要登录
 //   const requiresAuth = to.meta?.requiresAuth as boolean
+//   const requiresAdmin = to.meta?.requiresAdmin as boolean
 //   const token = localStorage.getItem('token')
+//   const role = localStorage.getItem('userRole')
 
 //   if (requiresAuth && !token) {
-//     // 需要登录但未登录，跳转到登录页，并保存原路径
 //     next({
 //       path: '/login',
 //       query: { redirect: to.fullPath }
 //     })
-//   } else {
-//     // 如果已登录且访问登录页或注册页，跳转到首页（可选）
-//     if ((to.path === '/login' || to.path === '/register') && token) {
-//       next('/')
-//     } else {
-//       next()
-//     }
+//     return
 //   }
+
+//   if (requiresAdmin && role !== 'admin') {
+//     alert('您没有管理员权限')
+//     next('/')
+//     return
+//   }
+
+//   if ((to.path === '/login' || to.path === '/register') && token) {
+//     next('/')
+//     return
+//   }
+
+//   next()
 // })
 
 export default router

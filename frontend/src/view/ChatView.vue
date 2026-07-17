@@ -232,9 +232,6 @@
       <!-- 输入区域 -->
       <div class="input-area">
         <div class="input-container">
-          <button class="tool-btn" title="附件">
-            <i class="fas fa-plus"></i>
-          </button>
 
           <input
             v-model="inputText"
@@ -244,9 +241,23 @@
             class="chat-input"
           />
 
-          <button class="tool-btn" title="语音">
-            <i class="fas fa-microphone"></i>
-          </button>
+<!-- 语音按钮 -->
+<button 
+  class="tool-btn" 
+  title="语音输入"
+  @click="toggleRecording"
+  :class="{ recording: isRecording }"
+>
+  <!-- ✅ 使用两个图标：一个作为背景，一个作为动态效果 -->
+  <span class="mic-wrapper">
+    <i class="fas fa-microphone mic-icon"></i>
+    <span class="mic-waves" v-if="isRecording">
+      <span class="wave wave1"></span>
+      <span class="wave wave2"></span>
+      <span class="wave wave3"></span>
+    </span>
+  </span>
+</button>
 
           <button
             @click="sendMessage(inputText)"
@@ -345,9 +356,17 @@ const userInfo = ref<UserInfo>({
 
 // 对话列表（从后端 API 获取）
 const conversationList = ref<Conversation[]>([])
-
 // 当前激活的对话 ID（用于发送消息时关联）
 const currentConversationId = ref<number | null>(null)
+
+const isRecording = ref(false)  // 是否正在录音
+const recognition = ref<any>(null)  // 语音识别实例
+const audioLevel = ref(0) // 声音大小（0-100）
+// 音频上下文
+let audioContext: AudioContext | null = null
+let analyser: AnalyserNode | null = null
+let dataArray: Uint8Array | null = null
+let animationId: number | null = null
 
 // ============================================
 // 3. 工具函数
@@ -790,6 +809,8 @@ onMounted(async () => {
   })
     // 处理查询参数
     await processQueryParam()
+    // 新增：初始化语音识别
+    initSpeechRecognition()
 })
 
 // ============================================
@@ -859,6 +880,147 @@ const viewShopDetail = (shopId: number): void => {
   router.push(`/shop/${shopId}`)
 }
 
+// ============================================
+// 19. 语音识别功能
+// ============================================
+
+// 初始化语音识别
+const initSpeechRecognition = () => {
+  // 检查浏览器是否支持
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if (!SpeechRecognition) {
+    console.warn('当前浏览器不支持语音识别')
+    return
+  }
+
+  recognition.value = new SpeechRecognition()
+  recognition.value.lang = 'zh-CN'  // 中文
+  recognition.value.continuous = false  // 单次识别
+  recognition.value.interimResults = true  // 显示中间结果
+
+// 识别结果
+recognition.value.onresult = (event: any) => {
+  const results = event.results
+  const transcript = results[0][0].transcript
+  inputText.value = transcript  // ✅ 只填入输入框
+  
+  // ✅ 如果是最终结果，只停止录音，不自动发送
+  if (results[0].isFinal) {
+    isRecording.value = false
+  }
+}
+
+  // 识别结束
+  recognition.value.onend = () => {
+    isRecording.value = false
+    stopAudioMonitoring()  // 停止声音监听
+  }
+
+  // 识别错误
+  recognition.value.onerror = (event: any) => {
+    console.error('语音识别错误:', event.error)
+    isRecording.value = false
+    if (event.error === 'not-allowed') {
+      alert('请允许浏览器使用麦克风权限')
+    } else if (event.error === 'no-speech') {
+      // 没有检测到语音，静默处理
+    } else {
+      alert('语音识别失败，请重试')
+    }
+  }
+}
+
+// 切换语音识别（点击麦克风按钮）
+const toggleRecording = async () => {
+  if (!recognition.value) {
+    alert('当前浏览器不支持语音识别，请使用 Chrome 浏览器')
+    return
+  }
+
+  if (isRecording.value) {
+    // 停止录音
+    try {
+      recognition.value.stop()
+    } catch (e) {}
+    isRecording.value = false
+    stopAudioMonitoring()  // ✅ 停止声音监听
+  } else {
+    // 开始录音
+    try {
+      // ✅ 先获取音频权限并开始监听声音
+      await startAudioMonitoring()
+      recognition.value.start()
+      isRecording.value = true
+    } catch (e) {
+      console.error('启动语音识别失败:', e)
+      alert('启动语音识别失败，请重试')
+      stopAudioMonitoring()
+    }
+  }
+}
+
+// ============================================
+// 20. 声音波动效果
+// ============================================
+
+// 获取麦克风音频流
+const getAudioStream = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    audioContext = new AudioContext()
+    analyser = audioContext.createAnalyser()
+    const source = audioContext.createMediaStreamSource(stream)
+    source.connect(analyser)
+    analyser.fftSize = 256
+    dataArray = new Uint8Array(analyser.frequencyBinCount)
+    return true
+  } catch (error) {
+    console.error('获取麦克风失败:', error)
+    return false
+  }
+}
+
+// 更新声音大小
+const updateAudioLevel = () => {
+  if (!analyser || !dataArray || !isRecording.value) {
+    audioLevel.value = 0
+    return
+  }
+  
+  // ✅ 使用类型断言 as Uint8Array<ArrayBuffer>
+  analyser.getByteFrequencyData(dataArray as Uint8Array<ArrayBuffer>)
+  let sum = 0
+  for (let i = 0; i < dataArray.length; i++) {
+    sum += dataArray[i] || 0  // ✅ 添加 || 0 防止 undefined
+  }
+  const avg = sum / dataArray.length
+  audioLevel.value = Math.min((avg / 128) * 100, 100)
+  
+  animationId = requestAnimationFrame(updateAudioLevel)
+}
+
+// 开始监听声音
+const startAudioMonitoring = async () => {
+  const success = await getAudioStream()
+  if (success) {
+    updateAudioLevel()
+  }
+}
+
+// 停止监听声音
+const stopAudioMonitoring = () => {
+  if (animationId) {
+    cancelAnimationFrame(animationId)
+    animationId = null
+  }
+  audioLevel.value = 0
+  if (audioContext) {
+    audioContext.close()
+    audioContext = null
+  }
+  analyser = null
+  dataArray = null
+}
 </script>
 
 
@@ -1586,6 +1748,7 @@ const viewShopDetail = (shopId: number): void => {
 }
 
 .tool-btn {
+  position: relative;
   background: none;
   border: none;
   color: #94a3b8;
@@ -1608,12 +1771,14 @@ const viewShopDetail = (shopId: number): void => {
   outline: none;
   font-size: 0.9rem;
   background: transparent;
-  color: #334155;
+  color:  #090909;
   min-width: 0;
+  font-weight: 500;
 }
 
 .chat-input::placeholder {
   color: #94a3b8;
+  font-weight: 400;
 }
 
 /* 发送按钮 - 带箭头指示 */
@@ -2121,5 +2286,92 @@ const viewShopDetail = (shopId: number): void => {
 
 .detail-btn i {
   font-size: 0.8rem;
+}
+
+/* ============================================
+   语音输入按钮
+   ============================================ */
+   .tool-btn:hover {
+  color: #64748b;
+}
+
+/* 麦克风包装器 */
+.mic-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 麦克风图标 - 在波动圆环之上 */
+.mic-icon {
+  position: relative;
+  z-index: 2;
+  transition: color 0.2s;
+  font-size: 1rem;
+}
+
+/* 录音状态 - 按钮变红*/
+.tool-btn.recording {
+  color: #ef4444;
+}
+
+.tool-btn.recording .mic-icon {
+  color: #ef4444;
+}
+
+/* 波动圆环容器 */
+.mic-waves {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 30px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* 单个波动圆环 */
+.wave {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid #ef4444;
+  opacity: 0;
+  width: 18px;
+  height: 18px;
+  animation: waveExpand 1.2s ease-out infinite;
+}
+
+/* 三个圆环不同延迟，形成连续波动 */
+.wave1 {
+  animation-delay: 0s;
+}
+
+.wave2 {
+  animation-delay: 0.4s;
+}
+
+.wave3 {
+  animation-delay: 0.8s;
+}
+
+/* 波动动画 - 从内向外扩散*/
+@keyframes waveExpand {
+  0% {
+    width: 14px;
+    height: 14px;
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  100% {
+    width: 48px;
+    height: 48px;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.6);
+  }
 }
 </style>
