@@ -139,24 +139,19 @@ just install    # 安装依赖和钩子
 ```
 tjll/
 ├── backend/               # 后端代码（Python）
-│   ├── config.py          # 配置（读同目录 .env）
+│   ├── config.py          # 配置（读仓库根目录 .env）
 │   ├── data/              # Yelp 数据集加载 & 数据查询接口
 │   ├── database.py        # 异步引擎 & 会话工厂
-│   ├── docs/              # 后端文档（API、开发指南、数据指南）
+│   ├── docs/              # 后端文档（yelp-api、development-guide、yelp-data-guide）
 │   ├── main.py
-│   ├── models/            # ORM 模型（businesses、reviews）
+│   ├── models/            # ORM 模型（businesses、reviews、users）
 │   ├── scripts/           # 一次性脚本（数据加载等）
 │   ├── services/          # 业务逻辑 & 外部 API 调用
 │   ├── tests/             # 测试
-│   └── RAG/               # 文档 / 检索 / OpenSearch / 模型
-├── docs/                  # 项目级文档基础设施
-│       ├── document/
-│       ├── retrieve/
-│       ├── opensearch/
-│       ├── models/        # 权重本地放置，不入 git
-│       └── infra/         # docker-compose / Dockerfile（*.example 入 git）
+│   └── RAG/               # 文档 / 检索 / OpenSearch / 模型权重
+├── docs/                  # 项目级文档（commands、contribution 等）
 ├── frontend/              # 前端代码（待定）
-│   └── .gitkeep
+├── .github/workflows/     # GitHub Actions CI
 ├── .pre-commit-config.yaml
 ├── justfile
 ├── pyproject.toml
@@ -188,7 +183,7 @@ just fmt         # ruff 格式化
 just mypy        # 类型检查
 ```
 
-> 完整指令清单见 `docs/cli-reference.md`。
+> 完整指令清单见 `docs/commands.md`。
 
 ### 3. 提交代码
 
@@ -530,40 +525,30 @@ uv outdated                    # 查看过期依赖
 
 | 指令 | 作用 |
 |---|---|
-| 指令 | 作用 |
-|---|---|
-| `just lint` | 全流程：自动修复→格式检查→类型检查 |
+| `just lint` | 全流程：lint 自动修复→格式检查→类型检查→覆盖率 |
 | `just test` | 运行测试 |
 | `just serve` | 启动开发服务器 |
 | `just up` | 流水线：启动数据库→启动服务器 |
-| `just cz` | 交互式提交 |
+| `just cz` | 交互式提交（Conventional Commits） |
 | `just push` | 推送代码 |
-| `just push-u feat/xxx` | 首次推送新分支到远程 |
-| `just db-up` / `just db-down` | 启动/停止数据库 |
-| `just data-load` | 全量加载 Yelp 数据 |
-| `just data-sample` | 小批量加载验证 |
-| `just data-check` | 查看数据库统计 |
+| `just db-up` / `just db-down` | 启动/停止 PostgreSQL |
+| `just data-load` / `just data-sample` | Yelp 数据加载 |
 | `just install` | 首次初始化 |
-| `just add <包名>` | 添加生产依赖 |
-| `just dev-branch feat/xxx` | 从 develop 拉最新并创建新分支 |
-| `just del-branch old new` | 删除旧分支并创建新分支 |
-| `just new-branch feat/xxx` | 创建本地分支 |
 
-> 完整指令清单及 `uv run` / `docker` / `git` 等原生命令用法见 `docs/cli-reference.md`。
+> 完整指令清单见 `docs/commands.md`。
 
 ---
 
-## CI/CD（待配置）
+## CI/CD
 
-后续将集成 GitHub Actions，在推送和 PR 时自动运行：
+已配置 GitHub Actions，在推送和 PR 时自动运行：
 
 | 触发时机 | 任务 |
 |---|---|
-| push / PR → master 或 develop | ruff check, ruff format --check, mypy backend |
+| push / PR → develop 或 master | ruff check, ruff format --check, mypy backend, 单元测试 + 覆盖率检查 |
 | 推标签 v* | 自动发布（构建 + 部署） |
-| push → master | 自动更新 CHANGELOG（可选） |
 
-届时会补充 `.github/workflows/` 目录下的 workflow 文件。
+工作流文件在 `.github/workflows/ci.yml`。
 
 ---
 

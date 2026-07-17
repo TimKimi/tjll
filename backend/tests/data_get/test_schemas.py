@@ -185,38 +185,59 @@ class TestYelpBusiness:
 
     def test_hours_normalized_from_list(self):
         """hours 字段是 list 时取第一个。"""
-        open_hour = YelpOpenHour(is_overnight=False, start="0900", end="2100", day=0)
-        biz = YelpBusiness(
-            id="b",
-            alias="b",
-            name="B",
-            location=YelpLocation(display_address=["A"]),
-            phone="",
-            display_phone="",
-            coordinates=YelpCoordinates(latitude=0.0, longitude=0.0),
-            business_hours=[
-                YelpBusinessHours(
-                    open=[open_hour], hours_type="REGULAR", is_open_now=True
-                ),
-                YelpBusinessHours(
-                    open=[open_hour], hours_type="REGULAR", is_open_now=False
-                ),
-            ],
+        biz = YelpBusiness.model_validate(
+            {
+                "id": "b",
+                "alias": "b",
+                "name": "B",
+                "location": {"display_address": ["A"]},
+                "phone": "",
+                "display_phone": "",
+                "coordinates": {"latitude": 0.0, "longitude": 0.0},
+                "business_hours": [
+                    {
+                        "open": [
+                            {
+                                "is_overnight": False,
+                                "start": "0900",
+                                "end": "2100",
+                                "day": 0,
+                            }
+                        ],
+                        "hours_type": "REGULAR",
+                        "is_open_now": True,
+                    },
+                    {
+                        "open": [
+                            {
+                                "is_overnight": False,
+                                "start": "0900",
+                                "end": "2100",
+                                "day": 0,
+                            }
+                        ],
+                        "hours_type": "REGULAR",
+                        "is_open_now": False,
+                    },
+                ],
+            }
         )
         assert biz.hours is not None
         assert biz.hours.is_open_now is True  # 取 list 第一个
 
     def test_hours_normalized_from_empty_list(self):
         """hours 是空 list 时返回 None。"""
-        biz = YelpBusiness(
-            id="b",
-            alias="b",
-            name="B",
-            location=YelpLocation(display_address=["A"]),
-            phone="",
-            display_phone="",
-            coordinates=YelpCoordinates(latitude=0.0, longitude=0.0),
-            business_hours=[],
+        biz = YelpBusiness.model_validate(
+            {
+                "id": "b",
+                "alias": "b",
+                "name": "B",
+                "location": {"display_address": ["A"]},
+                "phone": "",
+                "display_phone": "",
+                "coordinates": {"latitude": 0.0, "longitude": 0.0},
+                "business_hours": [],
+            }
         )
         assert biz.hours is None
 

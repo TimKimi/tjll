@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import RunnableConfig, RunnableLambda
 
 
 def _fake_llm():
@@ -95,7 +95,7 @@ def test_build_full_rag_chain_uses_session_id(monkeypatch):
     )
 
     chain = chains_mod.build_full_rag_chain()
-    cfg = {"configurable": {"session_id": "sec-001"}}
+    cfg: RunnableConfig = {"configurable": {"session_id": "sec-001"}}
     out = chain.invoke({"query": "你好"}, config=cfg)
     assert out == "模拟回答"
     assert "sec-001" in store
