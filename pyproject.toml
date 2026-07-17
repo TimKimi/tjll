@@ -57,6 +57,7 @@ dev = [
     "pre-commit>=4.2.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=6.1.0",
     "pytest-httpx>=0.36.2",
 ]
 
@@ -89,6 +90,20 @@ testpaths = ["backend/tests"]
 markers = [
     "integration: test that calls real Yelp API and database",
 ]
+
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "backend/tests/*",
+    "backend/scripts/*",
+    "backend/data/loader.py",
+    "backend/data/schemas.py",
+    "backend/main.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 60
 
 
 [tool.mypy]

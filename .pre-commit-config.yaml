@@ -81,7 +81,8 @@ repos:
       - id: local-mypy
         name: mypy check (backend)
         # 只检查后端代码（backend/ 目录），前端代码不含 Python 类型
-        entry: uv run mypy backend
+        # --cache-dir /tmp: 把缓存写到系统临时目录，避免 prek 把 .mypy_cache 写入检测为文件修改
+        entry: uv run mypy backend --cache-dir /tmp/mypy-cache
         require_serial: true
         language: unsupported
         # pass_filenames: false 表示始终检查整个 backend 目录而非仅变更的文件

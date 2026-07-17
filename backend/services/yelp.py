@@ -37,10 +37,11 @@ class YelpService:
         result = await svc.search_businesses(location="New York")
     """
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         self._base_url = settings.YELP_API_BASE_URL
+        key = api_key if api_key is not None else settings.YELP_API_KEY
         self._headers = {
-            "Authorization": f"Bearer {settings.YELP_API_KEY}",
+            "Authorization": f"Bearer {key}",
             "Accept": "application/json",
         }
 

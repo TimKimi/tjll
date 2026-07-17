@@ -28,10 +28,10 @@ install:
 # ============================================================
 
 # 全套代码检查（最常用）
-# 自动执行：ruff 自动修复 → ruff 格式检查 → mypy 类型检查
+# 自动执行：ruff 自动修复 → ruff 格式检查 → mypy 类型检查 → 单元测试覆盖率
 # 用法：just lint
 # 提示：提交前务必跑一次，确保 CI 不红
-lint: fix fmt-check mypy
+lint: fix fmt-check mypy coverage
 
 # ruff 自动修复 lint 问题（如未使用的导入、拼写错误等）
 fix:
@@ -48,6 +48,10 @@ fmt-check:
 # mypy 类型检查（只扫描 backend/ 目录）
 mypy:
     uv run mypy backend
+
+# 单元测试覆盖率（跳过集成测试）
+coverage:
+    uv run pytest -c pyproject.toml -m "not integration" --cov --cov-report=term-missing --cov-fail-under=60 -q --tb=short
 
 
 # ============================================================
