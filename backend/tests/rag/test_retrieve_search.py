@@ -25,7 +25,7 @@ def _fake_hits_resp():
 
 
 def test_format_hits_and_hits_to_documents():
-    from backend.RAG.retrieve import search as search_mod
+    from backend.rag.retrieve import search as search_mod
 
     hits = search_mod._format_hits(_fake_hits_resp())
     assert hits[0]["_score"] == 1.5
@@ -38,8 +38,42 @@ def test_format_hits_and_hits_to_documents():
     assert docs[0].metadata["score"] == 1.5
 
 
+def test_hits_to_documents_includes_yelp_meta():
+    from backend.rag.retrieve.search import hits_to_documents
+
+    docs = hits_to_documents(
+        [
+            {
+                "text": "好评片段",
+                "chunk_id": "b_pos_0000",
+                "document_id": "b",
+                "chunk_index": 0,
+                "_score": 2.0,
+                "polarity": "positive",
+                "id": "b",
+                "name": "Biz",
+                "alias": "biz",
+                "is_last_chunk": True,
+            }
+        ]
+    )
+    meta = docs[0].metadata
+    assert meta["polarity"] == "positive"
+    assert meta["name"] == "Biz"
+    assert meta["alias"] == "biz"
+    assert meta["id"] == "b"
+    assert meta["is_last_chunk"] is True
+
+
+def test_source_fields_include_yelp_meta():
+    from backend.rag.retrieve.search import _SOURCE_FIELDS
+
+    for key in ("polarity", "is_last_chunk", "id", "name", "alias"):
+        assert key in _SOURCE_FIELDS
+
+
 def test_vector_bm25_hybrid_search(monkeypatch):
-    import backend.RAG.retrieve.search as search_mod
+    import backend.rag.retrieve.search as search_mod
 
     class FakeClient:
         def __init__(self) -> None:
@@ -60,7 +94,8 @@ def test_vector_bm25_hybrid_search(monkeypatch):
     v = search_mod.vector_search("q")
     assert v[0]["text"] == "内容A"
     assert "knn" in client.last["body"]["query"]
-
+    assert "polarity" in client.last["body"]["_source"]
+    assert "name" in client.last["body"]["_source"]
     b = search_mod.bm25_search("q", k=2)
     assert b[0]["chunk_id"] == "c1"
     assert client.last["body"]["query"]["match"]["text"]["query"] == "q"
@@ -72,7 +107,7 @@ def test_vector_bm25_hybrid_search(monkeypatch):
 
 
 def test_get_retriever_and_modes(monkeypatch):
-    import backend.RAG.retrieve.search as search_mod
+    import backend.rag.retrieve.search as search_mod
 
     monkeypatch.setattr(
         search_mod,

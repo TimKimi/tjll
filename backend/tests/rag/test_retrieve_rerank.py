@@ -6,13 +6,13 @@ from langchain_core.documents import Document
 
 
 def test_rerank_docs_empty():
-    from backend.RAG.retrieve.rerank import rerank_docs
+    from backend.rag.retrieve.rerank import rerank_docs
 
     assert rerank_docs("q", []) == []
 
 
 def test_rerank_docs_orders_by_score(monkeypatch):
-    import backend.RAG.retrieve.rerank as rerank_mod
+    import backend.rag.retrieve.rerank as rerank_mod
 
     class FakeReranker:
         def compute_score(self, pairs, normalize=True):
@@ -33,7 +33,7 @@ def test_rerank_docs_orders_by_score(monkeypatch):
 
 
 def test_rerank_docs_single_float_score(monkeypatch):
-    import backend.RAG.retrieve.rerank as rerank_mod
+    import backend.rag.retrieve.rerank as rerank_mod
 
     class FakeReranker:
         def compute_score(self, pairs, normalize=True):
@@ -47,10 +47,10 @@ def test_rerank_docs_single_float_score(monkeypatch):
 
 
 def test_hybrid_search_with_rerank(monkeypatch):
-    import backend.RAG.retrieve.rerank as rerank_mod
+    import backend.rag.retrieve.rerank as rerank_mod
 
     monkeypatch.setattr(
-        "backend.RAG.retrieve.search.hybrid_search",
+        "backend.rag.retrieve.search.hybrid_search",
         lambda query, k=None, index_name=None: [
             {
                 "text": "命中",

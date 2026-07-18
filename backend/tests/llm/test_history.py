@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_get_history_passes_redis_config(monkeypatch):
-    import backend.LLM.session.history as history_mod
+    import backend.llm.session.history as history_mod
     from backend.config import settings
 
     captured: dict = {}

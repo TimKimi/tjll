@@ -112,6 +112,41 @@ data-check:
 
 
 # ============================================================
+# 离线评论清洗（可选；需本机 GGUF + llama.cpp，见 rag/models/.../README）
+# ============================================================
+
+# 用法：just review-clean <商家数> <最低评论数> <shard> <start> <end> [最多扫描评论数]
+# shard: 0 或 1；start/end: 分片内左闭右开
+# 好评/坏评各自写满约 1500 字即停；最多扫描评论数默认 200
+# 例：just review-clean 5 10 0 0 5 200
+review-clean biz rev shard start end maxrev="200":
+    uv run python -m backend.rag.scripts.clean_yelp_reviews --max-businesses {{ biz }} --min-reviews {{ rev }} --shard {{ shard }} --start {{ start }} --end {{ end }} --max-reviews-per-business {{ maxrev }}
+
+
+# ============================================================
+# cleaned Yelp → OpenSearch 入库
+# ============================================================
+
+# 补写：只入库 index_progress.json 里没有的商家
+# 例：just index-cleaned-backfill
+index-cleaned-backfill:
+    uv run python -m backend.rag.scripts.index_cleaned_yelp --mode backfill
+
+# 复写：全部商家重新入库（不删索引，同 chunk_id 覆盖旧数据）
+# 例：just index-cleaned-rewrite
+index-cleaned-rewrite:
+    uv run python -m backend.rag.scripts.index_cleaned_yelp --mode rewrite
+
+# 兼容旧名：默认补写
+index-cleaned:
+    uv run python -m backend.rag.scripts.index_cleaned_yelp --mode backfill
+
+# 删除索引并重建后再复写
+index-cleaned-recreate:
+    uv run python -m backend.rag.scripts.index_cleaned_yelp --mode rewrite --recreate
+
+
+# ============================================================
 # 开发服务器
 # ============================================================
 

@@ -69,12 +69,19 @@ htmlcov/
 backend/.env
 backend/.env.*
 
-# Model weights under backend/RAG: keep placeholders only
-backend/RAG/models/**
-!backend/RAG/models/**/
-!backend/RAG/models/**/.gitkeep
-!backend/RAG/models/**/README.md
-!backend/RAG/models/README.md
+# Model weights under backend/rag: keep placeholders only
+backend/rag/models/**
+!backend/rag/models/**/
+!backend/rag/models/**/.gitkeep
+!backend/rag/models/**/README.md
+!backend/rag/models/README.md
+!backend/rag/models/**/config.local.example.toml
+
+# Optional llama.cpp binaries (Windows CUDA); keep README / .gitkeep only
+backend/rag/tools/**
+!backend/rag/tools/**/
+!backend/rag/tools/**/.gitkeep
+!backend/rag/tools/**/README.md
 
 # ModelScope cache (never commit)
 modelscope/

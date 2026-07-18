@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_get_opensearch_client_uses_settings(monkeypatch):
-    import backend.RAG.opensearch.client as client_mod
+    import backend.rag.opensearch.client as client_mod
     from backend.config import settings
 
     captured: dict = {}

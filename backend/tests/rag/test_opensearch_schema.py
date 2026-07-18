@@ -4,18 +4,26 @@ from __future__ import annotations
 
 
 def test_index_mapping_body_structure():
-    from backend.RAG.opensearch.schema import index_mapping_body
+    from backend.rag.opensearch.schema import index_mapping_body
 
     body = index_mapping_body(dims=8)
     assert body["settings"]["index"]["knn"] is True
     props = body["mappings"]["properties"]
     assert props["embedding"]["dimension"] == 8
+    assert props["embedding"]["type"] == "knn_vector"
     assert props["text"]["analyzer"] == "ik_max_word"
     assert "ik_smart_analyzer" in body["settings"]["analysis"]["analyzer"]
+    for key in ("alias", "name", "categories", "address"):
+        assert props[key]["type"] == "keyword"
+        assert props[key]["fields"]["text"]["analyzer"] == "ik_max_word"
+    assert props["hours"]["type"] == "keyword"
+    assert "fields" not in props["hours"]
+    assert props["polarity"]["type"] == "keyword"
+    assert props["is_last_chunk"]["type"] == "boolean"
 
 
 def test_hybrid_pipeline_body_weights():
-    from backend.RAG.opensearch.schema import hybrid_pipeline_body
+    from backend.rag.opensearch.schema import hybrid_pipeline_body
     from backend.config import settings
 
     body = hybrid_pipeline_body()
@@ -26,7 +34,7 @@ def test_hybrid_pipeline_body_weights():
 
 
 def test_ensure_search_pipeline(monkeypatch):
-    import backend.RAG.opensearch.schema as schema
+    import backend.rag.opensearch.schema as schema
 
     calls: list[tuple] = []
 
@@ -47,7 +55,7 @@ def test_ensure_search_pipeline(monkeypatch):
 
 
 def test_ensure_index_create_and_recreate(monkeypatch):
-    import backend.RAG.opensearch.schema as schema
+    import backend.rag.opensearch.schema as schema
 
     exists = False
     created: list[tuple] = []

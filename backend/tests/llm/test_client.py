@@ -23,7 +23,7 @@ class _FakeLLM:
 
 
 def test_get_llm_passes_settings(monkeypatch):
-    import backend.LLM.client.llm as llm_mod
+    import backend.llm.client.llm as llm_mod
 
     captured = {}
 
@@ -39,7 +39,7 @@ def test_get_llm_passes_settings(monkeypatch):
 
 
 def test_invoke_llm(monkeypatch):
-    import backend.LLM.client.llm as llm_mod
+    import backend.llm.client.llm as llm_mod
 
     monkeypatch.setattr(llm_mod, "get_llm", lambda temperature=0.2: _FakeLLM())
     assert llm_mod.invoke_llm("hi") == "ok"
@@ -47,14 +47,14 @@ def test_invoke_llm(monkeypatch):
 
 
 def test_stream_llm(monkeypatch):
-    import backend.LLM.client.llm as llm_mod
+    import backend.llm.client.llm as llm_mod
 
     monkeypatch.setattr(llm_mod, "get_llm", lambda temperature=0.2: _FakeLLM())
     assert "".join(llm_mod.stream_llm("hi")) == "hello"
 
 
 def test_get_llm_with_tools(monkeypatch):
-    import backend.LLM.client.llm as llm_mod
+    import backend.llm.client.llm as llm_mod
 
     fake = _FakeLLM()
     monkeypatch.setattr(llm_mod, "get_llm", lambda temperature=0.2: fake)
@@ -68,7 +68,7 @@ def test_get_llm_with_tools(monkeypatch):
 
 
 def test_invoke_and_stream_with_tools(monkeypatch):
-    import backend.LLM.client.llm as llm_mod
+    import backend.llm.client.llm as llm_mod
 
     fake = _FakeLLM()
     monkeypatch.setattr(llm_mod, "get_llm", lambda temperature=0.2: fake)
@@ -87,7 +87,7 @@ def test_invoke_and_stream_with_tools(monkeypatch):
 
 
 def test_invoke_chat_and_stream_chat():
-    from backend.LLM.client.llm import invoke_chat, stream_chat
+    from backend.llm.client.llm import invoke_chat, stream_chat
 
     class R:
         def invoke(self, inputs, config=None):

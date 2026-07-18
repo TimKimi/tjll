@@ -6,21 +6,21 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 
 def test_has_history_empty():
-    from backend.LLM.rephrase.rewrite import has_history
+    from backend.llm.rephrase.rewrite import has_history
 
     assert has_history([]) is False
     assert has_history(None) is False
 
 
 def test_has_history_with_messages():
-    from backend.LLM.rephrase.rewrite import has_history
+    from backend.llm.rephrase.rewrite import has_history
 
     assert has_history([HumanMessage(content="你好")]) is True
     assert has_history([AIMessage(content="嗨")]) is True
 
 
 def test_rewrite_query_skips_first_turn():
-    from backend.LLM.rephrase.rewrite import rewrite_query
+    from backend.llm.rephrase.rewrite import rewrite_query
 
     q = "王者荣耀英雄称号怎么分类？"
     assert rewrite_query(q, []) == q
@@ -28,7 +28,7 @@ def test_rewrite_query_skips_first_turn():
 
 
 def test_rewrite_query_with_history(monkeypatch):
-    from backend.LLM.rephrase import rewrite as rewrite_mod
+    from backend.llm.rephrase import rewrite as rewrite_mod
 
     class FakeChain:
         def invoke(self, inputs):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.RAG.document.chunking import split_text_to_chunks
+from backend.rag.document.chunking import split_text_to_chunks
 
 
 def test_split_text_to_chunks_with_explicit_size():

@@ -59,11 +59,11 @@ class Settings(BaseSettings):
     opensearch_password: str = "Jianyan_01"
     opensearch_use_ssl: bool = True
     opensearch_verify_certs: bool = False
-    opensearch_index: str = "rag_kb_v1"
+    opensearch_index: str = "yelp_biz_v1"
 
     # ---- 项目内模型（相对 backend/）----
-    embedding_model_path: str = "RAG/models/bge-base-zh-v1.5"
-    rerank_model_path: str = "RAG/models/bge-reranker-v2-m3"
+    embedding_model_path: str = "rag/models/bge-base-zh-v1.5"
+    rerank_model_path: str = "rag/models/bge-reranker-v2-m3"
     embedding_device: str = "cuda"
     rerank_use_fp16: bool = True
 

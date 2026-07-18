@@ -8,7 +8,7 @@ import pytest
 
 
 def test_load_md_file(tmp_path):
-    from backend.RAG.document.loaders import load_document_as_text
+    from backend.rag.document.loaders import load_document_as_text
 
     path = tmp_path / "note.md"
     path.write_text("# 标题\n内容", encoding="utf-8")
@@ -32,20 +32,20 @@ def test_load_txt_file(tmp_path, monkeypatch):
         "langchain_community.document_loaders.TextLoader",
         FakeTextLoader,
     )
-    from backend.RAG.document.loaders import load_document_as_text
+    from backend.rag.document.loaders import load_document_as_text
 
     assert load_document_as_text(str(path)) == "hello txt"
 
 
 def test_load_missing_file_raises():
-    from backend.RAG.document.loaders import load_document_as_text
+    from backend.rag.document.loaders import load_document_as_text
 
     with pytest.raises(FileNotFoundError, match="文件不存在"):
         load_document_as_text("D:/no/such/file.md")
 
 
 def test_load_unsupported_extension(tmp_path):
-    from backend.RAG.document.loaders import load_document_as_text
+    from backend.rag.document.loaders import load_document_as_text
 
     path = tmp_path / "a.bin"
     path.write_bytes(b"x")
@@ -54,7 +54,7 @@ def test_load_unsupported_extension(tmp_path):
 
 
 def test_load_pdf_uses_mineru(tmp_path, monkeypatch):
-    import backend.RAG.document.loaders as loaders_mod
+    import backend.rag.document.loaders as loaders_mod
 
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(b"%PDF")
@@ -89,13 +89,13 @@ def test_load_docx(tmp_path, monkeypatch):
         "langchain_community.document_loaders.UnstructuredWordDocumentLoader",
         FakeWordLoader,
     )
-    from backend.RAG.document.loaders import load_document_as_text
+    from backend.rag.document.loaders import load_document_as_text
 
     assert load_document_as_text(str(path)) == "段1\n\n段2"
 
 
 def test_load_excel_openpyxl_fallback(tmp_path, monkeypatch):
-    import backend.RAG.document.loaders as loaders_mod
+    import backend.rag.document.loaders as loaders_mod
 
     path = tmp_path / "a.xlsx"
     path.write_bytes(b"PK")

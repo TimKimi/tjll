@@ -3,8 +3,56 @@
 from __future__ import annotations
 
 
+def test_resolve_embedding_device_cpu():
+    from backend.rag.document.embed import resolve_embedding_device
+
+    assert resolve_embedding_device("cpu") == "cpu"
+
+
+def test_resolve_embedding_device_cuda_fallback(monkeypatch):
+    import backend.rag.document.embed as embed_mod
+
+    class FakeCuda:
+        @staticmethod
+        def is_available():
+            return False
+
+    fake_torch = type("torch", (), {"cuda": FakeCuda})()
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+    assert embed_mod.resolve_embedding_device("cuda") == "cpu"
+
+
+def test_resolve_embedding_device_cuda_ok(monkeypatch):
+    import backend.rag.document.embed as embed_mod
+
+    class FakeCuda:
+        @staticmethod
+        def is_available():
+            return True
+
+    fake_torch = type("torch", (), {"cuda": FakeCuda})()
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+    assert embed_mod.resolve_embedding_device("cuda") == "cuda"
+
+
+def test_resolve_embedding_device_import_error(monkeypatch):
+    import builtins
+
+    import backend.rag.document.embed as embed_mod
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "torch":
+            raise ImportError("no torch")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert embed_mod.resolve_embedding_device("cuda") == "cpu"
+
+
 def test_embed_chunks_and_query(monkeypatch):
-    import backend.RAG.document.embed as embed_mod
+    import backend.rag.document.embed as embed_mod
 
     embed_mod._embedding_model = None
 
@@ -31,7 +79,7 @@ def test_embed_chunks_and_query(monkeypatch):
 def test_parse_pdf_with_mineru_mocked(tmp_path, monkeypatch):
     import types
 
-    import backend.RAG.document.pdf as pdf_mod
+    import backend.rag.document.pdf as pdf_mod
 
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(b"%PDF")
@@ -65,7 +113,7 @@ def test_parse_pdf_with_mineru_mocked(tmp_path, monkeypatch):
 
 
 def test_parse_pdf_import_error(monkeypatch):
-    import backend.RAG.document.pdf as pdf_mod
+    import backend.rag.document.pdf as pdf_mod
     import pytest
 
     monkeypatch.setattr(

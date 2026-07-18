@@ -28,7 +28,7 @@ class _FakeHistory:
 
 
 def test_answer_query(monkeypatch):
-    import backend.LLM.pipeline.rag_pipeline as pipe
+    import backend.llm.pipeline.rag_pipeline as pipe
 
     class FakeChain:
         def invoke(self, payload, config=None):
@@ -42,7 +42,7 @@ def test_answer_query(monkeypatch):
 
 
 def test_stream_answer_query(monkeypatch):
-    import backend.LLM.pipeline.rag_pipeline as pipe
+    import backend.llm.pipeline.rag_pipeline as pipe
 
     class FakeChain:
         def stream(self, payload, config=None):
@@ -55,7 +55,7 @@ def test_stream_answer_query(monkeypatch):
 
 
 def test_answer_query_with_sources(monkeypatch):
-    import backend.LLM.pipeline.rag_pipeline as pipe
+    import backend.llm.pipeline.rag_pipeline as pipe
 
     hist = _FakeHistory()
     docs = [
