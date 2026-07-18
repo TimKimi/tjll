@@ -38,6 +38,13 @@ def test_format_hits_and_hits_to_documents():
     assert docs[0].metadata["score"] == 1.5
 
 
+def test_source_fields_include_yelp_meta():
+    from backend.rag.retrieve.search import _SOURCE_FIELDS
+
+    for key in ("polarity", "is_last_chunk", "id", "name", "alias"):
+        assert key in _SOURCE_FIELDS
+
+
 def test_vector_bm25_hybrid_search(monkeypatch):
     import backend.rag.retrieve.search as search_mod
 
@@ -60,7 +67,8 @@ def test_vector_bm25_hybrid_search(monkeypatch):
     v = search_mod.vector_search("q")
     assert v[0]["text"] == "内容A"
     assert "knn" in client.last["body"]["query"]
-
+    assert "polarity" in client.last["body"]["_source"]
+    assert "name" in client.last["body"]["_source"]
     b = search_mod.bm25_search("q", k=2)
     assert b[0]["chunk_id"] == "c1"
     assert client.last["body"]["query"]["match"]["text"]["query"] == "q"

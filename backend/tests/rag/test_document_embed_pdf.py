@@ -3,6 +3,38 @@
 from __future__ import annotations
 
 
+def test_resolve_embedding_device_cpu():
+    from backend.rag.document.embed import resolve_embedding_device
+
+    assert resolve_embedding_device("cpu") == "cpu"
+
+
+def test_resolve_embedding_device_cuda_fallback(monkeypatch):
+    import backend.rag.document.embed as embed_mod
+
+    class FakeCuda:
+        @staticmethod
+        def is_available():
+            return False
+
+    fake_torch = type("torch", (), {"cuda": FakeCuda})()
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+    assert embed_mod.resolve_embedding_device("cuda") == "cpu"
+
+
+def test_resolve_embedding_device_cuda_ok(monkeypatch):
+    import backend.rag.document.embed as embed_mod
+
+    class FakeCuda:
+        @staticmethod
+        def is_available():
+            return True
+
+    fake_torch = type("torch", (), {"cuda": FakeCuda})()
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+    assert embed_mod.resolve_embedding_device("cuda") == "cuda"
+
+
 def test_embed_chunks_and_query(monkeypatch):
     import backend.rag.document.embed as embed_mod
 

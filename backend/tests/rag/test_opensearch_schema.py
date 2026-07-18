@@ -10,8 +10,16 @@ def test_index_mapping_body_structure():
     assert body["settings"]["index"]["knn"] is True
     props = body["mappings"]["properties"]
     assert props["embedding"]["dimension"] == 8
+    assert props["embedding"]["type"] == "knn_vector"
     assert props["text"]["analyzer"] == "ik_max_word"
     assert "ik_smart_analyzer" in body["settings"]["analysis"]["analyzer"]
+    for key in ("alias", "name", "categories", "address"):
+        assert props[key]["type"] == "keyword"
+        assert props[key]["fields"]["text"]["analyzer"] == "ik_max_word"
+    assert props["hours"]["type"] == "keyword"
+    assert "fields" not in props["hours"]
+    assert props["polarity"]["type"] == "keyword"
+    assert props["is_last_chunk"]["type"] == "boolean"
 
 
 def test_hybrid_pipeline_body_weights():
