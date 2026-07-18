@@ -1,5 +1,13 @@
-"""LLM 模块：客户端封装 + RAG 会话一条龙（对齐 backend.rag 分子目录风格）。"""
+"""LLM 模块：客户端封装 + 协作方门面 + RAG 会话一条龙。
 
+其他后端模块推荐只使用::
+
+    from backend.llm import ask, AskRequest, AskResponse
+
+不要直接依赖 ``backend.rag``。
+"""
+
+from backend.llm.api import AskRequest, AskResponse, RagSnippet, ask
 from backend.llm.client.llm import (
     get_llm,
     get_llm_with_tools,
@@ -18,6 +26,12 @@ from backend.llm.pipeline.rag_pipeline import (
 )
 
 __all__ = [
+    # 推荐：协作方门面
+    "AskRequest",
+    "AskResponse",
+    "RagSnippet",
+    "ask",
+    # 进阶 / 内部
     "RagAnswer",
     "answer_query",
     "answer_query_with_sources",

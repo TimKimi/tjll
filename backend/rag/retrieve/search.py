@@ -167,16 +167,17 @@ def get_retriever(
 
 
 def hits_to_documents(hits: list[dict]) -> list[Document]:
-    return [
-        Document(
-            page_content=h["text"],
-            metadata={
-                "chunk_id": h.get("chunk_id"),
-                "document_id": h.get("document_id"),
-                "source_file": h.get("source_file"),
-                "chunk_index": h.get("chunk_index"),
-                "score": h.get("_score"),
-            },
-        )
-        for h in hits
-    ]
+    docs: list[Document] = []
+    for h in hits:
+        meta: dict = {
+            "chunk_id": h.get("chunk_id"),
+            "document_id": h.get("document_id"),
+            "source_file": h.get("source_file"),
+            "chunk_index": h.get("chunk_index"),
+            "score": h.get("_score"),
+        }
+        for key in ("polarity", "id", "name", "alias", "is_last_chunk"):
+            if key in h and h.get(key) is not None:
+                meta[key] = h.get(key)
+        docs.append(Document(page_content=h["text"], metadata=meta))
+    return docs
