@@ -266,7 +266,7 @@ const handleLogin = async () => {
   
   const handleForgotPassword = () => {
   // 跳转到找回密码页面
-  router.push('/forgot-password')
+   alert('请联系管理员重置密码')
   }
   
   const handleSocialLogin = (platform: string) => {

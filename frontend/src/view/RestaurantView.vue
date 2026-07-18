@@ -277,7 +277,10 @@
   <script setup lang="ts">
   import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
+  import { useToast } from '@/composables/useToast'
+  import { handleApiError } from '@/utils/errorHandler'
   
+  const toast = useToast()
   const route = useRoute()
   const router = useRouter()
   
@@ -416,8 +419,14 @@
       // restaurantData.value = result.data
       // ======================================================
   
-      // ========== 模拟数据（开发测试用，接入 API 后删除） ==========
-      await new Promise(resolve => setTimeout(resolve, 500))
+
+    // ========== ✅ 测试错误提示（模拟加载失败） ==========
+    await new Promise(resolve => setTimeout(resolve, 800))
+    // 模拟随机失败（50%概率失败）
+    if (Math.random() > 0.5) {
+      throw new Error('网络连接失败，请检查网络后重试')
+    }
+    // 如果成功，使用模拟数据
       restaurantData.value = {
         id: Number(id),
         name: '蜀九香火锅',
@@ -466,13 +475,18 @@
       // ======================================================
   
       reviewPage.value = 1
-      checkFavorite()
-    } catch (error) {
-      console.error('加载餐厅详情失败:', error)
-    } finally {
-      isLoading.value = false
-    }
+    checkFavorite()
+  } catch (error) {
+    console.error('加载餐厅详情失败:', error)
+    // 使用 Toast 显示错误
+    // toast.error('加载餐厅详情失败，请稍后重试')
+     // 方式2：使用 errorHandler（更专业）
+    const toastOptions = handleApiError(error, '加载餐厅详情失败')
+    toast.showToast(toastOptions)
+  } finally {
+    isLoading.value = false
   }
+}
   
   // ============================================
   // 【API 接口2】收藏/取消收藏
