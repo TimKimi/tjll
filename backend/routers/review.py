@@ -13,7 +13,7 @@ from backend.services.review import ReviewService
 router = APIRouter(prefix="/api/review", tags=["评论"])
 
 
-@router.get(
+@router.post(
     "/list",
     summary="店铺评论列表",
     response_model=ApiResponse[PaginatedData[ReviewBase]],
@@ -30,7 +30,7 @@ async def review_list(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PaginatedData[ReviewBase]]:
-    """分页查询指定店铺的评论列表。"""
+    """分页查询指定店铺的评论列表（POST 方式，参数通过 Query 传递）。"""
     service = ReviewService(db)
     result = await service.list_by_business(
         business_id=business_id,
@@ -42,7 +42,7 @@ async def review_list(
     return ApiResponse.ok(data=result)
 
 
-@router.get(
+@router.post(
     "/{review_id}",
     summary="评论详情",
     response_model=ApiResponse[ReviewBase],
@@ -51,7 +51,7 @@ async def review_detail(
     review_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ReviewBase]:
-    """根据 ID 获取评论详情。"""
+    """根据 ID 获取评论详情（POST 方式，ID 在路径中）。"""
     service = ReviewService(db)
     review = await service.get_by_id(review_id)
     if not review:
