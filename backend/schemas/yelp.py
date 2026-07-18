@@ -12,7 +12,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ============================================================
 # 一、Yelp API 响应模型（与 API.md 对齐）
 # ============================================================
