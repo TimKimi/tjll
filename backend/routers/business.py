@@ -28,6 +28,9 @@ async def business_list(
     price: str | None = Query(default=None, description="价格区间，如 1,2,3"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=50),
+    source: str = Query(
+        default="db", description="数据来源，可选值：db（数据库）、yelp（Yelp API）"
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PaginatedData[BusinessDetail]]:
     """分页查询店铺列表，支持关键词、分类、地区筛选。"""
@@ -41,6 +44,7 @@ async def business_list(
         price=price,
         page=page,
         page_size=page_size,
+        source=source,
     )
     service = BusinessService(db)
     result = await service.list_businesses(query)
