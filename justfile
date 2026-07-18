@@ -112,6 +112,18 @@ data-check:
 
 
 # ============================================================
+# 离线评论清洗（可选；需本机 GGUF + llama.cpp，见 RAG/models/.../README）
+# ============================================================
+
+# 用法：just review-clean <商家数> <最低评论数> <shard> <start> <end> [最多扫描评论数]
+# shard: 0 或 1；start/end: 分片内左闭右开
+# 好评/坏评各自写满约 1500 字即停；最多扫描评论数默认 200
+# 例：just review-clean 5 10 0 0 5 200
+review-clean biz rev shard start end maxrev="200":
+    uv run python -m backend.RAG.scripts.clean_yelp_reviews --max-businesses {{ biz }} --min-reviews {{ rev }} --shard {{ shard }} --start {{ start }} --end {{ end }} --max-reviews-per-business {{ maxrev }}
+
+
+# ============================================================
 # 开发服务器
 # ============================================================
 
