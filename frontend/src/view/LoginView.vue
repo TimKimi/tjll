@@ -10,17 +10,39 @@
         <!-- 登录卡片 -->
         <div class="login-card">
           <!-- Logo 区域 -->
-          <div class="login-header">
-            <div class="logo-icon">
-              <img
-                src="/images/2.png"
-                alt="探店助手"
-                style="width: 56px; height: 56px; object-fit: contain;"
-              />
-            </div>
-            <h1 class="login-title">欢迎回来</h1>
-            <p class="login-subtitle">登录你的探店助手账号，开启智能探店之旅</p>
-          </div>
+<div class="login-header">
+  <div class="logo-icon">
+    <img
+      src="/images/2.png"
+      alt="探店助手"
+      style="width: 56px; height: 56px; object-fit: contain;"
+    />
+  </div>
+  <h1 class="login-title">欢迎回来</h1>
+  <p class="login-subtitle">{{ isAdminMode ? '管理员登录' : '登录你的探店助手账号，开启智能探店之旅' }}</p>
+  
+  <!-- ✅ 新增：角色切换 -->
+  <div class="role-toggle">
+    <button 
+      type="button"
+      class="role-btn" 
+      :class="{ active: !isAdminMode }"
+      @click="isAdminMode = false"
+    >
+      <i class="fas fa-user"></i>
+      用户
+    </button>
+    <button 
+      type="button"
+      class="role-btn" 
+      :class="{ active: isAdminMode }"
+      @click="isAdminMode = true"
+    >
+      <i class="fas fa-user-shield"></i>
+      管理员
+    </button>
+  </div>
+</div>
   
           <!-- 登录表单 -->
           <form class="login-form" @submit.prevent="handleLogin">
@@ -67,6 +89,11 @@
                   <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
                 </button>
               </div>
+                <!-- ✅ 新增：管理员提示 -->
+  <div v-if="isAdminMode" class="admin-hint">
+    <i class="fas fa-info-circle"></i>
+    <span>管理员账号：admin，密码：admin123</span>
+  </div>
             </div>
   
             <!-- 选项 -->
@@ -148,74 +175,83 @@
   const showPassword = ref(false)
   const isLoading = ref(false)
   const errorMessage = ref('')
+  const isAdminMode = ref(false)
   
-  // ============================================
-  // 登录逻辑（只调用真实 API，无模拟）
-  // ============================================
-  const handleLogin = async () => {
-    errorMessage.value = ''
-  
-    if (!loginForm.username.trim() || !loginForm.password.trim()) {
-      errorMessage.value = '请输入用户名和密码'
-      return
-    }
-  
-    isLoading.value = true
-  
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: loginForm.username.trim(),
-          password: loginForm.password.trim(),
-          remember: loginForm.remember,
-        }),
-      })
-  
-      if (response.ok) {
-        const data = await response.json()
-        
-        // 保存 token 到本地存储
-        if (data.token) {
-          localStorage.setItem('token', data.token)
-        }
-        
-        // 保存用户信息
-        if (data.user) {
-          localStorage.setItem('userInfo', JSON.stringify(data.user))
-        }
-        
-        // 获取重定向地址并跳转
-        const redirect = router.currentRoute.value.query.redirect as string || '/'
-        router.push(redirect)
-      } else {
-        // 处理错误响应
-        let errorMsg = '登录失败，请检查账号和密码'
-        try {
-          const error = await response.json()
-          errorMsg = error.message || errorMsg
-        } catch (e) {
-          // 如果响应不是 JSON 格式
-          errorMsg = `登录失败 (${response.status})`
-        }
-        errorMessage.value = errorMsg
-      }
-    } catch (error) {
-      console.error('登录请求异常:', error)
-      
-      // 判断是否为网络错误
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        errorMessage.value = '网络连接失败，请检查网络后重试'
-      } else {
-        errorMessage.value = '登录失败，请稍后重试'
-      }
-    } finally {
-      isLoading.value = false
-    }
+// ============================================
+// 登录逻辑（只调用真实 API，无模拟）
+// ============================================
+const handleLogin = async () => {
+  errorMessage.value = ''
+
+  if (!loginForm.username.trim() || !loginForm.password.trim()) {
+    errorMessage.value = '请输入用户名和密码'
+    return
   }
+
+  isLoading.value = true
+
+  try {
+    // ✅ 根据模式选择不同的登录接口
+    const loginUrl = isAdminMode.value ? '/api/auth/admin/login' : '/api/auth/login'
+    
+    const response = await fetch(loginUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: loginForm.username.trim(),
+        password: loginForm.password.trim(),
+        remember: loginForm.remember,
+      }),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      
+      // 保存 token 到本地存储
+      if (data.token) {
+        localStorage.setItem('token', data.token)
+      }
+      
+      // 保存用户信息
+      if (data.user) {
+        localStorage.setItem('userInfo', JSON.stringify(data.user))
+        // ✅ 如果是管理员，标记角色
+        if (isAdminMode.value) {
+          localStorage.setItem('userRole', 'admin')
+        } else {
+          localStorage.setItem('userRole', 'user')
+        }
+      }
+      
+      // 获取重定向地址并跳转
+      const redirect = router.currentRoute.value.query.redirect as string || '/'
+      router.push(redirect)
+    } else {
+      // 处理错误响应
+      let errorMsg = isAdminMode.value ? '管理员登录失败，请检查账号和密码' : '登录失败，请检查账号和密码'
+      try {
+        const error = await response.json()
+        errorMsg = error.message || errorMsg
+      } catch (e) {
+        errorMsg = `登录失败 (${response.status})`
+      }
+      errorMessage.value = errorMsg
+    }
+  } catch (error) {
+    console.error('登录请求异常:', error)
+    
+    // 判断是否为网络错误
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      errorMessage.value = '网络连接失败，请检查网络后重试'
+    } else {
+      errorMessage.value = isAdminMode.value ? '管理员登录失败，请稍后重试' : '登录失败，请稍后重试'
+    }
+  } finally {
+    isLoading.value = false
+  }
+}
   
   // ============================================
   // 导航函数
@@ -229,8 +265,8 @@
   }
   
   const handleForgotPassword = () => {
-    // 跳转到忘记密码页面
-    alert('请联系管理员重置密码')
+  // 跳转到找回密码页面
+  router.push('/forgot-password')
   }
   
   const handleSocialLogin = (platform: string) => {
@@ -871,4 +907,109 @@
       display: none;
     }
   }
+
+  /* ============================================
+   角色切换
+   ============================================ */
+.role-toggle {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  background: #f1f5f9;
+  padding: 0.25rem;
+  border-radius: 0.8rem;
+  max-width: 220px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.role-btn {
+  flex: 1;
+  padding: 0.4rem 1rem;
+  border: none;
+  border-radius: 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.role-btn i {
+  font-size: 0.8rem;
+}
+
+.role-btn:hover {
+  color: #334155;
+}
+
+.role-btn.active {
+  background: white;
+  color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.role-btn.active i {
+  color: #3b82f6;
+}
+
+/* ============================================
+   响应式 - 角色切换
+   ============================================ */
+@media (max-width: 768px) {
+  .role-toggle {
+    max-width: 180px;
+  }
+  
+  .role-btn {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.6rem;
+  }
+  
+  .role-btn i {
+    font-size: 0.7rem;
+  }
+}
+/* ============================================
+   管理员提示
+   ============================================ */
+   .admin-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: #3b82f6;
+  background: #eff6ff;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.4rem;
+}
+
+.admin-hint i {
+  font-size: 0.7rem;
+}
+
+.admin-hint span {
+  font-size: 0.75rem;
+}
+
+/* ============================================
+   响应式 - 管理员提示
+   ============================================ */
+@media (max-width: 768px) {
+  .admin-hint {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+  }
+  
+  .admin-hint span {
+    font-size: 0.65rem;
+  }
+}
   </style>
