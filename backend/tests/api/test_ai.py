@@ -38,6 +38,7 @@ def sample_business():
     return Business(id="biz_001", name="川味轩", rating=4.5, address="成都锦江区")
 
 
+@pytest.mark.integration
 class TestAIRoutes:
     """路由层测试 - patch 服务类本身"""
 

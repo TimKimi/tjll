@@ -199,6 +199,7 @@ class TestReviewService:
 
 
 # ---------- 路由层测试 ----------
+@pytest.mark.integration
 class TestReviewRoutes:
     """测试评论路由端点。"""
 

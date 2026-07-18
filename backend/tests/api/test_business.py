@@ -286,6 +286,7 @@ class TestBusinessService:
 
 
 # ---------- 路由层测试 ----------
+@pytest.mark.integration
 class TestBusinessRoutes:
     """测试店铺路由端点。"""
 
