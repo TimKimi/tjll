@@ -13,7 +13,18 @@ from backend.rag.opensearch.client import get_opensearch_client
 from backend.rag.opensearch.schema import ensure_search_pipeline
 from backend.config import settings
 
-_SOURCE_FIELDS = ["chunk_id", "document_id", "source_file", "chunk_index", "text"]
+_SOURCE_FIELDS = [
+    "chunk_id",
+    "document_id",
+    "source_file",
+    "chunk_index",
+    "text",
+    "polarity",
+    "is_last_chunk",
+    "id",
+    "name",
+    "alias",
+]
 
 
 def _format_hits(resp: dict) -> list[dict]:

@@ -1,9 +1,26 @@
-"""索引 mapping 与 hybrid Search Pipeline。"""
+"""索引 mapping 与 hybrid Search Pipeline（yelp_biz_v1）。"""
 
 from __future__ import annotations
 
-from backend.rag.opensearch.client import get_opensearch_client
 from backend.config import settings
+from backend.rag.opensearch.client import get_opensearch_client
+
+
+def _keyword() -> dict:
+    return {"type": "keyword"}
+
+
+def _keyword_with_text() -> dict:
+    return {
+        "type": "keyword",
+        "fields": {
+            "text": {
+                "type": "text",
+                "analyzer": "ik_max_word",
+                "search_analyzer": "ik_smart",
+            }
+        },
+    }
 
 
 def index_mapping_body(dims: int | None = None) -> dict:
@@ -24,10 +41,33 @@ def index_mapping_body(dims: int | None = None) -> dict:
         },
         "mappings": {
             "properties": {
-                "chunk_id": {"type": "keyword"},
-                "document_id": {"type": "keyword"},
-                "source_file": {"type": "keyword"},
+                # business fields
+                "id": _keyword(),
+                "alias": _keyword_with_text(),
+                "name": _keyword_with_text(),
+                "image_url": _keyword(),
+                "is_closed": {"type": "boolean"},
+                "url": _keyword(),
+                "review_count": {"type": "integer"},
+                "rating": {"type": "float"},
+                "price": _keyword(),
+                "categories": _keyword_with_text(),
+                "latitude": {"type": "float"},
+                "longitude": {"type": "float"},
+                "address": _keyword_with_text(),
+                "phone": _keyword(),
+                "display_phone": _keyword(),
+                "hours": _keyword(),
+                "transactions": _keyword(),
+                "photos": _keyword(),
+                "yelp_menu_url": _keyword(),
+                # chunk fields
+                "chunk_id": _keyword(),
+                "document_id": _keyword(),
+                "source_file": _keyword(),
+                "polarity": _keyword(),
                 "chunk_index": {"type": "integer"},
+                "is_last_chunk": {"type": "boolean"},
                 "text": {
                     "type": "text",
                     "analyzer": "ik_max_word",

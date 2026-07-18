@@ -6,7 +6,7 @@
 
 ```powershell
 $src = "D:\softwareinstal\pycharm\program\shixun\models"
-$dst = "D:\softwareinstal\pycharm\program\SHIXUNDAXIANGMU\tjll\backend\RAG\models"
+$dst = "D:\softwareinstal\pycharm\program\SHIXUNDAXIANGMU\tjll\backend\rag\models"
 Copy-Item "$src\bge-base-zh-v1.5\*" "$dst\bge-base-zh-v1.5\" -Recurse -Force
 Copy-Item "$src\bge-reranker-v2-m3\*" "$dst\bge-reranker-v2-m3\" -Recurse -Force
 ```
