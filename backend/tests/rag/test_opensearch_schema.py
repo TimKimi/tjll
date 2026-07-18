@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_index_mapping_body_structure():
-    from backend.RAG.opensearch.schema import index_mapping_body
+    from backend.rag.opensearch.schema import index_mapping_body
 
     body = index_mapping_body(dims=8)
     assert body["settings"]["index"]["knn"] is True
@@ -15,7 +15,7 @@ def test_index_mapping_body_structure():
 
 
 def test_hybrid_pipeline_body_weights():
-    from backend.RAG.opensearch.schema import hybrid_pipeline_body
+    from backend.rag.opensearch.schema import hybrid_pipeline_body
     from backend.config import settings
 
     body = hybrid_pipeline_body()
@@ -26,7 +26,7 @@ def test_hybrid_pipeline_body_weights():
 
 
 def test_ensure_search_pipeline(monkeypatch):
-    import backend.RAG.opensearch.schema as schema
+    import backend.rag.opensearch.schema as schema
 
     calls: list[tuple] = []
 
@@ -47,7 +47,7 @@ def test_ensure_search_pipeline(monkeypatch):
 
 
 def test_ensure_index_create_and_recreate(monkeypatch):
-    import backend.RAG.opensearch.schema as schema
+    import backend.rag.opensearch.schema as schema
 
     exists = False
     created: list[tuple] = []

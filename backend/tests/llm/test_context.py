@@ -20,7 +20,7 @@ class _FakeRetriever:
 
 
 def test_retrieve_rerank_docs(monkeypatch):
-    import backend.LLM.pipeline.context as ctx
+    import backend.llm.pipeline.context as ctx
 
     retriever = _FakeRetriever()
     monkeypatch.setattr(ctx, "rewrite_query", lambda q, h: f"改写:{q}")
@@ -40,7 +40,7 @@ def test_retrieve_rerank_docs(monkeypatch):
 
 
 def test_retrieve_rerank_context(monkeypatch):
-    import backend.LLM.pipeline.context as ctx
+    import backend.llm.pipeline.context as ctx
 
     retriever = _FakeRetriever(
         [

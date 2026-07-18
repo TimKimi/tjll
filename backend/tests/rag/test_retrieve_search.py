@@ -25,7 +25,7 @@ def _fake_hits_resp():
 
 
 def test_format_hits_and_hits_to_documents():
-    from backend.RAG.retrieve import search as search_mod
+    from backend.rag.retrieve import search as search_mod
 
     hits = search_mod._format_hits(_fake_hits_resp())
     assert hits[0]["_score"] == 1.5
@@ -39,7 +39,7 @@ def test_format_hits_and_hits_to_documents():
 
 
 def test_vector_bm25_hybrid_search(monkeypatch):
-    import backend.RAG.retrieve.search as search_mod
+    import backend.rag.retrieve.search as search_mod
 
     class FakeClient:
         def __init__(self) -> None:
@@ -72,7 +72,7 @@ def test_vector_bm25_hybrid_search(monkeypatch):
 
 
 def test_get_retriever_and_modes(monkeypatch):
-    import backend.RAG.retrieve.search as search_mod
+    import backend.rag.retrieve.search as search_mod
 
     monkeypatch.setattr(
         search_mod,

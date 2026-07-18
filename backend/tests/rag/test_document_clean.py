@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.RAG.document.clean import clean_text
+from backend.rag.document.clean import clean_text
 
 
 def test_clean_text_empty():

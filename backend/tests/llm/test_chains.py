@@ -30,7 +30,7 @@ class _FakeRetriever:
 
 
 def test_format_docs():
-    from backend.LLM.pipeline.context import format_docs
+    from backend.llm.pipeline.context import format_docs
 
     docs = [
         Document(
@@ -45,7 +45,7 @@ def test_format_docs():
 
 
 def test_build_rag_chain_invoke(monkeypatch):
-    import backend.LLM.pipeline.chains as chains_mod
+    import backend.llm.pipeline.chains as chains_mod
 
     monkeypatch.setattr(
         chains_mod, "get_retriever", lambda mode="hybrid", k=10: _FakeRetriever()
@@ -58,7 +58,7 @@ def test_build_rag_chain_invoke(monkeypatch):
 
 
 def test_build_rag_chain_with_rerank(monkeypatch):
-    import backend.LLM.pipeline.chains as chains_mod
+    import backend.llm.pipeline.chains as chains_mod
 
     monkeypatch.setattr(
         chains_mod, "get_retriever", lambda mode="hybrid", k=10: _FakeRetriever()
@@ -76,7 +76,7 @@ def test_build_rag_chain_with_rerank(monkeypatch):
 
 
 def test_build_full_rag_chain_uses_session_id(monkeypatch):
-    import backend.LLM.pipeline.chains as chains_mod
+    import backend.llm.pipeline.chains as chains_mod
     from langchain_core.chat_history import InMemoryChatMessageHistory
 
     store: dict[str, InMemoryChatMessageHistory] = {}
@@ -103,7 +103,7 @@ def test_build_full_rag_chain_uses_session_id(monkeypatch):
 
 
 def test_build_rag_chain_with_history(monkeypatch):
-    import backend.LLM.pipeline.chains as chains_mod
+    import backend.llm.pipeline.chains as chains_mod
     from langchain_core.chat_history import InMemoryChatMessageHistory
 
     store: dict[str, InMemoryChatMessageHistory] = {}

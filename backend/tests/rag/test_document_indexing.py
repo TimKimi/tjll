@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_make_document_id_stable():
-    from backend.RAG.document.indexing import make_document_id
+    from backend.rag.document.indexing import make_document_id
 
     a = make_document_id("/path/to/a.pdf")
     b = make_document_id("/path/to/a.pdf")
@@ -13,7 +13,7 @@ def test_make_document_id_stable():
 
 
 def test_build_chunk_docs():
-    from backend.RAG.document.indexing import build_chunk_docs, make_document_id
+    from backend.rag.document.indexing import build_chunk_docs, make_document_id
 
     docs = build_chunk_docs(
         "/data/report.pdf",
@@ -32,7 +32,7 @@ def test_build_chunk_docs():
 
 
 def test_index_chunks_to_opensearch(monkeypatch):
-    import backend.RAG.document.indexing as idx
+    import backend.rag.document.indexing as idx
 
     class FakeIndices:
         def refresh(self, index=None):
@@ -66,7 +66,7 @@ def test_index_chunks_to_opensearch(monkeypatch):
 
 
 def test_index_file_to_opensearch_empty_text(monkeypatch):
-    import backend.RAG.document.indexing as idx
+    import backend.rag.document.indexing as idx
 
     monkeypatch.setattr(idx, "ensure_index", lambda name=None: "idx")
     monkeypatch.setattr(idx, "load_document_as_text", lambda _p: "   ")
@@ -77,7 +77,7 @@ def test_index_file_to_opensearch_empty_text(monkeypatch):
 
 
 def test_index_file_to_opensearch_happy_path(monkeypatch):
-    import backend.RAG.document.indexing as idx
+    import backend.rag.document.indexing as idx
 
     monkeypatch.setattr(idx, "ensure_index", lambda name=None: "idx")
     monkeypatch.setattr(idx, "load_document_as_text", lambda _p: "hello world")
@@ -103,7 +103,7 @@ def test_index_file_to_opensearch_happy_path(monkeypatch):
 
 
 def test_index_file_skips_ensure(monkeypatch):
-    import backend.RAG.document.indexing as idx
+    import backend.rag.document.indexing as idx
 
     called = {"ensure": False}
 

@@ -11,7 +11,7 @@ def _message_text(msg: object) -> str:
 
 
 def test_rag_prompt_formats():
-    from backend.LLM.prompts.rag import RAG_PROMPT, RAG_PROMPT_WITH_HISTORY
+    from backend.llm.prompts.rag import RAG_PROMPT, RAG_PROMPT_WITH_HISTORY
 
     msgs = RAG_PROMPT.format_messages(context="资料", query="问题")
     text = "\n".join(_message_text(m) for m in msgs)
@@ -29,7 +29,7 @@ def test_rag_prompt_formats():
 
 
 def test_rephrase_prompt_formats():
-    from backend.LLM.prompts.rephrase import REPHRASE_PROMPT
+    from backend.llm.prompts.rephrase import REPHRASE_PROMPT
 
     msgs = REPHRASE_PROMPT.format_messages(
         query="这个怎么样",

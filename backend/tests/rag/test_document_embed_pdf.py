@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def test_embed_chunks_and_query(monkeypatch):
-    import backend.RAG.document.embed as embed_mod
+    import backend.rag.document.embed as embed_mod
 
     embed_mod._embedding_model = None
 
@@ -31,7 +31,7 @@ def test_embed_chunks_and_query(monkeypatch):
 def test_parse_pdf_with_mineru_mocked(tmp_path, monkeypatch):
     import types
 
-    import backend.RAG.document.pdf as pdf_mod
+    import backend.rag.document.pdf as pdf_mod
 
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(b"%PDF")
@@ -65,7 +65,7 @@ def test_parse_pdf_with_mineru_mocked(tmp_path, monkeypatch):
 
 
 def test_parse_pdf_import_error(monkeypatch):
-    import backend.RAG.document.pdf as pdf_mod
+    import backend.rag.document.pdf as pdf_mod
     import pytest
 
     monkeypatch.setattr(

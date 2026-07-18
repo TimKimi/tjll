@@ -96,6 +96,7 @@ source = ["backend"]
 omit = [
     "backend/tests/*",
     "backend/scripts/*",
+    "backend/rag/scripts/*",
     "backend/data/loader.py",
     "backend/data/schemas.py",
     "backend/main.py",
