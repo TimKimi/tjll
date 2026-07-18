@@ -194,16 +194,12 @@ class TestBusinessService:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_list_businesses_all_filters(self, mock_db, sample_business):
-        """测试所有筛选条件、排序为 rating、分页正常。"""
-        # 模拟 count 查询返回 5
+    async def test_list_businesses_default_source_db(self, mock_db, sample_business):
+        """测试默认 source='db' 时走数据库查询（未传 source）。"""
         count_result = MagicMock()
         count_result.scalar_one.return_value = 5
-
-        # 模拟主查询返回一条记录
         main_result = MagicMock()
         main_result.scalars.return_value.all.return_value = [sample_business]
-
         mock_db.execute.side_effect = [count_result, main_result]
 
         query = BusinessListQuery(
@@ -221,10 +217,85 @@ class TestBusinessService:
         assert result.total == 5
         assert result.page == 2
         assert result.page_size == 2
-        assert result.total_pages == 3  # (5+2-1)//2 = 3
+        assert result.total_pages == 3
         assert len(result.items) == 1
-        # 验证调用了 execute 两次（side_effect 已使用）
         assert mock_db.execute.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_list_businesses_source_yelp_success(self, mock_db):
+        """测试 source='yelp' 时调用 YelpSearchService 成功返回数据。"""
+        # 模拟 YelpSearchService 的返回
+        mock_yelp_result = PaginatedData(
+            items=[
+                BusinessDetail(
+                    id="yelp_biz_1",
+                    name="Yelp 餐厅",
+                    rating=4.8,
+                    review_count=100,
+                    categories=[Category(alias="sushi", title="Sushi")],
+                    location=Location(city="Tokyo"),
+                )
+            ],
+            total=1,
+            page=1,
+            page_size=10,
+            total_pages=1,
+        )
+
+        with patch("backend.services.business.YelpSearchService") as MockYelpSearch:
+            mock_yelp_instance = MockYelpSearch.return_value
+            mock_yelp_instance.search_as_schema = AsyncMock(
+                return_value=mock_yelp_result
+            )
+
+            query = BusinessListQuery(
+                keyword="sushi",
+                location="Tokyo",
+                source="yelp",
+                page=1,
+                page_size=10,
+            )
+            service = BusinessService(mock_db)
+            result = await service.list_businesses(query)
+
+            # 验证调用了 YelpSearchService
+            mock_yelp_instance.search_as_schema.assert_called_once_with(
+                keyword="sushi",
+                category=None,
+                location="Tokyo",
+                latitude=None,
+                longitude=None,
+                sort_by="rating",
+                price=None,
+                limit=10,
+                offset=0,
+            )
+            # 验证返回结果正确
+            assert result.total == 1
+            assert result.items[0].id == "yelp_biz_1"
+            assert result.items[0].name == "Yelp 餐厅"
+
+    @pytest.mark.asyncio
+    async def test_list_businesses_source_yelp_error(self, mock_db):
+        """测试 YelpSearchService 抛出异常时，服务层向上传递（由路由处理）。"""
+        with patch("backend.services.business.YelpSearchService") as MockYelpSearch:
+            mock_yelp_instance = MockYelpSearch.return_value
+            mock_yelp_instance.search_as_schema = AsyncMock(
+                side_effect=ValueError(
+                    "使用 Yelp 搜索时必须提供 location 或 latitude+longitude"
+                )
+            )
+
+            query = BusinessListQuery(
+                keyword="sushi",
+                source="yelp",
+                page=1,
+                page_size=10,
+            )
+            service = BusinessService(mock_db)
+            with pytest.raises(ValueError) as exc_info:
+                await service.list_businesses(query)
+            assert "location" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_list_businesses_sort_review_count(self, mock_db, sample_business):
@@ -289,10 +360,9 @@ class TestBusinessService:
 class TestBusinessRoutes:
     """测试店铺路由端点。"""
 
-    # 注意：路由文件在 backend/routers/business.py，如果实际路径不同请调整
     @patch("backend.routers.business.BusinessService")
     def test_list_businesses(self, mock_service_class, client):
-        """测试 GET /api/business/list 正常返回。"""
+        """测试 GET /api/business/list 正常返回，包含 source 参数。"""
         mock_service = mock_service_class.return_value
         mock_service.list_businesses = AsyncMock(
             return_value=PaginatedData(
@@ -322,6 +392,7 @@ class TestBusinessRoutes:
                 "sort_by": "rating",
                 "page": 1,
                 "page_size": 10,
+                "source": "db",
             },
         )
         assert response.status_code == 200
@@ -329,16 +400,17 @@ class TestBusinessRoutes:
         assert data["code"] == 0
         assert data["data"]["total"] == 1
         assert len(data["data"]["items"]) == 1
-        # 验证服务调用参数
+        # 验证服务调用参数，现在应包含 source='db'
         call_args = mock_service.list_businesses.call_args[0][0]
         assert isinstance(call_args, BusinessListQuery)
         assert call_args.keyword == "餐厅"
         assert call_args.category == "chinese"
         assert call_args.sort_by == "rating"
+        assert call_args.source == "db"
 
     @patch("backend.routers.business.BusinessService")
     def test_list_businesses_defaults(self, mock_service_class, client):
-        """测试未传参数时使用默认值。"""
+        """测试未传参数时使用默认值，source 应为 db。"""
         mock_service = mock_service_class.return_value
         mock_service.list_businesses = AsyncMock(
             return_value=PaginatedData(
@@ -352,6 +424,36 @@ class TestBusinessRoutes:
         assert call_args.page_size == 10
         assert call_args.sort_by == "rating"
         assert call_args.keyword is None
+        assert call_args.source == "db"  # 默认 db
+
+    @patch("backend.routers.business.BusinessService")
+    def test_list_businesses_with_yelp_source(self, mock_service_class, client):
+        """测试显式指定 source='yelp' 时，路由正确传递参数。"""
+        mock_service = mock_service_class.return_value
+        mock_service.list_businesses = AsyncMock(
+            return_value=PaginatedData(
+                items=[], total=0, page=1, page_size=10, total_pages=0
+            )
+        )
+        response = client.get(
+            "/api/business/list",
+            params={
+                "keyword": "pizza",
+                "location": "New York",
+                "source": "yelp",
+                "page": 2,
+                "page_size": 5,
+                "sort_by": "review_count",
+            },
+        )
+        assert response.status_code == 200
+        call_args = mock_service.list_businesses.call_args[0][0]
+        assert call_args.source == "yelp"
+        assert call_args.keyword == "pizza"
+        assert call_args.location == "New York"
+        assert call_args.page == 2
+        assert call_args.page_size == 5
+        assert call_args.sort_by == "review_count"
 
     @patch("backend.routers.business.BusinessService")
     def test_business_detail_found(self, mock_service_class, client):

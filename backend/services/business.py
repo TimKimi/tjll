@@ -17,6 +17,7 @@ from backend.schemas.business import (
     Location,
 )
 from backend.schemas.common import PaginatedData
+from backend.services.yelp_search import YelpSearchService
 
 
 def _parse_json_field(value: str | None) -> Any:
@@ -94,7 +95,16 @@ class BusinessService:
     async def list_businesses(
         self, query: BusinessListQuery
     ) -> PaginatedData[BusinessDetail]:
-        """分页查询店铺列表。"""
+        """分页查询店铺列表，根据 source 参数选择数据源。"""
+        if query.source == "yelp":
+            return await self._search_via_yelp(query)
+        else:
+            return await self._search_via_db(query)
+
+    async def _search_via_db(
+        self, query: BusinessListQuery
+    ) -> PaginatedData[BusinessDetail]:
+        """从数据库查询店铺列表。"""
         stmt = select(Business)
 
         # 关键词搜索
@@ -145,4 +155,22 @@ class BusinessService:
             page=query.page,
             page_size=query.page_size,
             total_pages=total_pages,
+        )
+
+    async def _search_via_yelp(
+        self, query: BusinessListQuery
+    ) -> PaginatedData[BusinessDetail]:
+        """通过 Yelp API 搜索店铺。"""
+        offset = (query.page - 1) * query.page_size
+        yelp_search = YelpSearchService()
+        return await yelp_search.search_as_schema(
+            keyword=query.keyword,
+            category=query.category,
+            location=query.location,
+            latitude=query.latitude,
+            longitude=query.longitude,
+            sort_by=query.sort_by,
+            price=query.price,
+            limit=query.page_size,
+            offset=offset,
         )

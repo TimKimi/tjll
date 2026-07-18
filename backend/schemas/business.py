@@ -73,3 +73,6 @@ class BusinessListQuery(BaseModel):
     price: str | None = Field(default=None, description="价格区间，如 1,2,3")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=10, ge=1, le=50)
+    source: str = Field(
+        default="db", description="数据来源：db（数据库）、yelp（Yelp API)"
+    )

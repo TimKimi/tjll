@@ -93,7 +93,6 @@ class YelpService:
             params["term"] = term
         if categories:
             params["categories"] = categories
-
         data = await self._get("/businesses/search", params)
         return YelpBusinessSearchResponse(**data)
 

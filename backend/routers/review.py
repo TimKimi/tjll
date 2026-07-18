@@ -19,11 +19,14 @@ router = APIRouter(prefix="/api/review", tags=["评论"])
     response_model=ApiResponse[PaginatedData[ReviewBase]],
 )
 async def review_list(
-    business_id: str = Query(..., description="店铺 ID"),
+    business_id: str = Query(..., description="店铺 ID（Yelp 商家 ID）"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=50),
     sort_by: str = Query(
         default="time", description="排序：time/rating_high/rating_low"
+    ),
+    source: str = Query(
+        default="db", description="数据来源，可选值：db（数据库）、yelp（Yelp API）"
     ),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PaginatedData[ReviewBase]]:
@@ -34,6 +37,7 @@ async def review_list(
         page=page,
         page_size=page_size,
         sort_by=sort_by,
+        source=source,
     )
     return ApiResponse.ok(data=result)
 
