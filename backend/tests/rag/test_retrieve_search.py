@@ -38,6 +38,33 @@ def test_format_hits_and_hits_to_documents():
     assert docs[0].metadata["score"] == 1.5
 
 
+def test_hits_to_documents_includes_yelp_meta():
+    from backend.rag.retrieve.search import hits_to_documents
+
+    docs = hits_to_documents(
+        [
+            {
+                "text": "好评片段",
+                "chunk_id": "b_pos_0000",
+                "document_id": "b",
+                "chunk_index": 0,
+                "_score": 2.0,
+                "polarity": "positive",
+                "id": "b",
+                "name": "Biz",
+                "alias": "biz",
+                "is_last_chunk": True,
+            }
+        ]
+    )
+    meta = docs[0].metadata
+    assert meta["polarity"] == "positive"
+    assert meta["name"] == "Biz"
+    assert meta["alias"] == "biz"
+    assert meta["id"] == "b"
+    assert meta["is_last_chunk"] is True
+
+
 def test_source_fields_include_yelp_meta():
     from backend.rag.retrieve.search import _SOURCE_FIELDS
 

@@ -35,6 +35,22 @@ def test_resolve_embedding_device_cuda_ok(monkeypatch):
     assert embed_mod.resolve_embedding_device("cuda") == "cuda"
 
 
+def test_resolve_embedding_device_import_error(monkeypatch):
+    import builtins
+
+    import backend.rag.document.embed as embed_mod
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "torch":
+            raise ImportError("no torch")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    assert embed_mod.resolve_embedding_device("cuda") == "cpu"
+
+
 def test_embed_chunks_and_query(monkeypatch):
     import backend.rag.document.embed as embed_mod
 
