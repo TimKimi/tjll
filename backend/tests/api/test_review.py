@@ -268,7 +268,7 @@ class TestReviewRoutes:
 
     @patch("backend.routers.review.ReviewService")
     def test_list_reviews(self, mock_service_class, client):
-        """测试 GET /api/review/list 正常返回"""
+        """测试 POST /api/review/list 正常返回"""
         mock_service = mock_service_class.return_value
         mock_service.list_by_business = AsyncMock(
             return_value=PaginatedData(
@@ -290,7 +290,7 @@ class TestReviewRoutes:
             )
         )
 
-        response = client.get(
+        response = client.post(
             "/api/review/list",
             params={
                 "business_id": "b1",
@@ -305,7 +305,6 @@ class TestReviewRoutes:
         assert data["code"] == 0
         assert data["data"]["total"] == 1
         assert len(data["data"]["items"]) == 1
-        # 断言现在包含 source 参数
         mock_service.list_by_business.assert_called_once_with(
             business_id="b1", page=1, page_size=10, sort_by="time", source="db"
         )
@@ -319,9 +318,8 @@ class TestReviewRoutes:
                 items=[], total=0, page=1, page_size=10, total_pages=0
             )
         )
-        response = client.get("/api/review/list", params={"business_id": "b1"})
+        response = client.post("/api/review/list", params={"business_id": "b1"})
         assert response.status_code == 200
-        # 由于未传 source，路由会使用默认 'db'
         mock_service.list_by_business.assert_called_once_with(
             business_id="b1", page=1, page_size=10, sort_by="time", source="db"
         )
@@ -335,7 +333,7 @@ class TestReviewRoutes:
                 items=[], total=0, page=1, page_size=10, total_pages=0
             )
         )
-        response = client.get(
+        response = client.post(
             "/api/review/list",
             params={"business_id": "b1", "source": "yelp", "page": 1, "page_size": 5},
         )
@@ -346,7 +344,7 @@ class TestReviewRoutes:
 
     @patch("backend.routers.review.ReviewService")
     def test_review_detail_found(self, mock_service_class, client):
-        """测试 GET /api/review/{review_id} 存在"""
+        """测试 POST /api/review/{review_id} 存在"""
         mock_service = mock_service_class.return_value
         mock_service.get_by_id = AsyncMock(
             return_value=ReviewBase(
@@ -359,7 +357,7 @@ class TestReviewRoutes:
                 url="",
             )
         )
-        response = client.get("/api/review/r1")
+        response = client.post("/api/review/r1")
         assert response.status_code == 200
         data = response.json()
         assert data["code"] == 0
@@ -371,7 +369,7 @@ class TestReviewRoutes:
         """测试评论不存在时返回 404"""
         mock_service = mock_service_class.return_value
         mock_service.get_by_id = AsyncMock(return_value=None)
-        response = client.get("/api/review/not_exist")
+        response = client.post("/api/review/not_exist")
         assert response.status_code == 404
         assert response.json()["detail"] == "评论不存在"
         mock_service.get_by_id.assert_called_once_with("not_exist")
@@ -385,12 +383,11 @@ class TestReviewRoutes:
                 items=[], total=0, page=1, page_size=10, total_pages=0
             )
         )
-        response = client.get(
+        response = client.post(
             "/api/review/list",
             params={"business_id": "b1", "sort_by": "unknown", "source": "db"},
         )
         assert response.status_code == 200
-        # 路由透传 sort_by，服务层会处理未知值（走 time）
         mock_service.list_by_business.assert_called_once_with(
             business_id="b1", page=1, page_size=10, sort_by="unknown", source="db"
         )
