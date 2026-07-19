@@ -18,34 +18,39 @@ from backend.schemas.auth import (
 class TestRegisterRequest:
     """测试注册请求 Schema。"""
 
-    def test_valid_minimal(self):
-        """仅必填字段。"""
-        req = RegisterRequest(username="张三", password="12345678")
+    def test_valid(self):
+        """合法注册请求。"""
+        req = RegisterRequest(
+            username="张三", password="12345678", email="user@example.com"
+        )
         assert req.username == "张三"
         assert req.password == "12345678"
-        assert req.email is None
+        assert req.email == "user@example.com"
 
-    def test_valid_with_email(self):
-        """带邮箱。"""
-        req = RegisterRequest(
-            username="user1", password="pass1234", email="test@example.com"
-        )
-        assert req.email == "test@example.com"
+    def test_email_required(self):
+        """邮箱是必填字段。"""
+        with pytest.raises(ValidationError):
+            RegisterRequest(username="user1", password="12345678")  # type: ignore[call-arg]  # ty: ignore[missing-argument]
+
+    def test_email_invalid_format(self):
+        """邮箱格式不正确应报错。"""
+        with pytest.raises(ValidationError):
+            RegisterRequest(username="user1", password="12345678", email="not-an-email")
 
     def test_username_too_short(self):
         """用户名少于 2 位应报错。"""
         with pytest.raises(ValidationError):
-            RegisterRequest(username="a", password="12345678")
+            RegisterRequest(username="a", password="12345678")  # type: ignore[call-arg]  # ty: ignore[missing-argument]
 
     def test_username_too_long(self):
         """用户名超过 16 位应报错。"""
         with pytest.raises(ValidationError):
-            RegisterRequest(username="a" * 17, password="12345678")
+            RegisterRequest(username="a" * 17, password="12345678")  # type: ignore[call-arg]  # ty: ignore[missing-argument]
 
     def test_password_too_short(self):
         """密码少于 8 位应报错。"""
         with pytest.raises(ValidationError):
-            RegisterRequest(username="user1", password="1234567")
+            RegisterRequest(username="user1", password="1234567")  # type: ignore[call-arg]  # ty: ignore[missing-argument]
 
 
 class TestLoginRequest:

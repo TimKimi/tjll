@@ -16,7 +16,9 @@ class TestAppUserRepr:
 
     def test_repr_contains_id_and_username(self):
         """__repr__ 应包含 id 和 username。"""
-        user = AppUser(id="u_test_001", username="测试用户")
+        user = AppUser(
+            id="u_test_001", username="测试用户", password_hash="h", email="t@t.com"
+        )
         r = repr(user)
         assert "AppUser" in r
         assert "u_test_001" in r
@@ -68,10 +70,15 @@ class TestAppUserColumns:
         assert isinstance(col.type, DateTime)
 
     def test_optional_string_fields_nullable(self):
-        """email、bio、avatar 可为空。"""
-        for field in ["email", "bio", "avatar"]:
+        """bio、avatar 可为空，email 不可为空。"""
+        for field in ["bio", "avatar"]:
             col = AppUser.__table__.c[field]
             assert col.nullable is True, f"{field} should be nullable"
+
+    def test_email_not_nullable(self):
+        """email 字段不可为空。"""
+        col = AppUser.__table__.c["email"]
+        assert col.nullable is False
 
     def test_email_default_to_empty_string(self):
         """email 字段默认值为空字符串。"""
@@ -94,10 +101,16 @@ class TestAppUserCreate:
 
     def test_create_with_minimal_fields(self):
         """仅用必填字段创建用户。"""
-        user = AppUser(id="u_min", username="min_user", password_hash="abc123")
+        user = AppUser(
+            id="u_min",
+            username="min_user",
+            password_hash="abc123",
+            email="min@example.com",
+        )
         assert user.id == "u_min"
         assert user.username == "min_user"
         assert user.password_hash == "abc123"
+        assert user.email == "min@example.com"
 
     def test_create_with_all_fields(self):
         """使用所有字段创建用户。"""

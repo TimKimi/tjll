@@ -101,6 +101,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440  # 24 小时
     JWT_REFRESH_EXPIRE_DAYS: int = 7
+    EMAIL_CHECK_DELIVERABILITY: bool = False  # 生产环境可开启 DNS MX 检查
 
     @field_validator("JWT_EXPIRE_MINUTES", mode="before")
     @classmethod

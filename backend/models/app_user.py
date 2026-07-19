@@ -26,8 +26,8 @@ class AppUser(Base):
     password_hash: Mapped[str] = mapped_column(String(255), comment="bcrypt 密码哈希")
 
     # ── 个人信息 ──
-    email: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, default="", comment="邮箱"
+    email: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="", comment="邮箱"
     )
     bio: Mapped[str | None] = mapped_column(
         Text, nullable=True, default="", comment="个性签名"

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from email_validator import EmailNotValidError, validate_email
+from pydantic import BaseModel, Field, field_validator
+
+from backend.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class UserRole(str, Enum):
@@ -20,7 +26,20 @@ class RegisterRequest(BaseModel):
 
     username: str = Field(..., min_length=2, max_length=16, description="用户名")
     password: str = Field(..., min_length=8, description="密码")
-    email: str | None = Field(default=None, description="邮箱")
+    email: str = Field(..., description="邮箱（需真实可用的域名）")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_deliverable(cls, v: str) -> str:
+        """校验邮箱格式，生产环境额外检查域名可送达性。"""
+        try:
+            result = validate_email(
+                v,
+                check_deliverability=settings.EMAIL_CHECK_DELIVERABILITY,
+            )
+            return result.normalized
+        except EmailNotValidError as e:
+            raise ValueError(f"邮箱无效: {e}") from e
 
 
 class LoginRequest(BaseModel):
