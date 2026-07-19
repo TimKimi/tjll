@@ -4,35 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-from backend.core.dependencies import get_current_user
-from backend.database import get_db
-from backend.main import app
 from backend.schemas.user import UserProfileResponse
-
-
-@pytest.fixture
-def client():
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture(autouse=True)
-def override_deps():
-    """mock 认证 + 数据库依赖，避免连数据库。"""
-    app.dependency_overrides[get_current_user] = lambda: {
-        "sub": "u_abc",
-        "username": "张三",
-    }
-
-    async def mock_get_db():
-        return AsyncMock()
-
-    app.dependency_overrides[get_db] = mock_get_db
-    yield
-    app.dependency_overrides.clear()
 
 
 class TestUserRoutes:
