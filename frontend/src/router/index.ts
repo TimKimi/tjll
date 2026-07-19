@@ -7,7 +7,7 @@ import RegisterView from '../view/RegisterView.vue'
 import PersonalProfileView from '../view/PersonalProfileView.vue'
 import RestaurantView from '../view/RestaurantView.vue'
 import AdminView from '../view/AdminView.vue'
-import RestaurantListReview from '@/view/RestaurantListReview.vue'
+import RestaurantListView from '../view/RestaurantListView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -79,7 +79,7 @@ const router = createRouter({
     {
       path: '/restaurants',
       name: 'reataurants',
-      component: RestaurantListReview,
+      component: RestaurantListView,
       meta: {
         title: '发现餐厅',
         requiresAuth: false,
