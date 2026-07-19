@@ -2,18 +2,30 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class RagSnippet(BaseModel):
-    """单条 RAG 片段。"""
+    """单条 RAG 片段：正文 + 索引元字段（不含 embedding）。"""
 
     model_config = ConfigDict(extra="ignore")
 
-    content: str = Field(..., description="片段正文")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="片段元数据")
+    content: str = Field(..., description="片段正文（text）")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="索引全字段（除 embedding）及 score / rerank_score 等",
+    )
+
+
+class HistoryMessage(BaseModel):
+    """会话历史单条（本轮写入前已存在的消息）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["user", "assistant", "system"] = Field(..., description="角色")
+    content: str = Field(..., description="消息正文")
 
 
 class AskRequest(BaseModel):
@@ -46,5 +58,9 @@ class AskResponse(BaseModel):
     answer: str = Field(..., description="LLM 回复")
     sources: list[RagSnippet] = Field(
         default_factory=list,
-        description="本轮用到的 RAG 片段",
+        description="本轮检索/精排后的 RAG 片段（无 embedding）",
+    )
+    history: list[HistoryMessage] = Field(
+        default_factory=list,
+        description="本轮写入前已有的会话历史",
     )

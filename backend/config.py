@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     redis_password: str = "Jianyan_01"
     redis_history_ttl: int = 86400  # 24h
 
+    # ---- 日志（相对 backend/；暂定 docs/）----
+    log_dir: str = "docs"
+    log_level: str = "INFO"
+
     @property
     def yelp_dataset_dir(self) -> Path:
         return REPO_ROOT / self.YELP_DATASET_DIR
@@ -150,6 +154,10 @@ class Settings(BaseSettings):
     @property
     def pdfs_dir(self) -> str:
         return _resolve_path(self.pdfs_path)
+
+    @property
+    def log_dir_path(self) -> Path:
+        return Path(_resolve_path(self.log_dir))
 
     @property
     def opensearch_url(self) -> str:
