@@ -1,5 +1,6 @@
-# backend/tests/api/test_health.py
 """健康检查路由的单元测试。"""
+
+from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
@@ -16,15 +17,8 @@ class TestHealthRoutes:
 
         assert response.status_code == 200
         data = response.json()
-
-        # 验证响应结构符合 ApiResponse
-        assert "code" in data
-        assert "message" in data
-        assert "data" in data
         assert data["code"] == 0
         assert data["message"] == "success"
-
-        # 验证 data 内容
         assert data["data"]["status"] == "ok"
         assert data["data"]["service"] == "TJLL API"
 
@@ -35,7 +29,7 @@ class TestHealthRoutes:
         assert response.status_code == 405
 
     def test_health_check_response_headers(self):
-        """检查响应头（可选）。"""
+        """检查响应头。"""
         client = TestClient(app)
         response = client.get("/health")
         assert "application/json" in response.headers["content-type"]

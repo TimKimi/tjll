@@ -113,7 +113,7 @@ git commit -m "chore: init project structure"
 git remote add origin https://github.com/<你的用户名>/tjll.git
 
 # 推送到远程
-just push-u master
+just pushu master
 ```
 
 
@@ -177,7 +177,7 @@ graph LR
 ### 2. 代码检查
 
 ```bash
-just lint        # 全流程：自动修复 → 格式检查 → 类型检查
+just lint        # 全流程：自动修复 lint → 自动格式化 → mypy 类型检查
 just fix         # ruff 自动修复 lint
 just fmt         # ruff 格式化
 just mypy        # 类型检查
@@ -301,7 +301,7 @@ graph TD
 
 ```bash
 # 一条命令完成：切 develop → 拉最新 → 创建新分支
-just dev-branch feat/xxx
+just cob feat/xxx
 
 # 等价于手动执行：
 #   git checkout develop
@@ -323,7 +323,7 @@ just cz          # 交互式提交，生成规范 commit
 
 ```bash
 # 推送你的分支到远程（首次用 -u）
-just push-u feat/xxx
+just pushu feat/xxx
 
 # 等价于：git push -u origin feat/xxx
 ```
@@ -377,7 +377,7 @@ PR 合并后，开启下一个功能：
 
 ```bash
 # 一条命令完成：删旧分支 → 切 develop → 拉最新 → 建新分支
-just del-branch feat/xxx feat/yyy
+just brdel feat/xxx feat/yyy
 
 # 或者手动操作：
 #   git checkout develop
@@ -525,14 +525,16 @@ uv outdated                    # 查看过期依赖
 
 | 指令 | 作用 |
 |---|---|
-| `just lint` | 全流程：lint 自动修复→格式检查→类型检查→覆盖率 |
+| `just lint` | 全流程：lint 自动修复→格式化→mypy 类型检查 |
+| `just check` | lint + 测试覆盖率（CI 用） |
 | `just test` | 运行测试 |
+| `just coverage` | 单元测试 + 覆盖率报告 |
 | `just serve` | 启动开发服务器 |
 | `just up` | 流水线：启动数据库→启动服务器 |
 | `just cz` | 交互式提交（Conventional Commits） |
 | `just push` | 推送代码 |
-| `just db-up` / `just db-down` | 启动/停止 PostgreSQL |
-| `just data-load` / `just data-sample` | Yelp 数据加载 |
+| `just dbup` / `just dbdown` | 启动/停止 PostgreSQL |
+| `just dload` / `just dsample` | Yelp 数据加载 |
 | `just install` | 首次初始化 |
 
 > 完整指令清单见 `docs/commands.md`。
@@ -577,7 +579,7 @@ prek auto-update
 ### 如何创建新的贡献分支？
 
 ```bash
-just new-branch feat/xxx   # 新功能
-just new-branch fix/xxx    # 修复
-just new-branch docs/xxx   # 文档
+just cob feat/xxx   # 新功能
+just cob fix/xxx    # 修复
+just cob docs/xxx   # 文档
 ```

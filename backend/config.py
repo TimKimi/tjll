@@ -1,8 +1,11 @@
 """应用配置：Yelp/DB + RAG；密钥读仓库根目录 `.env`。"""
 
+from datetime import timedelta
 from pathlib import Path
 
-from pydantic import Field
+from typing import Any
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/config.py → 应用根 backend/（模型与数据路径相对此目录）
@@ -93,6 +96,24 @@ class Settings(BaseSettings):
     hybrid_bm25_weight: float = 0.3
     hybrid_vector_weight: float = 0.7
 
+    # ---- JWT / Auth ----
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 1440  # 24 小时
+    JWT_REFRESH_EXPIRE_DAYS: int = 7
+    EMAIL_CHECK_DELIVERABILITY: bool = False  # 生产环境可开启 DNS MX 检查
+
+    @field_validator("JWT_EXPIRE_MINUTES", mode="before")
+    @classmethod
+    def _parse_jwt_expire(cls, v: Any) -> int:
+        if isinstance(v, str) and "*" in v:
+            parts = v.split("*")
+            try:
+                return int(parts[0].strip()) * int(parts[1].strip())
+            except (ValueError, IndexError):
+                pass
+        return int(v) if v is not None else 1440
+
     # ---- Redis（对话历史，需 redis-stack）----
     redis_host: str = "localhost"
     redis_port: int = 6379
@@ -103,6 +124,10 @@ class Settings(BaseSettings):
     # ---- 日志（相对 backend/；暂定 docs/）----
     log_dir: str = "docs"
     log_level: str = "INFO"
+
+    @property
+    def jwt_expire_delta(self) -> timedelta:
+        return timedelta(minutes=self.JWT_EXPIRE_MINUTES)
 
     @property
     def yelp_dataset_dir(self) -> Path:

@@ -13,10 +13,7 @@ set shell := ["sh", "-c"]
 # 安装
 # ============================================================
 
-# 首次初始化项目
-# 作用：安装所有 Python 依赖 + 配置 git 提交前检查钩子
-# 用法：just install
-# 注意：新成员克隆仓库后先跑这条命令
+# 首次初始化项目（安装依赖 + git 钩子）
 install:
     uv sync --all-groups
     prek install --overwrite
@@ -27,29 +24,29 @@ install:
 # 代码质量检查
 # ============================================================
 
-# 全套代码检查（最常用）
-# 自动执行：ruff 自动修复 → ruff 格式检查 → mypy 类型检查 → 单元测试覆盖率
-# 用法：just lint
-# 提示：提交前务必跑一次，确保 CI 不红
-lint: fix fmt-check mypy coverage
+# 快速代码检查：自动修复 lint + 格式化 + mypy
+lint: fix fmt mypy
 
-# ruff 自动修复 lint 问题（如未使用的导入、拼写错误等）
+# 全量检查：lint + 测试覆盖率（CI 用）
+check: lint coverage
+
+# ruff 自动修复 lint 问题（未使用的导入、拼写错误等）
 fix:
     uv run ruff check --force-exclude --fix
 
-# ruff 格式化代码（修改文件缩进、空行等风格）
+# ruff 自动格式化代码（缩进、空行等风格）
 fmt:
     uv run ruff format --force-exclude
 
-# 只检查格式是否正确，不修改文件（CI 流程用）
-fmt-check:
+# 仅检查格式，不修改文件（CI 用）
+fmtck:
     uv run ruff format --force-exclude --check
 
-# mypy 类型检查（只扫描 backend/ 目录）
+# mypy 类型检查（仅 backend/ 目录）
 mypy:
     uv run mypy backend
 
-# 单元测试覆盖率（跳过集成测试）
+# 单元测试 + 覆盖率报告（跳过集成测试）
 coverage:
     uv run pytest -c pyproject.toml -m "not integration" --cov --cov-report=term-missing --cov-fail-under=60 -q --tb=short
 
@@ -58,23 +55,20 @@ coverage:
 # 测试
 # ============================================================
 
-# 运行所有 pytest 测试（含单元测试 + 集成测试）
+# 运行全部 pytest（含集成测试）
 test:
     uv run pytest -c pyproject.toml -v --tb=short
 
-# 只运行指定模块的测试
-# 用法：just test-mod data              → 测试 data 模块
-# 用法：just test-mod data_get          → 测试数据获取模块
-# 用法：just test-mod data/test_loader  → 测试加载器转换函数
-test-mod module:
+# 运行指定模块测试：just tmod data
+tmod module:
     uv run pytest -c pyproject.toml backend/tests/{{ module }} -v --tb=short
 
-# 只跑单元测试（不依赖数据库）
-test-unit:
+# 仅跑单元测试（不依赖数据库）
+tunit:
     uv run pytest -c pyproject.toml -m "not integration" -v --tb=short
 
-# 只跑集成测试（依赖数据库）
-test-integration:
+# 仅跑集成测试（依赖数据库）
+tint:
     uv run pytest -c pyproject.toml -m integration -v --tb=short
 
 
@@ -83,11 +77,11 @@ test-integration:
 # ============================================================
 
 # 启动 PostgreSQL 容器（后台运行）
-db-up:
+dbup:
     docker compose up -d
 
 # 停止 PostgreSQL 容器
-db-down:
+dbdown:
     docker compose down
 
 
@@ -95,19 +89,16 @@ db-down:
 # Yelp 数据加载
 # ============================================================
 
-# 两阶段加载：just data-load <商家数> <最低评论数>
-# 自动筛选关联的评论和用户，不足最低评论数的商家会被丢弃
-# 用法：just data-load 100 50
-data-load biz rev:
+# 两阶段加载 Yelp 数据集：just dload 100 50
+dload biz rev:
     uv run python -m backend.scripts.extract_yelp_data --max-businesses {{ biz }} --min-reviews {{ rev }}
 
-# 小批量加载（快速验证）：just data-sample
-# 等价于 just data-load 5 1
-data-sample:
+# 快速小批量加载（等价于 just dload 5 1）
+dsample:
     uv run python -m backend.scripts.extract_yelp_data --max-businesses 5 --min-reviews 1
 
-# 查看数据库中已加载的 Yelp 数据统计
-data-check:
+# 查看数据库中的 Yelp 数据统计
+dstat:
     uv run python -m backend.tests.scripts.check_db
 
 
@@ -115,34 +106,29 @@ data-check:
 # 离线评论清洗（可选；需本机 GGUF + llama.cpp，见 rag/models/.../README）
 # ============================================================
 
-# 用法：just review-clean <商家数> <最低评论数> <shard> <start> <end> [最多扫描评论数]
-# shard: 0 或 1；start/end: 分片内左闭右开
-# 好评/坏评各自写满约 1500 字即停；最多扫描评论数默认 200
-# 例：just review-clean 5 10 0 0 5 200
-review-clean biz rev shard start end maxrev="200":
+# 离线清洗 Yelp 评论：just rvclean 5 10 0 0 5 200
+rvclean biz rev shard start end maxrev="200":
     uv run python -m backend.rag.scripts.clean_yelp_reviews --max-businesses {{ biz }} --min-reviews {{ rev }} --shard {{ shard }} --start {{ start }} --end {{ end }} --max-reviews-per-business {{ maxrev }}
 
 
 # ============================================================
-# cleaned Yelp → OpenSearch 入库
+# Yelp 数据 → OpenSearch 入库
 # ============================================================
 
-# 补写：只入库 index_progress.json 里没有的商家
-# 例：just index-cleaned-backfill
-index-cleaned-backfill:
+# 补写：入库 index_progress 里缺失的商家
+idx-backfill:
     uv run python -m backend.rag.scripts.index_cleaned_yelp --mode backfill
 
-# 复写：全部商家重新入库（不删索引，同 chunk_id 覆盖旧数据）
-# 例：just index-cleaned-rewrite
-index-cleaned-rewrite:
+# 复写：全部商家重新入库（同 chunk_id 覆盖旧数据）
+idx-rewrite:
     uv run python -m backend.rag.scripts.index_cleaned_yelp --mode rewrite
 
-# 兼容旧名：默认补写
-index-cleaned:
+# 兼容旧名，默认补写
+idx-clean:
     uv run python -m backend.rag.scripts.index_cleaned_yelp --mode backfill
 
-# 删除索引并重建后再复写
-index-cleaned-recreate:
+# 删除索引并重建后复写
+idx-recreate:
     uv run python -m backend.rag.scripts.index_cleaned_yelp --mode rewrite --recreate
 
 
@@ -150,12 +136,11 @@ index-cleaned-recreate:
 # 开发服务器
 # ============================================================
 
-# 启动 FastAPI 开发服务器（修改代码后自动重载）
+# 启动 FastAPI 开发服务器（热重载）
 serve:
     uv run uvicorn backend.main:app --reload
 
-# 一条命令启动完整开发环境
-# 自动先启动数据库，再启动开发服务器
+# 一键启动完整环境（数据库 + 服务器）
 up:
     docker compose up -d && uv run uvicorn backend.main:app --reload
 
@@ -164,64 +149,46 @@ up:
 # 提交 & 推送
 # ============================================================
 
-# 交互式提交代码（自动引导填写 Conventional Commits 格式）
-# 会提示选择类型（feat/fix/docs 等）、填写描述
+# 交互式提交代码（Conventional Commits 格式）
 cz:
     uv run cz commit
 
-# 推送当前分支到远程（已关联远程的分支）
+# 推送当前分支到远程
 push:
     git push
 
-# 首次推送新分支到远程（自动关联上下游）
-# 用法：just push-u feat/user-auth
-# 等价于：git push -u origin feat/user-auth
-push-u branch:
+# 首次推送新分支到远程：just pushu feat/user-auth
+pushu branch:
     git push -u origin {{ branch }}
 
 
 # ============================================================
-# 分支管理流水线
+# 分支管理
 # ============================================================
 
-# 从 develop 分支拉取最新代码，并创建新功能分支
-# 用法：just dev-branch feat/xxx
-# 等价于依次执行：
-#   git checkout develop
-#   git pull
-#   git checkout -b feat/xxx
-dev-branch branch:
+# 同步 develop 并创建新功能分支：just cob feat/xxx
+cob branch:
     git checkout develop
     git pull
     git checkout -b {{ branch }}
 
-# 删除已完成的分支，并开启新功能分支
-# 参数 1：要删除的旧分支名
-# 参数 2：要创建的新分支名
-# 用法：just del-branch feat/old-feat feat/new-feat
-# 等价于依次执行：
-#   git branch -d feat/old-feat
-#   git push origin --delete feat/old-feat
-#   git checkout develop && git pull
-#   git checkout -b feat/new-feat
-del-branch branch newbranch:
+# 删除本地+远程分支后同步 develop 并建新分支：just brdel feat/old feat/new
+brdel branch newbranch:
     git branch -d {{ branch }}
     git push origin --delete {{ branch }}
     git checkout develop
     git pull
     git checkout -b {{ newbranch }}
 
-# 基于当前 HEAD 创建新分支（不切换分支）
-# 用法：just new-branch feat/my-feature
-new-branch branch:
-    git checkout -b {{ branch }}
+# 基于当前 HEAD 创建新分支（不自动切换）：just brnew feat/xxx
+brnew branch:
+    git branch {{ branch }}
 
 
 # ============================================================
 # 依赖管理
 # ============================================================
 
-# 添加生产依赖
-# 用法：just add fastapi
+# 添加生产依赖：just add fastapi
 add pkg:
     uv add {{ pkg }}
