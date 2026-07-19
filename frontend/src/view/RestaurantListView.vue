@@ -216,6 +216,7 @@ const fetchShops = async (page: number = 1) => {
       page: String(page),
       page_size: String(pageSize.value),
       sort_by: filters.sort_by,
+      // location: "Chicago",
       source: 'db',
     })
 
