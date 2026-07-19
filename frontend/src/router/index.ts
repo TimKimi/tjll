@@ -7,6 +7,7 @@ import RegisterView from '../view/RegisterView.vue'
 import PersonalProfileView from '../view/PersonalProfileView.vue'
 import RestaurantView from '../view/RestaurantView.vue'
 import AdminView from '../view/AdminView.vue'
+import RestaurantListReview from '@/view/RestaurantListReview.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -73,6 +74,15 @@ const router = createRouter({
       meta: {
         title: '探店助手 - 餐厅信息',
         requiresAuth: true,  // 必须登录才能访问
+      }
+    },
+    {
+      path: '/restaurants',
+      name: 'reataurants',
+      component: RestaurantListReview,
+      meta: {
+        title: '发现餐厅',
+        requiresAuth: false,
       }
     },
     {

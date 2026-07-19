@@ -279,6 +279,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import { useToast } from '@/composables/useToast'
   import { handleApiError } from '@/utils/errorHandler'
+  import tzlookup from 'tz-lookup'
   
   const toast = useToast()
   const route = useRoute()
@@ -297,7 +298,7 @@
   }
   
   interface RestaurantData {
-    id: number
+    id: string
     name: string
     image: string
     images?: string[]
@@ -329,6 +330,7 @@
   const REVIEW_PAGE_SIZE = 10
   const reviewPage = ref(1)
   const isLoadingMore = ref(false)
+  const reviewTotal = ref(0)            // 新增：总评论数
   
   // 图片预览状态
   const showGalleryModal = ref(false)
@@ -397,97 +399,196 @@
   })
   
   // ============================================
-  // 【API 接口1】获取餐厅详情
+  // 【API 接口1】获取餐厅详情（使用 tz-lookup）
   // ============================================
-  // 接口地址: GET /api/restaurants/{id}
-  // 请求头: Authorization: Bearer {token}
-  // 响应: { code: 200, data: RestaurantData }
-  // ============================================
-  const loadRestaurantDetail = async (id: string) => {
-    isLoading.value = true
-    try {
-      // ========== 真实 API 调用（取消注释即可使用） ==========
-      // const response = await fetch(`/api/restaurants/${id}`, {
-      //   method: 'GET',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      //   }
-      // })
-      // if (!response.ok) throw new Error('获取餐厅详情失败')
-      // const result = await response.json()
-      // restaurantData.value = result.data
-      // ======================================================
-  
-
-    // ========== ✅ 测试错误提示（模拟加载失败） ==========
-    await new Promise(resolve => setTimeout(resolve, 800))
-    // 模拟随机失败（50%概率失败）
-    if (Math.random() > 0.5) {
-      throw new Error('网络连接失败，请检查网络后重试')
-    }
-    // 如果成功，使用模拟数据
-      restaurantData.value = {
-        id: Number(id),
-        name: '蜀九香火锅',
-        image: 'https://picsum.photos/seed/restaurant1/800/400',
-        images: [
-          'https://picsum.photos/seed/restaurant1/800/400',
-          'https://picsum.photos/seed/restaurant2/800/400',
-          'https://picsum.photos/seed/restaurant3/800/400'
-        ],
-        rating: 4.8,
-        reviewCount: 326,
-        price: 120,
-        address: '成都市锦江区春熙路88号',
-        hours: '10:00 - 22:00',
-        phone: '028-88888888',
-        category: '火锅',
-        isOpen: true,
-        reason: '口碑极佳，环境舒适，性价比高，是成都必吃的火锅之一',
-        summary: '"味道正宗，服务热情，排队也值得！"',
-        tags: ['🫕 正宗川味', '👨‍👩‍👧‍👦 适合聚餐', '🏠 环境优雅', '📸 适合拍照'],
-        lat: 30.6595,
-        lng: 104.0786,
-        reviews: [
-          { id: 1, userName: '美食达人小王', rating: 5, content: '味道太棒了！强烈推荐！', time: '2026-07-15' },
-          { id: 2, userName: '爱吃的小李', rating: 4, content: '环境很好，价格适中。', time: '2026-07-14' },
-          { id: 3, userName: '探店达人张张', rating: 5, content: '强烈推荐！锅底香而不腻！', time: '2026-07-13' },
-          { id: 4, userName: '火锅爱好者老李', rating: 5, content: '成都最好吃的火锅之一！', time: '2026-07-12' },
-          { id: 5, userName: '美食探店小刘', rating: 4, content: '味道不错，价格合理。', time: '2026-07-11' },
-          { id: 6, userName: '成都本地人老张', rating: 5, content: '从小吃到大的味道！', time: '2026-07-10' },
-          { id: 7, userName: '旅游达人小美', rating: 5, content: '来成都必吃的火锅！', time: '2026-07-09' },
-          { id: 8, userName: '美食博主阿杰', rating: 4, content: '整体不错，价格略贵。', time: '2026-07-08' },
-          { id: 9, userName: '学生党小杨', rating: 4, content: '好吃，但有点贵。', time: '2026-07-07' },
-          { id: 10, userName: '家庭聚餐代表', rating: 5, content: '很适合家庭聚餐！', time: '2026-07-06' },
-          { id: 11, userName: '火锅控小刘', rating: 5, content: '成都火锅的天花板！', time: '2026-07-05' },
-          { id: 12, userName: '美食评论家老王', rating: 4, content: '味道正宗，服务有待提升。', time: '2026-07-04' },
-          { id: 13, userName: '情侣约会指南', rating: 5, content: '氛围很好，适合情侣约会！', time: '2026-07-03' },
-          { id: 14, userName: '成都土著小赵', rating: 5, content: '吃了十年的老店！', time: '2026-07-02' },
-          { id: 15, userName: '美食探店小分队', rating: 4, content: '整体不错，排队太久。', time: '2026-07-01' },
-          { id: 16, userName: '吃货小胖', rating: 5, content: '好吃到哭！必点牛肉和毛肚！', time: '2026-06-30' },
-          { id: 17, userName: '美食达人小陈', rating: 4, content: '味道不错，价格略高。', time: '2026-06-29' },
-          { id: 18, userName: '旅游博主小刘', rating: 5, content: '来成都旅游必打卡！', time: '2026-06-28' },
-          { id: 19, userName: '本地吃货老李', rating: 5, content: '成都最好吃的火锅！', time: '2026-06-27' },
-          { id: 20, userName: '美食家小张', rating: 4, content: '味道正宗，价格偏贵。', time: '2026-06-26' }
-        ]
+const loadRestaurantDetail = async (id: string) => {
+  isLoading.value = true
+  try {
+    const response = await fetch(`http://localhost:8000/api/business/${id}/`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
-      // ======================================================
-  
-      reviewPage.value = 1
+    })
+
+    if (!response.ok) {
+      throw new Error(`请求失败 (HTTP ${response.status})`)
+    }
+
+    const result = await response.json()
+    if (result.code !== 0) {
+      throw new Error(result.message || '获取餐厅详情失败')
+    }
+
+    const data = result.data
+
+    // 1. 判断是否永久关闭
+    const isClosed = data.is_closed === true || data.is_closed === 'true'
+    let isOpen = false
+
+    // 2. 获取时区（优先使用后端返回的 timezone，否则用经纬度查询）
+    let timezone: string | undefined = data.timezone
+    if (!timezone && data.coordinates?.latitude && data.coordinates?.longitude) {
+      try {
+        timezone = tzlookup(data.coordinates.latitude, data.coordinates.longitude)
+      } catch (error) {
+        console.warn('时区查询失败，将使用本地时间', error)
+        timezone = undefined
+      }
+    }
+
+    // 3. 若未永久关闭且存在营业数据，判断当前是否营业
+    if (!isClosed && data.hours) {
+      isOpen = isOpenNow(data.hours, timezone)
+    }
+
+    // 4. 映射数据
+    const mappedData: RestaurantData = {
+      id: data.id,
+      name: data.name,
+      image: data.image_url || data.photos?.[0] || '',
+      images: data.photos || [],
+      rating: data.rating || 0,
+      reviewCount: data.review_count || 0,
+      price: typeof data.price === 'string' ? parseFloat(data.price) || 0 : (data.price || 0),
+      address: data.location?.display_address?.join(' ') || data.location?.address1 || '',
+      hours: data.hours ? formatHours(data.hours, timezone) : '暂未提供',
+      phone: data.display_phone || data.phone || '',
+      category: extractCategory(data.categories),
+      isOpen: isOpen,
+      reason: '',
+      summary: '',
+      tags: extractTags(data.categories, data.transactions),
+      lat: data.coordinates?.latitude,
+      lng: data.coordinates?.longitude,
+      reviews: (data as any).reviews || []
+    }
+
+    restaurantData.value = mappedData
+    reviewTotal.value = mappedData.reviewCount
+    reviewPage.value = 0
+
     checkFavorite()
+    restaurantData.value!.reviews = []
+    await loadMoreReviews()
+
   } catch (error) {
     console.error('加载餐厅详情失败:', error)
-    // 使用 Toast 显示错误
-    // toast.error('加载餐厅详情失败，请稍后重试')
-     // 方式2：使用 errorHandler（更专业）
     const toastOptions = handleApiError(error, '加载餐厅详情失败')
     toast.showToast(toastOptions)
   } finally {
     isLoading.value = false
   }
 }
-  
+
+// 从 categories 数组中提取第一个分类名称
+const extractCategory = (categories: any[]): string => {
+  if (!categories || categories.length === 0) return '未分类'
+  const first = categories[0]
+  return typeof first === 'string' ? first : (first.title || first.name || '')
+}
+
+// 生成标签（可从分类或交易类型中提取）
+const extractTags = (categories: any[], transactions: any[]): string[] => {
+  const tags: string[] = []
+  if (categories && categories.length) {
+    categories.forEach(cat => {
+      const title = cat.title || cat.name || ''
+      if (title) tags.push(title)
+    })
+  }
+  if (transactions && transactions.length) {
+    transactions.forEach(t => {
+      if (typeof t === 'string') tags.push(t)
+      else if (t.name) tags.push(t.name)
+    })
+  }
+  return tags.slice(0, 10) // 最多显示10个，可调整
+}
+
+// ============================================
+// 辅助函数：获取指定时区的当前星期和分钟数
+// ============================================
+const getLocalTimeInTimezone = (timezone?: string) => {
+  const now = new Date()
+  if (timezone) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+    const parts = formatter.formatToParts(now)
+    let year = 0, month = 0, day = 0, hour = 0, minute = 0
+    for (const p of parts) {
+      if (p.type === 'year') year = parseInt(p.value)
+      else if (p.type === 'month') month = parseInt(p.value)
+      else if (p.type === 'day') day = parseInt(p.value)
+      else if (p.type === 'hour') hour = parseInt(p.value)
+      else if (p.type === 'minute') minute = parseInt(p.value)
+    }
+    const localDate = new Date(year, month - 1, day)
+    const dayOfWeek = localDate.getDay()
+    return { dayOfWeek, minutes: hour * 60 + minute }
+  } else {
+    const localDate = new Date()
+    return {
+      dayOfWeek: localDate.getDay(),
+      minutes: localDate.getHours() * 60 + localDate.getMinutes()
+    }
+  }
+}
+
+// ============================================
+// 格式化营业时间（支持时区）
+// ============================================
+const formatHours = (hoursData: any, timezone?: string): string => {
+  if (!hoursData?.open || !Array.isArray(hoursData.open)) {
+    return '暂未提供'
+  }
+  const { dayOfWeek } = getLocalTimeInTimezone(timezone)
+  const match = hoursData.open.find((item: any) => {
+    const jsDay = (item.day + 1) % 7
+    return jsDay === dayOfWeek
+  })
+  if (match) {
+    const start = match.start.padStart(4, '0')
+    const end = match.end.padStart(4, '0')
+    return `${start.slice(0,2)}:${start.slice(2)} - ${end.slice(0,2)}:${end.slice(2)}`
+  }
+  return '今日休息'
+}
+
+// ============================================
+// 判断当前是否营业（基于当地时区）
+// ============================================
+const isOpenNow = (hoursData: any, timezone?: string): boolean => {
+  if (!hoursData?.open || !Array.isArray(hoursData.open)) {
+    return false
+  }
+  const { dayOfWeek, minutes } = getLocalTimeInTimezone(timezone)
+  const match = hoursData.open.find((item: any) => {
+    const jsDay = (item.day + 1) % 7
+    return jsDay === dayOfWeek
+  })
+  if (!match) return false
+
+  const startStr = match.start.padStart(4, '0')
+  const endStr = match.end.padStart(4, '0')
+  const start = parseInt(startStr.slice(0,2)) * 60 + parseInt(startStr.slice(2))
+  let end = parseInt(endStr.slice(0,2)) * 60 + parseInt(endStr.slice(2))
+  if (end < start) end += 24 * 60
+
+  if (start > end) {
+    return minutes >= start || minutes <= end
+  } else {
+    return minutes >= start && minutes <= end
+  }
+}
   // ============================================
   // 【API 接口2】收藏/取消收藏
   // ============================================
@@ -546,75 +647,110 @@
     isFavorited.value = favorites.includes(restaurantData.value.id)
   }
   
-  // ============================================
-  // 【API 接口3】加载更多评论
-  // ============================================
-  // 接口地址: GET /api/restaurants/{id}/reviews?page={page}&limit={limit}
-  // 请求头: Authorization: Bearer {token}
-  // 响应: { code: 200, data: { list: Review[], total: number, hasMore: boolean } }
-  // ============================================
-  const loadMoreReviews = async () => {
-    if (isLoadingMore.value || !hasMoreReviews.value) return
-    
-    isLoadingMore.value = true
-    
-    // ========== 真实 API 调用（取消注释即可使用） ==========
-    // try {
-    //   const nextPage = reviewPage.value + 1
-    //   const response = await fetch(
-    //     `/api/restaurants/${restaurantData.value?.id}/reviews?page=${nextPage}&limit=${REVIEW_PAGE_SIZE}`,
-    //     {
-    //       headers: {
-    //         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-    //       }
-    //     }
-    //   )
-    //   if (!response.ok) throw new Error('加载评论失败')
-    //   const result = await response.json()
-    //   const newReviews = result.data.list
-    //   restaurantData.value!.reviews = [...(restaurantData.value!.reviews || []), ...newReviews]
-    //   reviewPage.value = nextPage
-    // } catch (error) {
-    //   console.error('加载评论失败:', error)
-    //   alert('加载评论失败，请稍后重试')
-    // } finally {
-    //   isLoadingMore.value = false
-    // }
-    // ======================================================
-  
-    // ========== 本地模拟（开发测试用，接入 API 后删除） ==========
-    await new Promise(resolve => setTimeout(resolve, 600))
-    reviewPage.value++
-    isLoadingMore.value = false
-    // ======================================================
-  
+// ============================================
+// 【API 接口3】加载更多评论
+// 接口地址: POST /api/review/list/
+// 请求头: Authorization: Bearer {token}
+// 请求体: { business_id, page, page_size, sort_by, source }
+// 响应: { code: 0, data: { items: [], total: 0 } }
+// ============================================
+const loadMoreReviews = async () => {
+  if (isLoadingMore.value || !hasMoreReviews.value) return
+
+  const id = restaurantData.value?.id
+  if (!id) {
+    console.error('餐厅 ID 不存在，无法加载评论')
+    return
+  }
+
+  isLoadingMore.value = true
+
+  try {
+    const nextPage = reviewPage.value + 1
+
+    const params = new URLSearchParams({
+      business_id: id,
+      page: String(nextPage),
+      page_size: String(REVIEW_PAGE_SIZE)
+    })
+    const url = `http://localhost:8000/api/review/list?${params.toString()}`
+    console.log('请求 URL：', url)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      }
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text()
+      console.error('服务器错误详情：', errorBody)
+      throw new Error(`HTTP ${response.status}: ${errorBody}`)
+    }
+
+    const result = await response.json()
+    console.log('完整响应：', result)
+console.log('items 长度：', result.data?.items?.length)
+console.log('total：', result.data?.total)
+    if (result.code !== 0) {
+      throw new Error(result.message || '接口返回错误码')
+    }
+
+    const items = result.data?.items || []
+    const total = result.data?.total || 0
+    reviewTotal.value = total
+
+    const newReviews = items.map((item: any) => ({
+      id: item.id,
+      userName: item.user?.name || '匿名用户',
+      avatar: item.user?.image_url || item.user?.profile_url || '',
+      rating: item.rating || 0,
+      content: item.text || '',
+      time: item.time_created || ''
+    }))
+
+    restaurantData.value!.reviews = [
+      ...(restaurantData.value!.reviews || []),
+      ...newReviews
+    ]
+    reviewPage.value = nextPage
+
     await nextTick()
     const reviewItems = document.querySelectorAll('.review-item')
     if (reviewItems.length > 0) {
       const lastItem = reviewItems[reviewItems.length - 1]
       lastItem?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
+
+  } catch (error) {
+    console.error('加载评论失败：', error)
+    const toastOptions = handleApiError(error, '加载评论失败')
+    toast.showToast(toastOptions)
+  } finally {
+    isLoadingMore.value = false
   }
-  
+}
   // ============================================
   // 评论分页计算属性
   // ============================================
-  const displayedReviews = computed(() => {
-    if (!restaurantData.value?.reviews) return []
-    const reviews = restaurantData.value.reviews
-    const end = reviewPage.value * REVIEW_PAGE_SIZE
-    return reviews.slice(0, end)
-  })
-  
-  const hasMoreReviews = computed(() => {
-    if (!restaurantData.value?.reviews) return false
-    return restaurantData.value.reviews.length > displayedReviews.value.length
-  })
-  
-  const remainingReviewsCount = computed(() => {
-    if (!restaurantData.value?.reviews) return 0
-    return restaurantData.value.reviews.length - displayedReviews.value.length
-  })
+// 已显示评论数量
+const displayedReviews = computed(() => {
+  if (!restaurantData.value?.reviews) return []
+  return restaurantData.value.reviews
+})
+
+// 是否有更多评论（依据接口返回的 total 和 hasMore）
+const hasMoreReviews = computed(() => {
+  if (!restaurantData.value?.reviews) return false
+  return restaurantData.value.reviews.length < reviewTotal.value
+})
+
+// 剩余评论数
+const remainingReviewsCount = computed(() => {
+  if (!restaurantData.value?.reviews) return 0
+  return Math.max(0, reviewTotal.value - restaurantData.value.reviews.length)
+})
   
   // ============================================
   // 图片预览功能
