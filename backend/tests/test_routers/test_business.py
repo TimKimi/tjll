@@ -38,7 +38,7 @@ class TestBusinessRoutes:
             )
         )
 
-        response = client.get(
+        response = client.post(
             "/api/business/list",
             params={
                 "keyword": "餐厅",
@@ -69,7 +69,7 @@ class TestBusinessRoutes:
                 items=[], total=0, page=1, page_size=10, total_pages=0
             )
         )
-        response = client.get("/api/business/list")
+        response = client.post("/api/business/list")
         assert response.status_code == 200
         call_args = mock_service.list_businesses.call_args[0][0]
         assert call_args.page == 1
@@ -86,7 +86,7 @@ class TestBusinessRoutes:
                 items=[], total=0, page=1, page_size=10, total_pages=0
             )
         )
-        response = client.get(
+        response = client.post(
             "/api/business/list",
             params={
                 "keyword": "pizza",
@@ -114,7 +114,7 @@ class TestBusinessRoutes:
                 review_count=5,
             )
         )
-        response = client.get("/api/business/b1")
+        response = client.post("/api/business/b1")
         assert response.status_code == 200
         data = response.json()
         assert data["code"] == 0
@@ -125,7 +125,7 @@ class TestBusinessRoutes:
     def test_business_detail_not_found(self, mock_service_class, client):
         mock_service = mock_service_class.return_value
         mock_service.get_by_id = AsyncMock(return_value=None)
-        response = client.get("/api/business/not_exist")
+        response = client.post("/api/business/not_exist")
         assert response.status_code == 404
         assert response.json()["detail"] == "店铺不存在"
         mock_service.get_by_id.assert_called_once_with("not_exist")
