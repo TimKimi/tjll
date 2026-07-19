@@ -2,35 +2,29 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
+from backend.config import settings
 from backend.rag.document.embed import embed_query
 from backend.rag.opensearch.client import get_opensearch_client
 from backend.rag.opensearch.schema import ensure_search_pipeline
-from backend.config import settings
 
-_SOURCE_FIELDS = [
-    "chunk_id",
-    "document_id",
-    "source_file",
-    "chunk_index",
-    "text",
-    "polarity",
-    "is_last_chunk",
-    "id",
-    "name",
-    "alias",
-]
+logger = logging.getLogger("backend.rag.retrieve.search")
+
+# 拉取索引全部字段，仅排除 embedding（向量体积大且前端不需要）
+_SOURCE_EXCLUDES = {"excludes": ["embedding"]}
 
 
 def _format_hits(resp: dict) -> list[dict]:
     hits: list[dict] = []
     for hit in resp["hits"]["hits"]:
         item = dict(hit["_source"])
+        item.pop("embedding", None)
         item["_score"] = hit["_score"]
         hits.append(item)
     return hits
@@ -55,7 +49,7 @@ def vector_search(
                 }
             }
         },
-        "_source": _SOURCE_FIELDS,
+        "_source": _SOURCE_EXCLUDES,
     }
     resp = client.search(index=index_name, body=body)
     return _format_hits(resp)
@@ -72,7 +66,7 @@ def bm25_search(
     body = {
         "size": k,
         "query": {"match": {"text": {"query": query}}},
-        "_source": _SOURCE_FIELDS,
+        "_source": _SOURCE_EXCLUDES,
     }
     resp = client.search(index=index_name, body=body)
     return _format_hits(resp)
@@ -110,15 +104,28 @@ def hybrid_search(
                 ]
             }
         },
-        "_source": _SOURCE_FIELDS,
+        "_source": _SOURCE_EXCLUDES,
     }
     # search_pipeline 走查询参数，配合 normalization-processor
-    resp = client.search(
-        index=index_name,
-        body=body,
-        params={"search_pipeline": pipeline},
+    logger.info(
+        "hybrid_search index=%s k=%d pipeline=%s query_len=%d",
+        index_name,
+        k,
+        pipeline,
+        len(query),
     )
-    return _format_hits(resp)
+    try:
+        resp = client.search(
+            index=index_name,
+            body=body,
+            params={"search_pipeline": pipeline},
+        )
+        hits = _format_hits(resp)
+        logger.info("hybrid_search ok hits=%d", len(hits))
+        return hits
+    except Exception:
+        logger.exception("hybrid_search failed index=%s", index_name)
+        raise
 
 
 class OpenSearchRetriever(BaseRetriever):
@@ -139,19 +146,7 @@ class OpenSearchRetriever(BaseRetriever):
         else:
             hits = hybrid_search(query, k=self.k, index_name=self.index_name)
 
-        return [
-            Document(
-                page_content=h["text"],
-                metadata={
-                    "chunk_id": h["chunk_id"],
-                    "document_id": h["document_id"],
-                    "source_file": h["source_file"],
-                    "chunk_index": h["chunk_index"],
-                    "score": h["_score"],
-                },
-            )
-            for h in hits
-        ]
+        return hits_to_documents(hits)
 
 
 def get_retriever(
@@ -167,17 +162,16 @@ def get_retriever(
 
 
 def hits_to_documents(hits: list[dict]) -> list[Document]:
+    """text → page_content；其余索引字段（除 embedding）全部进 metadata。"""
     docs: list[Document] = []
     for h in hits:
-        meta: dict = {
-            "chunk_id": h.get("chunk_id"),
-            "document_id": h.get("document_id"),
-            "source_file": h.get("source_file"),
-            "chunk_index": h.get("chunk_index"),
-            "score": h.get("_score"),
-        }
-        for key in ("polarity", "id", "name", "alias", "is_last_chunk"):
-            if key in h and h.get(key) is not None:
-                meta[key] = h.get(key)
-        docs.append(Document(page_content=h["text"], metadata=meta))
+        text = str(h.get("text") or "")
+        meta: dict = {}
+        for key, value in h.items():
+            if key in ("text", "embedding", "_score"):
+                continue
+            meta[key] = value
+        if "_score" in h:
+            meta["score"] = h["_score"]
+        docs.append(Document(page_content=text, metadata=meta))
     return docs

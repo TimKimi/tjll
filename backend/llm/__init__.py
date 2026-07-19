@@ -7,7 +7,7 @@
 不要直接依赖 ``backend.rag``。
 """
 
-from backend.llm.api import AskRequest, AskResponse, RagSnippet, ask
+from backend.llm.api import AskRequest, AskResponse, HistoryMessage, RagSnippet, ask
 from backend.llm.client.llm import (
     get_llm,
     get_llm_with_tools,
@@ -29,6 +29,7 @@ __all__ = [
     # 推荐：协作方门面
     "AskRequest",
     "AskResponse",
+    "HistoryMessage",
     "RagSnippet",
     "ask",
     # 进阶 / 内部

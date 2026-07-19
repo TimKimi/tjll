@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -15,6 +16,8 @@ from backend.rag.document.embed import embed_chunks
 from backend.rag.document.loaders import load_document_as_text
 from backend.rag.opensearch.client import get_opensearch_client
 from backend.rag.opensearch.schema import ensure_index
+
+logger = logging.getLogger("backend.rag.document.indexing")
 
 Polarity = Literal["positive", "negative"]
 
@@ -188,6 +191,12 @@ def index_business_summaries_to_opensearch(
 
     business = normalize_business_fields(raw)
     business_id = str(business["id"])
+    logger.info(
+        "index business_id=%s name=%s index=%s",
+        business_id,
+        business.get("name"),
+        index_name or settings.opensearch_index,
+    )
 
     pos_docs = _chunks_for_polarity(raw, business, "positive", "positive_summary")
     neg_docs = _chunks_for_polarity(raw, business, "negative", "negative_summary")

@@ -25,7 +25,8 @@ resp: AskResponse = ask(
 )
 
 print(resp.answer)       # LLM 回复
-print(resp.sources)      # 本轮用到的 RAG 片段
+print(resp.sources)      # 本轮用到的 RAG 片段（无 embedding）
+print(resp.history)      # 本轮写入前已有的会话历史
 print(resp.query, resp.section_id, resp.uuid)
 
 # 方式二：结构化对象
@@ -51,9 +52,12 @@ payload = resp.model_dump()
 | `section_id` | 会话 ID |
 | `uuid` | 入参回传（未传则为 `null`） |
 | `answer` | LLM 回复文本 |
-| `sources` | `[{ "content": str, "metadata": dict }, ...]` |
+| `sources` | `[{ "content": str, "metadata": dict }, ...]`：片段正文 + 索引全字段（**不含** `embedding`） |
+| `history` | `[{ "role": "user"\|"assistant"\|"system", "content": str }, ...]`：本轮写入前 Redis 中已有的消息 |
 
-`metadata` 常见键（Yelp 入库后）：`chunk_id`、`document_id`、`chunk_index`、`score`、`rerank_score`、`polarity`、`id`、`name`、`alias`、`is_last_chunk` 等。
+`sources[].metadata` 透传 OpenSearch `_source` 除 `embedding` / `text` 外的字段，并附带 `score`、`rerank_score` 等。常见键（Yelp）：`chunk_id`、`document_id`、`chunk_index`、`polarity`、`id`、`name`、`alias`、`is_last_chunk` 等。PDF 遗留数据可能仍有 `source_file`，Yelp chunk 通常没有。
+
+`history` **不含**本轮的 `query` / `answer`（二者已在响应顶层）；首次提问时 `history` 为空列表。
 
 ### 本阶段唯一处理路径
 
@@ -178,7 +182,22 @@ python -m backend.rag.scripts.index_cleaned_yelp --mode backfill
 
 ---
 
-## 5. 自检清单
+## 5. 日志
+
+`ask` / 检索 / 入库脚本会把日志写到 `backend/docs/`（可由 `.env` 的 `LOG_DIR` / `LOG_LEVEL` 调整；**只写文件，不打控制台**）：
+
+| 文件 | Logger |
+|------|----------|
+| `backend/docs/llm.log` | `backend.llm.*` |
+| `backend/docs/rag.log` | `backend.rag.*` |
+
+每轮 `ask` 在 `llm.log` 中会记录：写入前历史全文、query 改造前后、精排后完整 chunk（`content` + metadata，无 embedding）、AI 回复全文。
+
+`*.log` 已在 `.gitignore` 中，不会进 git。
+
+---
+
+## 6. 自检清单
 
 - [ ] `from backend.llm import ask` 可导入
 - [ ] Redis / OpenSearch / LLM 可达

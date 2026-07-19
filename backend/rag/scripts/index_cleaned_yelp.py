@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Literal
 
 from backend.config import settings
+from backend.logging_setup import setup_app_logging
 from backend.rag.document.index_progress import (
     both_sides_fully_indexed,
     clear_indexed,
@@ -33,11 +34,7 @@ from backend.rag.document.index_progress import (
 from backend.rag.document.indexing import index_business_summaries_to_opensearch
 from backend.rag.opensearch.schema import ensure_index
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("backend.rag.scripts.index_cleaned_yelp")
 
 Mode = Literal["backfill", "rewrite"]
 
@@ -192,11 +189,15 @@ def main(argv: list[str] | None = None) -> int:
         help="最多处理的 JSON 文件数（调试用）",
     )
     args = parser.parse_args(argv)
+    setup_app_logging()
     try:
         return run_index(args)
     except FileNotFoundError as exc:
         logger.error("%s", exc)
         return 2
+    except Exception:
+        logger.exception("index_cleaned_yelp failed")
+        raise
 
 
 if __name__ == "__main__":

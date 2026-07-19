@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from backend.llm.api.schemas import AskRequest, AskResponse
+from backend.llm.api.schemas import AskRequest, AskResponse, HistoryMessage
 from backend.llm.pipeline.rag_pipeline import RagAnswer
 
 
@@ -22,8 +22,17 @@ def test_ask_from_dict_maps_fields(monkeypatch):
             sources=[
                 {
                     "content": "服务很好",
-                    "metadata": {"name": "Acme", "polarity": "positive"},
+                    "metadata": {
+                        "name": "Acme",
+                        "polarity": "positive",
+                        "chunk_id": "b_pos_0000",
+                        "score": 1.2,
+                    },
                 }
+            ],
+            history=[
+                {"role": "user", "content": "上次问过"},
+                {"role": "assistant", "content": "上次答过"},
             ],
         )
 
@@ -48,6 +57,10 @@ def test_ask_from_dict_maps_fields(monkeypatch):
     assert len(resp.sources) == 1
     assert resp.sources[0].content == "服务很好"
     assert resp.sources[0].metadata["polarity"] == "positive"
+    assert resp.sources[0].metadata["chunk_id"] == "b_pos_0000"
+    assert len(resp.history) == 2
+    assert resp.history[0] == HistoryMessage(role="user", content="上次问过")
+    assert resp.history[1].role == "assistant"
 
 
 def test_ask_from_model(monkeypatch):
@@ -56,7 +69,13 @@ def test_ask_from_model(monkeypatch):
     monkeypatch.setattr(
         handler_mod,
         "answer_query_with_sources",
-        lambda q, s: RagAnswer(answer="ok", query=q, section_id=s, sources=[]),
+        lambda q, s: RagAnswer(
+            answer="ok",
+            query=q,
+            section_id=s,
+            sources=[],
+            history=[],
+        ),
     )
     from backend.llm.api import ask
 
@@ -64,6 +83,7 @@ def test_ask_from_model(monkeypatch):
     assert resp.answer == "ok"
     assert resp.uuid is None
     assert resp.sources == []
+    assert resp.history == []
 
 
 def test_ask_requires_query_and_section_id():

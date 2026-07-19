@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -10,6 +11,8 @@ from langchain_core.output_parsers import StrOutputParser
 from backend.config import settings
 from backend.llm.client.llm import get_llm
 from backend.llm.prompts.rephrase import REPHRASE_PROMPT
+
+logger = logging.getLogger("backend.llm.rephrase.rewrite")
 
 
 def has_history(history: Sequence[BaseMessage] | None) -> bool:
@@ -28,9 +31,12 @@ def build_rephrase_chain():
 def rewrite_query(query: str, history: Sequence[BaseMessage] | None) -> str:
     """首轮跳过重述；有历史时结合上下文改写检索 query。"""
     if not has_history(history):
+        logger.info("rewrite skipped (no history) query=%r", query)
         return query
     rephrase = build_rephrase_chain()
     rewritten = rephrase.invoke(
         {"query": query, "history": list(history or [])}
     ).strip()
-    return rewritten or query
+    out = rewritten or query
+    logger.info("rewrite before=%r after=%r", query, out)
+    return out
