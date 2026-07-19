@@ -234,6 +234,7 @@ const fetchShops = async (page: number = 1) => {
     }
 
     const response = await fetch(`http://localhost:8000/api/business/list?${params.toString()}`, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
