@@ -1,5 +1,6 @@
 """应用配置：Yelp/DB + RAG；密钥读仓库根目录 `.env`。"""
 
+from datetime import timedelta
 from pathlib import Path
 
 from pydantic import Field
@@ -93,6 +94,12 @@ class Settings(BaseSettings):
     hybrid_bm25_weight: float = 0.3
     hybrid_vector_weight: float = 0.7
 
+    # ---- JWT / Auth ----
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24  # 24 小时
+    JWT_REFRESH_EXPIRE_DAYS: int = 7
+
     # ---- Redis（对话历史，需 redis-stack）----
     redis_host: str = "localhost"
     redis_port: int = 6379
@@ -103,6 +110,10 @@ class Settings(BaseSettings):
     # ---- 日志（相对 backend/；暂定 docs/）----
     log_dir: str = "docs"
     log_level: str = "INFO"
+
+    @property
+    def jwt_expire_delta(self) -> timedelta:
+        return timedelta(minutes=self.JWT_EXPIRE_MINUTES)
 
     @property
     def yelp_dataset_dir(self) -> Path:
