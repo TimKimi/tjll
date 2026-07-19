@@ -63,6 +63,21 @@ class TestHelpers:
         schema = _model_to_schema(review)
         assert schema.user is None
 
+    # 新增：测试 user JSON 缺少 name 字段的情况
+    def test_model_to_schema_with_user_missing_name(self):
+        review = MagicMock(spec=Review)
+        review.id = "r3"
+        review.business_id = "b3"
+        review.text = "缺失名字"
+        review.rating = 4
+        review.time_created = "2025-01-03"
+        review.user = '{"id": "u3"}'  # 缺少 name
+        review.url = ""
+        schema = _model_to_schema(review)
+        assert schema.user is not None
+        assert schema.user.id == "u3"
+        assert schema.user.name == ""  # 默认值
+
 
 # ---------- Fixtures ----------
 @pytest.fixture
@@ -191,6 +206,24 @@ class TestReviewService:
                 await service.list_by_business(business_id="not_exist", source="yelp")
             assert exc_info.value.status_code == 404
             assert "商家不存在" in exc_info.value.detail
+
+    # 新增：测试 Yelp 响应不包含 total 字段时的后备逻辑
+    @pytest.mark.asyncio
+    async def test_search_via_yelp_without_total(self, mock_db, mock_yelp_review):
+        """测试 Yelp 响应不包含 total 字段时的处理"""
+        mock_yelp_response = MagicMock()
+        mock_yelp_response.reviews = [mock_yelp_review]
+        # 不设置 total 属性，或者设置 total=0 也测试
+        with patch("backend.services.review.YelpService") as MockYelpService:
+            mock_yelp_instance = MockYelpService.return_value
+            mock_yelp_instance.get_reviews = AsyncMock(return_value=mock_yelp_response)
+            service = ReviewService(mock_db)
+            result = await service.list_by_business(
+                business_id="biz_123", page=1, page_size=10, source="yelp"
+            )
+            # 应使用 len(items) 作为 total
+            assert result.total == 1
+            assert len(result.items) == 1
 
     @pytest.mark.asyncio
     async def test_list_by_business_rating_high(self, mock_db, sample_review):
@@ -341,6 +374,60 @@ class TestReviewRoutes:
         assert response.status_code == 200
         mock_service.list_by_business.assert_called_once_with(
             business_id="b1", page=1, page_size=5, sort_by="time", source="yelp"
+        )
+
+    @patch("backend.routers.review.ReviewService")
+    def test_list_reviews_with_sort_rating_high(self, mock_service_class, client):
+        """测试 sort_by='rating_high' 的传递"""
+        mock_service = mock_service_class.return_value
+        mock_service.list_by_business = AsyncMock(
+            return_value=PaginatedData(
+                items=[], total=0, page=1, page_size=10, total_pages=0
+            )
+        )
+        response = client.post(
+            "/api/review/list",
+            params={"business_id": "b1", "sort_by": "rating_high", "source": "db"},
+        )
+        assert response.status_code == 200
+        mock_service.list_by_business.assert_called_once_with(
+            business_id="b1", page=1, page_size=10, sort_by="rating_high", source="db"
+        )
+
+    @patch("backend.routers.review.ReviewService")
+    def test_list_reviews_with_sort_rating_low(self, mock_service_class, client):
+        """测试 sort_by='rating_low' 的传递"""
+        mock_service = mock_service_class.return_value
+        mock_service.list_by_business = AsyncMock(
+            return_value=PaginatedData(
+                items=[], total=0, page=1, page_size=10, total_pages=0
+            )
+        )
+        response = client.post(
+            "/api/review/list",
+            params={"business_id": "b1", "sort_by": "rating_low", "source": "db"},
+        )
+        assert response.status_code == 200
+        mock_service.list_by_business.assert_called_once_with(
+            business_id="b1", page=1, page_size=10, sort_by="rating_low", source="db"
+        )
+
+    @patch("backend.routers.review.ReviewService")
+    def test_list_reviews_with_page_size_boundary(self, mock_service_class, client):
+        """测试 page_size 最大值 50 正常传递"""
+        mock_service = mock_service_class.return_value
+        mock_service.list_by_business = AsyncMock(
+            return_value=PaginatedData(
+                items=[], total=0, page=1, page_size=50, total_pages=0
+            )
+        )
+        response = client.post(
+            "/api/review/list",
+            params={"business_id": "b1", "page_size": 50},
+        )
+        assert response.status_code == 200
+        mock_service.list_by_business.assert_called_once_with(
+            business_id="b1", page=1, page_size=50, sort_by="time", source="db"
         )
 
     @patch("backend.routers.review.ReviewService")

@@ -27,7 +27,13 @@ def _parse_json_field(value: str | None) -> dict | None:
 def _model_to_schema(review: Review) -> ReviewBase:
     """ORM 模型转响应 Schema。"""
     user_raw = _parse_json_field(review.user)
-    user = ReviewUser(**user_raw) if user_raw else None
+    user = None
+    if user_raw:
+        # 确保必填字段存在，缺失则用默认值
+        user_raw.setdefault("name", "")
+        user_raw.setdefault("profile_url", "")
+        # id 如果缺失也可以用空字符串
+        user = ReviewUser(**user_raw)
 
     return ReviewBase(
         id=review.id,
@@ -53,7 +59,7 @@ class ReviewService:
         page: int = 1,
         page_size: int = 10,
         sort_by: str = "time",
-        source: str = "db",  # ✅ 已添加 source 参数
+        source: str = "db",
     ) -> PaginatedData[ReviewBase]:
         """获取某店铺的评论列表，根据 source 选择数据源。"""
         if source == "yelp":
