@@ -5,11 +5,17 @@ from __future__ import annotations
 import json
 from argparse import Namespace
 from pathlib import Path
+from typing import Any
+
+# 用 Any 承接模块，避免本地空 .pyi / 陈旧 mypy 缓存导致 attr-defined
+import backend.rag.scripts.index_cleaned_yelp as _index_cleaned_yelp
 
 from backend.rag.document.index_progress import (
     INDEX_PROGRESS_FILENAME,
     load_indexed_ids,
 )
+
+script: Any = _index_cleaned_yelp
 
 
 def _write_biz(cleaned: Path, bid: str, *, pos: str = "good", neg: str = "bad") -> None:
@@ -27,8 +33,6 @@ def _write_biz(cleaned: Path, bid: str, *, pos: str = "good", neg: str = "bad") 
 
 
 def test_run_index_missing_dir(tmp_path: Path):
-    from backend.rag.scripts import index_cleaned_yelp as script
-
     args = Namespace(
         input_dir=str(tmp_path / "missing"),
         index="yelp_biz_v1",
@@ -44,8 +48,6 @@ def test_run_index_missing_dir(tmp_path: Path):
 
 
 def test_backfill_skips_already_and_marks_complete(monkeypatch, tmp_path: Path):
-    from backend.rag.scripts import index_cleaned_yelp as script
-
     cleaned = tmp_path / "cleaned"
     cleaned.mkdir()
     _write_biz(cleaned, "b1")
@@ -100,8 +102,6 @@ def test_backfill_skips_already_and_marks_complete(monkeypatch, tmp_path: Path):
 
 
 def test_backfill_does_not_mark_incomplete(monkeypatch, tmp_path: Path):
-    from backend.rag.scripts import index_cleaned_yelp as script
-
     cleaned = tmp_path / "cleaned"
     cleaned.mkdir()
     _write_biz(cleaned, "only_pos", neg="")
@@ -133,8 +133,6 @@ def test_backfill_does_not_mark_incomplete(monkeypatch, tmp_path: Path):
 
 
 def test_rewrite_clears_progress_and_reindexes_all(monkeypatch, tmp_path: Path):
-    from backend.rag.scripts import index_cleaned_yelp as script
-
     cleaned = tmp_path / "cleaned"
     cleaned.mkdir()
     _write_biz(cleaned, "b1")
@@ -182,8 +180,6 @@ def test_rewrite_clears_progress_and_reindexes_all(monkeypatch, tmp_path: Path):
 
 
 def test_main_rewrite_recreate_and_limit(monkeypatch, tmp_path: Path):
-    from backend.rag.scripts import index_cleaned_yelp as script
-
     cleaned = tmp_path / "cleaned"
     cleaned.mkdir()
     for i in range(3):
@@ -228,8 +224,6 @@ def test_main_rewrite_recreate_and_limit(monkeypatch, tmp_path: Path):
 
 
 def test_run_index_returns_1_on_bulk_errors(monkeypatch, tmp_path: Path):
-    from backend.rag.scripts import index_cleaned_yelp as script
-
     cleaned = tmp_path / "cleaned"
     cleaned.mkdir()
     _write_biz(cleaned, "b1")
