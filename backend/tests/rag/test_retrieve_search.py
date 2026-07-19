@@ -17,6 +17,7 @@ def _fake_hits_resp():
                         "source_file": "a.pdf",
                         "chunk_index": 0,
                         "text": "内容A",
+                        "embedding": [0.1, 0.2, 0.3],
                     },
                 }
             ]
@@ -30,12 +31,16 @@ def test_format_hits_and_hits_to_documents():
     hits = search_mod._format_hits(_fake_hits_resp())
     assert hits[0]["_score"] == 1.5
     assert hits[0]["text"] == "内容A"
+    assert "embedding" not in hits[0]
 
     docs = search_mod.hits_to_documents(hits)
     assert isinstance(docs[0], Document)
     assert docs[0].page_content == "内容A"
     assert docs[0].metadata["chunk_id"] == "c1"
+    assert docs[0].metadata["source_file"] == "a.pdf"
     assert docs[0].metadata["score"] == 1.5
+    assert "embedding" not in docs[0].metadata
+    assert "text" not in docs[0].metadata
 
 
 def test_hits_to_documents_includes_yelp_meta():
@@ -63,13 +68,40 @@ def test_hits_to_documents_includes_yelp_meta():
     assert meta["alias"] == "biz"
     assert meta["id"] == "b"
     assert meta["is_last_chunk"] is True
+    assert "source_file" not in meta
+    assert "embedding" not in meta
 
 
-def test_source_fields_include_yelp_meta():
-    from backend.rag.retrieve.search import _SOURCE_FIELDS
+def test_retriever_tolerates_missing_source_file(monkeypatch):
+    """Yelp chunk 无 source_file，Retriever 不得 KeyError。"""
+    import backend.rag.retrieve.search as search_mod
 
-    for key in ("polarity", "is_last_chunk", "id", "name", "alias"):
-        assert key in _SOURCE_FIELDS
+    monkeypatch.setattr(
+        search_mod,
+        "hybrid_search",
+        lambda query, k=None, index_name=None, pipeline_name=None: [
+            {
+                "text": "好吃",
+                "chunk_id": "b_pos_0000",
+                "document_id": "b",
+                "chunk_index": 0,
+                "_score": 1.2,
+                "polarity": "positive",
+                "name": "Acme",
+            }
+        ],
+    )
+    r = search_mod.OpenSearchRetriever(mode="hybrid", k=1)
+    docs = r.invoke("q")
+    assert docs[0].page_content == "好吃"
+    assert "source_file" not in docs[0].metadata
+    assert docs[0].metadata["name"] == "Acme"
+
+
+def test_source_excludes_embedding_only():
+    from backend.rag.retrieve.search import _SOURCE_EXCLUDES
+
+    assert _SOURCE_EXCLUDES == {"excludes": ["embedding"]}
 
 
 def test_vector_bm25_hybrid_search(monkeypatch):
@@ -93,17 +125,20 @@ def test_vector_bm25_hybrid_search(monkeypatch):
 
     v = search_mod.vector_search("q")
     assert v[0]["text"] == "内容A"
+    assert "embedding" not in v[0]
     assert "knn" in client.last["body"]["query"]
-    assert "polarity" in client.last["body"]["_source"]
-    assert "name" in client.last["body"]["_source"]
+    assert client.last["body"]["_source"] == {"excludes": ["embedding"]}
+
     b = search_mod.bm25_search("q", k=2)
     assert b[0]["chunk_id"] == "c1"
     assert client.last["body"]["query"]["match"]["text"]["query"] == "q"
+    assert client.last["body"]["_source"] == {"excludes": ["embedding"]}
 
     h = search_mod.hybrid_search("q")
     assert h[0]["document_id"] == "d1"
     assert client.last["params"]["search_pipeline"] == "pipe"
     assert "hybrid" in client.last["body"]["query"]
+    assert client.last["body"]["_source"] == {"excludes": ["embedding"]}
 
 
 def test_get_retriever_and_modes(monkeypatch):

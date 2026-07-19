@@ -56,12 +56,17 @@ def test_stream_answer_query(monkeypatch):
 
 def test_answer_query_with_sources(monkeypatch):
     import backend.llm.pipeline.rag_pipeline as pipe
+    from langchain_core.messages import AIMessage, HumanMessage
 
     hist = _FakeHistory()
+    hist.messages = [
+        HumanMessage(content="上一问"),
+        AIMessage(content="上一答"),
+    ]
     docs = [
         Document(
             page_content="片段内容",
-            metadata={"source_file": "x.pdf", "chunk_index": 0},
+            metadata={"name": "Acme", "polarity": "positive", "chunk_index": 0},
         )
     ]
 
@@ -75,6 +80,10 @@ def test_answer_query_with_sources(monkeypatch):
     assert result.query == "问题"
     assert result.section_id == "sec-9"
     assert result.sources[0]["content"] == "片段内容"
-    assert result.sources[0]["metadata"]["source_file"] == "x.pdf"
+    assert result.sources[0]["metadata"]["name"] == "Acme"
+    assert result.history == [
+        {"role": "user", "content": "上一问"},
+        {"role": "assistant", "content": "上一答"},
+    ]
     assert hist.user == ["问题"]
     assert hist.ai == ["带来源的回答"]

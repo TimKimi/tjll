@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+import json
+import logging
+from typing import Any
+
 from langchain_core.documents import Document
 
+from backend.config import settings
 from backend.llm.rephrase.rewrite import rewrite_query
 from backend.rag.retrieve import get_retriever, rerank_docs
-from backend.config import settings
+
+logger = logging.getLogger("backend.llm.pipeline.context")
+
+
+def _meta_without_embedding(meta: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in meta.items() if k != "embedding"}
+
+
+def _docs_payload(docs: list[Document]) -> list[dict[str, Any]]:
+    """日志用：完整 chunk 正文 + 元字段（不含 embedding）。"""
+    return [
+        {
+            "content": doc.page_content,
+            "metadata": _meta_without_embedding(dict(doc.metadata)),
+        }
+        for doc in docs
+    ]
 
 
 def format_docs(docs: list[Document]) -> str:
@@ -22,13 +43,8 @@ def format_docs(docs: list[Document]) -> str:
 
 def retrieve_rerank_context(inputs: dict) -> str:
     """检索 + rerank：使用改写后的 query；生成仍用原 query。"""
-    query = inputs["query"]
-    history = inputs.get("history") or []
-    search_query = rewrite_query(query, history)
-
-    retriever = get_retriever(mode="hybrid", k=settings.retrieval_top_k)
-    docs = retriever.invoke(search_query)
-    return format_docs(rerank_docs(search_query, docs, top_n=settings.rerank_top_n))
+    docs = retrieve_rerank_docs(inputs)
+    return format_docs(docs)
 
 
 def retrieve_rerank_docs(inputs: dict) -> list[Document]:
@@ -36,7 +52,18 @@ def retrieve_rerank_docs(inputs: dict) -> list[Document]:
     query = inputs["query"]
     history = inputs.get("history") or []
     search_query = rewrite_query(query, history)
+    logger.info(
+        "retrieve query_before=%r query_after=%r history_msgs=%d",
+        query,
+        search_query,
+        len(history),
+    )
 
     retriever = get_retriever(mode="hybrid", k=settings.retrieval_top_k)
     docs = retriever.invoke(search_query)
-    return rerank_docs(search_query, docs, top_n=settings.rerank_top_n)
+    ranked = rerank_docs(search_query, docs, top_n=settings.rerank_top_n)
+    logger.info(
+        "retrieve_rerank chunks=%s",
+        json.dumps(_docs_payload(ranked), ensure_ascii=False, default=str),
+    )
+    return ranked

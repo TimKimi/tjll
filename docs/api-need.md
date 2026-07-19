@@ -131,7 +131,7 @@ POST /api/auth/register
 |----------|--------|------|------------------------|
 | username | string | ✅   | 用户名，2-16 位         |
 | password | string | ✅   | 密码，至少 8 位         |
-| phone    | string | ❌   | 手机号                  |
+| email    | string | ❌   | 邮箱                    |
 
 **成功响应** `201`:
 
@@ -142,7 +142,6 @@ POST /api/auth/register
   "data": {
     "id": "u_abc123",
     "username": "张三",
-    "phone": "13800138000",
     "avatar": "",
     "register_time": "2026-07-19T14:30:00"
   }
@@ -171,7 +170,7 @@ POST /api/auth/login
 
 | 字段     | 类型    | 必填 | 说明           |
 |----------|---------|------|---------------|
-| username | string  | ✅   | 用户名或手机号 |
+| username | string  | ✅   | 用户名           |
 | password | string  | ✅   | 密码           |
 | remember | boolean | ❌   | 是否记住我     |
 
@@ -188,7 +187,6 @@ POST /api/auth/login
       "username": "张三",
       "avatar": "",
       "is_online": true,
-      "phone": "13800138000",
       "email": "",
       "bio": "",
       "register_time": "2026-07-19T14:30:00",
@@ -230,7 +228,6 @@ POST /api/auth/admin/login
       "username": "管理员",
       "avatar": "https://example.com/admin_avatar.jpg",
       "is_online": true,
-      "phone": "",
       "email": "admin@example.com",
       "bio": "平台管理员",
       "register_time": "2026-01-01T00:00:00",
@@ -289,7 +286,6 @@ GET /api/user/profile
     "username": "张三",
     "avatar": "",
     "is_online": true,
-    "phone": "13800138000",
     "email": "",
     "bio": "",
     "register_time": "2026-07-19T14:30:00"
@@ -318,7 +314,6 @@ PUT /api/user/profile
 | 字段     | 类型   | 说明     |
 |----------|--------|---------|
 | username | string | 用户名   |
-| phone    | string | 手机号   |
 | email    | string | 邮箱     |
 | bio      | string | 个性签名 |
 
@@ -1039,7 +1034,7 @@ GET /api/admin/users
 |-----------|--------|------|--------|--------------------------|
 | page      | int    | ❌   | 1      | 页码                      |
 | page_size | int    | ❌   | 20     | 每页条数                  |
-| keyword   | string | ❌   | —      | 搜索关键词（用户名/手机号） |
+| keyword   | string | ❌   | —      | 搜索关键词（用户名）          |
 
 **成功响应** `200`:
 
@@ -1051,7 +1046,6 @@ GET /api/admin/users
       {
         "id": "u_abc123",
         "username": "张三",
-        "phone": "13800138001",
         "email": "zhangsan@example.com",
         "bio": "热爱美食，分享生活",
         "avatar": "",
@@ -1138,7 +1132,7 @@ GET /health
 
 | 表名          | 说明           | 主要字段                                              |
 |---------------|---------------|------------------------------------------------------|
-| `app_users`   | 应用用户表     | id, username, password_hash, phone, email, bio, avatar, is_online, role, register_time |
+| `app_users`   | 应用用户表     | id, username, password_hash, email, bio, avatar, is_online, role, register_time |
 | `conversations` | 对话表       | id, user_id, title, icon, created_at, updated_at      |
 | `messages`    | 消息表         | id, conversation_id, role, content, timestamp         |
 | `favorites`   | 收藏表         | id, user_id, shop_id, created_at                      |
