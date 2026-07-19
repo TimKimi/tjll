@@ -20,9 +20,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine
 from backend.models.base import Base
 from backend.routers import ai as ai_router
+from backend.routers import auth as auth_router
 from backend.routers import business as business_router
 from backend.routers import health as health_router
 from backend.routers import review as review_router
+from backend.routers import user as user_router
 
 
 @asynccontextmanager
@@ -39,6 +41,7 @@ app = FastAPI(
     description="大众点评 AI 智能助手后端服务 —— 统一接口入口",
     version="0.1.0",
     lifespan=lifespan,
+    swagger_ui_parameters={"persistAuthorization": True},
 )
 
 # ── CORS：允许前端跨域访问 ────────────────────────────────
@@ -52,6 +55,8 @@ app.add_middleware(
 
 # ── 注册路由（统一入口） ──────────────────────────────────
 app.include_router(health_router.router)
+app.include_router(auth_router.router)
+app.include_router(user_router.router)
 app.include_router(business_router.router)
 app.include_router(review_router.router)
 app.include_router(ai_router.router)

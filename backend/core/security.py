@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -12,6 +13,9 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from backend.config import settings
+
+# passlib 与 bcrypt 4.x 版本检测有兼容警告，非运行错误，抑制之
+logging.getLogger("passlib.handlers.bcrypt").setLevel(logging.ERROR)
 
 # ── 密码哈希 ───────────────────────────────────────────────
 
