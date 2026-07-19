@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.database import get_db
 from backend.main import app
 from backend.schemas.common import PaginatedData
 from backend.schemas.review import ReviewBase, ReviewUser
@@ -16,6 +17,20 @@ from backend.schemas.review import ReviewBase, ReviewUser
 def client():
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def override_deps():
+    """mock 数据库依赖，避免连数据库。"""
+
+    async def mock_get_db():
+        from unittest.mock import AsyncMock
+
+        return AsyncMock()
+
+    app.dependency_overrides[get_db] = mock_get_db
+    yield
+    app.dependency_overrides.clear()
 
 
 class TestReviewRoutes:

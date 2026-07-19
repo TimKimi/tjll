@@ -48,7 +48,7 @@ mypy:
 
 # 单元测试 + 覆盖率报告（跳过集成测试）
 coverage:
-    uv run pytest -c pyproject.toml -m "not integration" --cov --cov-report=term-missing --cov-fail-under=60 -q --tb=short
+    uv run pytest -c pyproject.toml -m "not integration" -n auto --cov --cov-report=term-missing --cov-fail-under=60 -q --tb=short
 
 
 # ============================================================
@@ -57,19 +57,19 @@ coverage:
 
 # 运行全部 pytest（含集成测试）
 test:
-    uv run pytest -c pyproject.toml -v --tb=short
+    uv run pytest -c pyproject.toml -n auto -v --tb=short
 
 # 运行指定模块测试：just tmod data
 tmod module:
-    uv run pytest -c pyproject.toml backend/tests/{{ module }} -v --tb=short
+    uv run pytest -c pyproject.toml -n auto backend/tests/{{ module }} -v --tb=short
 
 # 仅跑单元测试（不依赖数据库）
 tunit:
-    uv run pytest -c pyproject.toml -m "not integration" -v --tb=short
+    uv run pytest -c pyproject.toml -m "not integration" -n auto -v --tb=short
 
 # 仅跑集成测试（依赖数据库）
 tint:
-    uv run pytest -c pyproject.toml -m integration -v --tb=short
+    uv run pytest -c pyproject.toml -m integration -n auto -v --tb=short
 
 
 # ============================================================
