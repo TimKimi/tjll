@@ -14,10 +14,11 @@ just install     # 首次初始化：安装依赖 + git 钩子
 ### 代码质量
 
 ```bash
-just lint        # 全流程：自动修 lint → 格式检查 → mypy
+just lint        # 快速：自动修 lint → 格式化 → mypy
+just check       # 全量：lint + 测试覆盖率
 just fix         # 仅 ruff 自动修复
 just fmt         # ruff 格式化（修改文件）
-just fmt-check   # 仅检查格式
+just fmtck       # 仅检查格式（CI 用）
 just mypy        # 仅类型检查
 ```
 
@@ -25,13 +26,17 @@ just mypy        # 仅类型检查
 
 ```bash
 just test        # 全量 pytest
+just coverage    # 单元测试 + 覆盖率报告（跳过集成测试）
+just tmod data   # 仅测试某模块
+just tunit       # 仅跑单元测试
+just tint        # 仅跑集成测试
 ```
 
 ### 数据库
 
 ```bash
-just db-up       # 启动 PostgreSQL 容器
-just db-down     # 停止 PostgreSQL 容器
+just dbup        # 启动 PostgreSQL 容器
+just dbdown      # 停止 PostgreSQL 容器
 
 # 进阶：连接 psql
 docker compose exec -T db psql -U tjll -d tjll
@@ -40,9 +45,9 @@ docker compose exec -T db psql -U tjll -d tjll
 ### Yelp 数据加载
 
 ```bash
-just data-load 100 10    # 最多 100 商家，每商家至少 10 条有效评论
-just data-sample          # 小批量验证（等价于 just data-load 5 1）
-just data-check           # 查看数据库统计
+just dload 100 10    # 最多 100 商家，每商家至少 10 条有效评论
+just dsample          # 小批量验证（等价于 just dload 5 1）
+just dstat            # 查看数据库统计
 
 # 仅解压（不加载）
 uv run python -m backend.scripts.extract_yelp_data --skip-load
@@ -66,15 +71,15 @@ just up          # 流水线：启动数据库 → 启动服务器
 ```bash
 just cz                # 交互式提交（Conventional Commits）
 just push              # 推送到当前远程分支
-just push-u feat/xxx   # 首次推送新分支（关联远程）
+just pushu feat/xxx    # 首次推送新分支（关联远程）
 ```
 
 ### 分支管理
 
 ```bash
-just dev-branch feat/xxx      # 从 develop 拉最新 + 创建新分支（一步到位）
-just new-branch feat/xxx      # 基于当前 HEAD 创建本地分支
-just del-branch old new       # 删除旧分支（本地+远程）并开启新功能
+just cob feat/xxx           # 同步 develop + 创建新分支（一步到位）
+just brnew feat/xxx         # 基于当前 HEAD 创建本地分支（不切换）
+just brdel old new          # 删除旧分支（本地+远程）+ 开启新功能
 ```
 
 ### 依赖管理
@@ -102,12 +107,12 @@ uv outdated          # 查看过期依赖
 docker compose up -d
 
 # 2. 加载数据（指定商家数和最低评论数）
-just data-load 50 10
+just dload 50 10
 # 第一阶段：扫描 JSON，筛选商家/评论/用户
 # 第二阶段：批量写入数据库
 
 # 3. 验证
-just data-check
+just dstat
 ```
 
 ### 字段映射
@@ -160,9 +165,9 @@ git commit --no-verify                      # 紧急跳过钩子
 ### 分支
 
 ```bash
-just dev-branch feat/xxx        # 从 develop 拉最新 → 创建新分支
-just new-branch feat/xxx        # 创建本地分支
-just del-branch feat/old feat/new  # 清理旧分支 → 开启新功能
+just cob feat/xxx            # 从 develop 拉最新 → 创建新分支
+just brnew feat/xxx          # 创建本地分支（不切换）
+just brdel feat/old feat/new  # 清理旧分支 → 开启新功能
 
 # 等价的原生命令：
 git checkout -b feat/xxx                    # 新分支

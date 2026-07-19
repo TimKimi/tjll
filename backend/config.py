@@ -3,7 +3,9 @@
 from datetime import timedelta
 from pathlib import Path
 
-from pydantic import Field
+from typing import Any
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/config.py → 应用根 backend/（模型与数据路径相对此目录）
@@ -97,8 +99,19 @@ class Settings(BaseSettings):
     # ---- JWT / Auth ----
     JWT_SECRET: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60 * 24  # 24 小时
+    JWT_EXPIRE_MINUTES: int = 1440  # 24 小时
     JWT_REFRESH_EXPIRE_DAYS: int = 7
+
+    @field_validator("JWT_EXPIRE_MINUTES", mode="before")
+    @classmethod
+    def _parse_jwt_expire(cls, v: Any) -> int:
+        if isinstance(v, str) and "*" in v:
+            parts = v.split("*")
+            try:
+                return int(parts[0].strip()) * int(parts[1].strip())
+            except (ValueError, IndexError):
+                pass
+        return int(v) if v is not None else 1440
 
     # ---- Redis（对话历史，需 redis-stack）----
     redis_host: str = "localhost"
