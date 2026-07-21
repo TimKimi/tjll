@@ -25,3 +25,9 @@ class UpdateProfileRequest(BaseModel):
     username: str | None = Field(default=None, min_length=2, max_length=16)
     email: EmailStr | None = None
     bio: str | None = Field(default=None, max_length=500)
+
+
+class AvatarResponse(BaseModel):
+    """头像上传响应。"""
+
+    avatar: str = Field(description="头像 URL")

@@ -323,7 +323,9 @@ PUT /api/user/profile
 
 ---
 
-### 4.3 上传头像
+### 4.3 上传头像 —— 🟡 开发中
+
+> **分支**: `feat/avatar-upload`
 
 ```
 POST /api/user/avatar
