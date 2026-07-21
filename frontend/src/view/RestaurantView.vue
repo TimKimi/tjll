@@ -335,6 +335,8 @@
   // 图片预览状态
   const showGalleryModal = ref(false)
   const currentImageIndex = ref(0)
+  //数据源
+  const source = ref(route.query.source as string || 'db')
 
   // ============================================
   // 评分表情映射
@@ -404,13 +406,18 @@
 const loadRestaurantDetail = async (id: string) => {
   isLoading.value = true
   try {
-    const response = await fetch(`http://localhost:8000/api/business/${id}/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+// 根据 source 决定是否添加查询参数
+const url = source.value === 'yelp'
+  ? `http://localhost:8000/api/business/${id}/?source=yelp`
+  : `http://localhost:8000/api/business/${id}/`
+
+const response = await fetch(url, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+  }
+})
 
     if (!response.ok) {
       throw new Error(`请求失败 (HTTP ${response.status})`)
@@ -469,7 +476,7 @@ const loadRestaurantDetail = async (id: string) => {
     reviewTotal.value = mappedData.reviewCount
     reviewPage.value = 0
 
-    checkFavorite()
+    await checkFavorite()   // 从后端获取收藏状态
     restaurantData.value!.reviews = []
     await loadMoreReviews()
 
@@ -598,33 +605,39 @@ const isOpenNow = (hoursData: any, timezone?: string): boolean => {
   // 请求头: Authorization: Bearer {token}
   // ============================================
   const toggleFavorite = async () => {
-    if (!restaurantData.value) return
+  if (!restaurantData.value) return
 
-    // ========== 真实 API 调用（取消注释即可使用） ==========
-    // try {
-    //   const url = isFavorited.value
-    //     ? `/api/favorites/${restaurantData.value.id}`
-    //     : '/api/favorites'
-    //   const method = isFavorited.value ? 'DELETE' : 'POST'
-    //
-    //   const response = await fetch(url, {
-    //     method,
-    //     headers: {
-    //       'Content-Type': 'application/json',
-    //       'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-    //     },
-    //     body: method === 'POST' ? JSON.stringify({ shopId: restaurantData.value.id }) : undefined
-    //   })
-    //   if (!response.ok) throw new Error('操作失败')
-    //   isFavorited.value = !isFavorited.value
-    // } catch (error) {
-    //   console.error('收藏操作失败:', error)
-    //   alert('操作失败，请稍后重试')
-    // }
-    // ======================================================
+  // 防止重复点击
+  if (isLoading.value) return
 
-    // ========== 本地模拟（开发测试用，接入 API 后删除） ==========
+  try {
+    const url = isFavorited.value
+      ? `/api/favorites/${restaurantData.value.id}`
+      : '/api/favorites'
+    const method = isFavorited.value ? 'DELETE' : 'POST'
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: method === 'POST' ? JSON.stringify({
+        shop_id: restaurantData.value.id   // 改为 shop_id（下划线）
+      }) : undefined
+    })
+
+    // 如果状态码不是 2xx，尝试解析错误信息
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      console.error('后端返回错误:', errorData)
+      throw new Error(errorData.message || '操作失败')
+    }
+
+    // 切换收藏状态
     isFavorited.value = !isFavorited.value
+
+    // 更新本地缓存（方便其他页面同步）
     const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
     if (isFavorited.value) {
       if (!favorites.includes(restaurantData.value.id)) {
@@ -635,17 +648,58 @@ const isOpenNow = (hoursData: any, timezone?: string): boolean => {
       if (index > -1) favorites.splice(index, 1)
     }
     localStorage.setItem('favorites', JSON.stringify(favorites))
-    // ======================================================
+
+    // 成功提示
+    toast.showToast({
+      message: isFavorited.value ? '已收藏' : '已取消收藏',
+      type: 'success'
+    })
+
+  } catch (error) {
+    console.error('收藏操作失败:', error)
+    toast.showToast({
+      message: error instanceof Error ? error.message : '操作失败，请稍后重试',
+      type: 'error'
+    })
   }
+}
 
   // ============================================
-  // 检查收藏状态
+  // 异步检查收藏状态
   // ============================================
-  const checkFavorite = () => {
-    if (!restaurantData.value) return
+  const checkFavorite = async () => {
+  if (!restaurantData.value) return
+
+  try {
+    const response = await fetch('/api/favorites', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      }
+    })
+
+    if (response.ok) {
+      const result = await response.json()
+      const items = result.data?.items || []
+      // 判断当前店铺 ID 是否在收藏列表中
+      const shopId = restaurantData.value.id
+      const isFav = items.some((item: any) => String(item.shop_id) === String(shopId))
+      isFavorited.value = isFav
+
+      // 更新 localStorage 缓存（保持与其他页面一致）
+      const shopIds = items.map((item: any) => String(item.shop_id))
+      localStorage.setItem('favorites', JSON.stringify(shopIds))
+    } else {
+      // 接口失败时 fallback 到 localStorage
+      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
+      isFavorited.value = favorites.includes(String(restaurantData.value.id))
+    }
+  } catch (error) {
+    console.error('检查收藏状态失败:', error)
+    // 出错时使用 localStorage 缓存
     const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
-    isFavorited.value = favorites.includes(restaurantData.value.id)
+    isFavorited.value = favorites.includes(String(restaurantData.value.id))
   }
+}
 
 // ============================================
 // 【API 接口3】加载更多评论
@@ -669,12 +723,17 @@ const loadMoreReviews = async () => {
     const nextPage = reviewPage.value + 1
 
     const params = new URLSearchParams({
-      business_id: id,
-      page: String(nextPage),
-      page_size: String(REVIEW_PAGE_SIZE)
-    })
-    const url = `http://localhost:8000/api/review/list?${params.toString()}`
-    console.log('请求 URL：', url)
+  business_id: id,
+  page: String(nextPage),
+  page_size: String(REVIEW_PAGE_SIZE)
+})
+
+// 如果当前数据源是 yelp，则追加 source 参数
+if (source.value === 'yelp') {
+  params.append('source', 'yelp')
+}
+
+const url = `http://localhost:8000/api/review/list?${params.toString()}`
 
     const response = await fetch(url, {
       method: 'POST',

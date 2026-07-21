@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     """服务监听地址"""
     APP_PORT: int = 8000
     """服务监听端口"""
+    APP_BASE_URL: str = ""
+    """外部访问地址，空则自动从 APP_HOST+APP_PORT 推导（反代场景需手动设置）"""
     log_dir: str = "logs"
     """日志输出目录（相对 backend/）"""
     log_level: str = "INFO"
@@ -67,6 +69,24 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRE_DAYS: int = 7
     EMAIL_CHECK_DELIVERABILITY: bool = False
     """注册时是否检查邮箱域名可送达性"""
+
+    # ================================================================
+    # 邮件发送（密码找回用）
+    # ================================================================
+    SMTP_HOST: str = ""
+    """[必填] SMTP 服务器地址"""
+    SMTP_PORT: int = 587
+    """SMTP 端口（SSL: 465, TLS: 587）"""
+    SMTP_USER: str = ""
+    """[必填] SMTP 用户名"""
+    SMTP_PASSWORD: str = Field(default="")
+    """[必填] SMTP 密码"""
+    SMTP_FROM: str = ""
+    """[必填] 发件人地址"""
+    SMTP_USE_TLS: bool = True
+    """是否使用 TLS"""
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    """密码重置 Token 过期时间（分钟）"""
 
     # ================================================================
     # LLM

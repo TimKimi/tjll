@@ -29,6 +29,12 @@ class AdminUserItem(BaseModel):
     role: str = "user"
 
 
+class UpdateRoleRequest(BaseModel):
+    """修改用户角色请求。"""
+
+    role: str = Field(..., pattern="^(user|admin)$", description="角色：user / admin")
+
+
 class AdminUserListQuery(BaseModel):
     """管理员用户列表查询参数。"""
 

@@ -21,7 +21,7 @@ class TestAddFavoriteRequest:
     def test_shop_id_required(self):
         """shop_id 是必填字段。"""
         with pytest.raises(ValidationError):
-            AddFavoriteRequest()  # type: ignore[call-arg]  # ty: ignore[missing-argument]
+            AddFavoriteRequest()  # type: ignore
 
     def test_shop_id_cannot_be_empty(self):
         """shop_id 不能为空字符串。"""
@@ -35,7 +35,9 @@ class TestFavoriteItem:
     def test_valid_minimal(self):
         """仅用必填字段创建。"""
         now = datetime(2026, 7, 19, 15, 0, 0)
-        item = FavoriteItem(id="fav_001", shop_id="biz_001", created_at=now)
+        item = FavoriteItem(
+            id="fav_001", shop_id="biz_001", source="db", created_at=now
+        )
         assert item.id == "fav_001"
         assert item.shop_id == "biz_001"
         assert item.name == ""
@@ -69,14 +71,14 @@ class TestFavoriteItem:
     def test_id_required(self):
         """id 是必填字段。"""
         with pytest.raises(ValidationError):
-            FavoriteItem(shop_id="biz_001", created_at=datetime.now())  # type: ignore[call-arg]  # ty: ignore[missing-argument]
+            FavoriteItem(shop_id="biz_001", source="db", created_at=datetime.now())  # type: ignore
 
     def test_shop_id_required(self):
         """shop_id 是必填字段。"""
         with pytest.raises(ValidationError):
-            FavoriteItem(id="fav_001", created_at=datetime.now())  # type: ignore[call-arg]  # ty: ignore[missing-argument]
+            FavoriteItem(id="fav_001", source="db", created_at=datetime.now())  # type: ignore
 
     def test_created_at_required(self):
         """created_at 是必填字段。"""
         with pytest.raises(ValidationError):
-            FavoriteItem(id="fav_001", shop_id="biz_001")  # type: ignore[call-arg]  # ty: ignore[missing-argument]
+            FavoriteItem(id="fav_001", shop_id="biz_001", source="db")  # type: ignore

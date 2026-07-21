@@ -116,3 +116,42 @@ class TestAuthRoutes:
         assert response.status_code == 200
         data = response.json()
         assert data["data"]["user"]["role"] == "admin"
+
+    @patch("backend.routers.auth.AuthService")
+    def test_forgot_password_success(self, mock_service_class, client):
+        """忘记密码应返回 200（无论邮箱是否存在）。"""
+        mock_instance = mock_service_class.return_value
+        mock_instance.forgot_password = AsyncMock(return_value=None)
+        response = client.post(
+            "/api/auth/forgot-password",
+            json={"email": "user@example.com"},
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "如果该邮箱已注册，重置邮件已发送"
+
+    @patch("backend.routers.auth.AuthService")
+    def test_reset_password_success(self, mock_service_class, client):
+        """重置密码成功。"""
+        mock_instance = mock_service_class.return_value
+        mock_instance.reset_password = AsyncMock(return_value=None)
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": "valid_token", "password": "new_password_123"},
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "密码重置成功"
+
+    @patch("backend.routers.auth.AuthService")
+    def test_reset_password_invalid_token(self, mock_service_class, client):
+        """无效的重置令牌应返回 400。"""
+        from backend.core.exceptions import AppError
+
+        mock_instance = mock_service_class.return_value
+        mock_instance.reset_password = AsyncMock(
+            side_effect=AppError("重置链接无效或已使用", code=400)
+        )
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": "bad", "password": "new_password_123"},
+        )
+        assert response.status_code == 400

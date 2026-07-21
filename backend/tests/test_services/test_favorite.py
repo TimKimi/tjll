@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,11 +58,13 @@ class TestListFavorites:
         fav1 = MagicMock()
         fav1.id = "fav_001"
         fav1.shop_id = "biz_001"
+        fav1.source = "db"
         fav1.created_at = datetime(2026, 7, 19, 15, 0, 0)
 
         fav2 = MagicMock()
         fav2.id = "fav_002"
         fav2.shop_id = "biz_002"
+        fav2.source = "db"
         fav2.created_at = datetime(2026, 7, 20, 10, 30, 0)
 
         # Row tuples returned by the join query
@@ -211,6 +213,99 @@ class TestAddFavorite:
         service = FavoriteService(mock_db)
         with pytest.raises(AppError) as exc:
             await service.add_favorite("u_test", "biz_001")
+        assert exc.value.code == 409
+        assert "已收藏" in exc.value.message
+
+
+class TestAddFavoriteYelpSource:
+    """测试 Yelp 来源的收藏添加。"""
+
+    @patch("backend.services.favorite.YelpService")
+    @pytest.mark.asyncio
+    async def test_add_yelp_favorite_success(self, mock_yelp_class, mock_db):
+        """Yelp 来源收藏成功应返回收藏项信息。"""
+        from backend.services.favorite import FavoriteService
+
+        # Mock Yelp API 返回商家信息
+        mock_yelp_instance = mock_yelp_class.return_value
+        mock_biz = MagicMock()
+        mock_biz.id = "yelp_biz_001"
+        mock_biz.name = "Yelp Restaurant"
+        mock_biz.image_url = "https://yelp.com/photo.jpg"
+        mock_biz.rating = 4.5
+        mock_biz.price = "$$$"
+        mock_loc = MagicMock()
+        mock_loc.address1 = "123 Main St"
+        mock_biz.location = mock_loc
+        mock_cat = MagicMock()
+        mock_cat.alias = "italian"
+        mock_cat.title = "Italian"
+        mock_biz.categories = [mock_cat]
+        mock_yelp_instance.get_business = AsyncMock(return_value=mock_biz)
+
+        # Mock 未收藏
+        fav_result = MagicMock()
+        fav_result.scalar_one_or_none.return_value = None
+
+        mock_db.execute = AsyncMock(return_value=fav_result)
+
+        now = datetime(2026, 7, 21, 12, 0, 0)
+
+        async def _refresh_side_effect(obj):
+            obj.created_at = now
+
+        mock_db.refresh = AsyncMock(side_effect=_refresh_side_effect)
+
+        service = FavoriteService(mock_db)
+        result = await service.add_favorite("u_test", "yelp_biz_001", source="yelp")
+
+        assert result.shop_id == "yelp_biz_001"
+        assert result.source == "yelp"
+        assert result.name == "Yelp Restaurant"
+        assert result.rating == 4.5
+        assert result.price == "$$$"
+        assert result.address == "123 Main St"
+        assert result.category == "Italian"
+        mock_db.add.assert_called_once()
+        mock_db.commit.assert_awaited_once()
+        mock_yelp_instance.get_business.assert_awaited_once_with("yelp_biz_001")
+
+    @patch("backend.services.favorite.YelpService")
+    @pytest.mark.asyncio
+    async def test_add_yelp_favorite_not_found(self, mock_yelp_class, mock_db):
+        """Yelp 来源收藏时商家不存在应抛出异常。"""
+        from backend.core.exceptions import AppError
+        from backend.services.favorite import FavoriteService
+
+        mock_yelp_instance = mock_yelp_class.return_value
+        mock_yelp_instance.get_business = AsyncMock(
+            side_effect=Exception("Yelp API error")
+        )
+
+        service = FavoriteService(mock_db)
+        with pytest.raises(AppError) as exc:
+            await service.add_favorite("u_test", "no_such", source="yelp")
+        assert exc.value.code == 404
+        assert "商家不存在" in exc.value.message
+
+    @patch("backend.services.favorite.YelpService")
+    @pytest.mark.asyncio
+    async def test_add_yelp_favorite_duplicate(self, mock_yelp_class, mock_db):
+        """Yelp 来源重复收藏应抛出异常。"""
+        from backend.core.exceptions import AppError
+        from backend.services.favorite import FavoriteService
+
+        mock_yelp_instance = mock_yelp_class.return_value
+        mock_yelp_instance.get_business = AsyncMock(return_value=MagicMock())
+
+        fav_result = MagicMock()
+        fav_result.scalar_one_or_none.return_value = MagicMock()
+
+        mock_db.execute = AsyncMock(return_value=fav_result)
+
+        service = FavoriteService(mock_db)
+        with pytest.raises(AppError) as exc:
+            await service.add_favorite("u_test", "yelp_biz", source="yelp")
         assert exc.value.code == 409
         assert "已收藏" in exc.value.message
 

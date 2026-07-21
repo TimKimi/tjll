@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import math
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import AppError
 from backend.models.app_user import AppUser
 from backend.schemas.admin import AdminProfileResponse, AdminUserItem
 from backend.schemas.common import PaginatedData
+
+logger = logging.getLogger("backend.services.admin")
 
 
 class AdminService:
@@ -19,14 +23,7 @@ class AdminService:
         self.db = db
 
     async def get_admin_profile(self, user_id: str) -> AdminProfileResponse | None:
-        """通过用户 ID 获取管理员信息。
-
-        Args:
-            user_id: 用户 ID。
-
-        Returns:
-            管理员信息，若非管理员则返回 None。
-        """
+        """通过用户 ID 获取管理员信息。"""
         result = await self.db.execute(select(AppUser).where(AppUser.id == user_id))
         user = result.scalar_one_or_none()
         if not user or user.role != "admin":
@@ -44,17 +41,7 @@ class AdminService:
         page_size: int = 20,
         keyword: str | None = None,
     ) -> PaginatedData[AdminUserItem]:
-        """获取所有用户列表（分页）。
-
-        Args:
-            page: 页码（从 1 开始）。
-            page_size: 每页条数。
-            keyword: 搜索关键词（按用户名模糊匹配）。
-
-        Returns:
-            分页的用户列表。
-        """
-        # 构建查询条件
+        """获取所有用户列表（分页，支持关键词搜索）。"""
         base_query = select(AppUser)
         count_query = select(func.count(AppUser.id))
 
@@ -63,14 +50,12 @@ class AdminService:
             base_query = base_query.where(AppUser.username.ilike(like_pattern))
             count_query = count_query.where(AppUser.username.ilike(like_pattern))
 
-        # 总数
         total_result = await self.db.execute(count_query)
         total = total_result.scalar_one()
 
         total_pages = math.ceil(total / page_size) if total > 0 else 0
         offset = (page - 1) * page_size
 
-        # 分页查询
         q = (
             base_query.order_by(AppUser.register_time.desc())
             .offset(offset)
@@ -89,15 +74,72 @@ class AdminService:
             total_pages=total_pages,
         )
 
+    async def change_role(
+        self, admin_id: str, target_user_id: str, new_role: str
+    ) -> AdminUserItem:
+        """修改指定用户的角色。
+
+        Raises:
+            AppError: 目标用户不存在、不能修改自己的角色。
+        """
+        if admin_id == target_user_id:
+            raise AppError("不能修改自己的角色", code=400)
+
+        result = await self.db.execute(
+            select(AppUser).where(AppUser.id == target_user_id)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            raise AppError("用户不存在", code=404)
+
+        old_role = user.role
+        user.role = new_role
+        await self.db.commit()
+
+        logger.info(
+            "角色变更 admin=%s target=%s %s → %s",
+            admin_id,
+            target_user_id,
+            old_role,
+            new_role,
+        )
+        return self._user_to_item(user)
+
+    async def delete_user(self, admin_id: str, target_user_id: str) -> None:
+        """删除指定用户。
+
+        Raises:
+            AppError: 目标用户不存在、不能删除自己。
+        """
+        if admin_id == target_user_id:
+            raise AppError("不能删除自己的账号", code=400)
+
+        result = await self.db.execute(
+            select(AppUser).where(AppUser.id == target_user_id)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            raise AppError("用户不存在", code=404)
+
+        await self.db.delete(user)
+        await self.db.commit()
+
+        logger.warning(
+            "用户被删除 admin=%s target=%s username=%s",
+            admin_id,
+            target_user_id,
+            user.username,
+        )
+
     @staticmethod
     def _user_to_item(user: AppUser) -> AdminUserItem:
         return AdminUserItem(
             id=user.id,
             username=user.username,
-            email=user.email,
-            bio=user.bio or "",
             avatar=user.avatar or "",
             is_online=user.is_online,
+            email=user.email,
+            bio=user.bio or "",
             register_time=user.register_time,
             role=user.role,
         )

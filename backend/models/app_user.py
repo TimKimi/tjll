@@ -36,6 +36,14 @@ class AppUser(Base):
         Text, nullable=True, default="", comment="头像 URL"
     )
 
+    # ── 密码重置 ──
+    reset_token: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, default=None, comment="密码重置令牌"
+    )
+    reset_token_exp: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None, comment="密码重置令牌过期时间"
+    )
+
     # ── 状态 ──
     is_online: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否在线")
     role: Mapped[str] = mapped_column(
