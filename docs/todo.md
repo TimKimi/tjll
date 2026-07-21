@@ -4,21 +4,12 @@
 
 ---
 
-## 当前迭代 (feat/admin)
+## 当前迭代 (feat/avatar-upload)
 
-- [x] 创建项目架构文档 (`docs/architecture.md`)
-- [x] 创建架构决策记录 (`docs/decision-records.md`)
-- [x] 创建项目需求文档 (`docs/requirements.md`)
-- [x] 创建开发日志 (`docs/development-log.md`)
-- [x] 创建待办任务清单 (`docs/todo.md`)
-- [x] 修正 `docs/api-need.md` 模块进度状态
-- [x] 更新 `README.md` 补充文档索引
-- [x] 实现 Admin 路由 — `GET /api/admin/profile`
-- [x] 实现 Admin 路由 — `GET /api/admin/users`
-- [x] 编写 Admin 模块单元测试
-- [x] 注册 admin 路由到 `main.py`
-- [x] 运行测试验证（41 路由测试全部通过）
-- [ ] 提交代码（等待 review）
+- [ ] 实现头像上传 — `POST /api/user/avatar`
+- [ ] 实现头像上传 Service 逻辑
+- [ ] 编写头像上传单元测试
+- [ ] 运行测试验证
 
 ---
 

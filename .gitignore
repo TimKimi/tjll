@@ -102,5 +102,9 @@ format.py
 # Windows reserved device name (sometimes created by shell redirect)
 nul
 
+# Uploaded avatars (never commit user-uploaded files)
+backend/static/avatars/*
+!backend/static/avatars/.gitkeep
+
 # Editor local settings (conda interpreter path is machine-specific)
 .vscode/

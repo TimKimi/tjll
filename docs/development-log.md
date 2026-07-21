@@ -4,25 +4,10 @@
 
 ---
 
-## [2026-07-21] feat/admin 分支开发
+## [2026-07-21] feat/avatar-upload 分支开发
 
-### 已完成
-- 创建 `docs/architecture.md` — 项目架构文档
-- 创建 `docs/decision-records.md` — 架构决策记录
-- 创建 `docs/requirements.md` — 项目需求文档
-- 创建 `docs/todo.md` — 待办任务清单
-- 修正 `docs/api-need.md` — 同步各模块实际进度状态
-- 更新 `README.md` — 补充关键文档索引
-
-### 已完成
-- 创建 `backend/schemas/admin.py` — Admin Pydantic Schema
-- 创建 `backend/services/admin.py` — AdminService 业务逻辑
-- 创建 `backend/routers/admin.py` — Admin 路由（profile + users）
-- 注册 admin 路由到 `backend/main.py`
-- 创建 `backend/tests/test_routers/test_admin.py` — Admin 模块单元测试（6 个测试用例）
-
-### 待验证
-- 运行测试套件确认通过
+### 开发中
+- 实现头像上传接口（`POST /api/user/avatar`）
 
 ---
 
