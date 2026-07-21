@@ -15,15 +15,32 @@
 
       <div class="header-right">
         <div class="admin-info">
-          <img
-            v-if="adminInfo.avatar"
-            :src="adminInfo.avatar"
-            alt="管理员头像"
-            class="admin-avatar"
-          />
-          <i v-else class="fas fa-user-circle admin-avatar-icon"></i>
-          <span class="admin-name">{{ adminInfo.name || '管理员' }}</span>
-        </div>
+  <!-- 头像可点击 -->
+  <div class="avatar-wrapper" @click="triggerAdminAvatarUpload" title="更换头像">
+    <img
+      v-if="adminInfo.avatar"
+      :src="getFullAvatarUrl(adminInfo.avatar)"
+      alt="管理员头像"
+      class="admin-avatar"
+      @error="adminInfo.avatar = ''"
+    />
+    <i v-else class="fas fa-user-circle admin-avatar-icon"></i>
+    <!-- 小相机提示（可选） -->
+    <span class="avatar-hover-tip">
+      <i class="fas fa-camera"></i>
+    </span>
+  </div>
+  <span class="admin-name">{{ adminInfo.name || '管理员' }}</span>
+</div>
+
+<!-- 隐藏的文件选择器 -->
+<input
+  ref="adminAvatarInput"
+  type="file"
+  accept="image/*"
+  style="display: none"
+  @change="handleAdminAvatarUpload"
+/>
         <button class="logout-btn" @click="handleLogout">
           <i class="fas fa-sign-out-alt"></i>
           <span>退出</span>
@@ -94,11 +111,12 @@
                 <td class="col-name">
                   <div class="user-info-cell">
                     <img
-                      v-if="user.avatar"
-                      :src="user.avatar"
-                      alt="头像"
-                      class="user-avatar-small"
-                    />
+  v-if="user.avatar"
+  :src="getFullAvatarUrl(user.avatar)"
+  alt="头像"
+  class="user-avatar-small"
+  @error="user.avatar = ''"
+/>
                     <i v-else class="fas fa-user-circle user-avatar-small-icon"></i>
                     <span>{{ user.username }}</span>
                   </div>
@@ -150,7 +168,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-
+const adminAvatarInput = ref<HTMLInputElement | null>(null)
 // ============================================
 // 类型定义（与后端返回字段完全一致）
 // ============================================
@@ -254,16 +272,20 @@ const loadUsers = async () => {
     if (result.code === 0) {
       // 从 data.items 提取列表，并映射字段名
       const items = result.data.items || []
-      userList.value = items.map((item: any) => ({
-  id: item.id || 0,
-  username: item.username || '用户',      // 与模板一致
-  avatar: item.avatar || '',
-  email: item.email || '',
-  bio: item.bio || '',
-  is_online: item.is_online ?? false,     // 与模板一致
-  register_time: item.register_time || '未知', // 与模板一致
-  role: item.role || 'user',
-}))
+      userList.value = items.map((item: any) => {
+  const avatar = item.avatar || ''
+  const fullAvatar = avatar ? (avatar.startsWith('http') ? avatar : `http://localhost:8000${avatar}`) : ''
+  return {
+    id: item.id || 0,
+    username: item.username || '用户',
+    avatar: fullAvatar,
+    email: item.email || '',
+    bio: item.bio || '',
+    is_online: item.is_online ?? false,
+    register_time: item.register_time || '未知',
+    role: item.role || 'user',
+  }
+})
 
       // 保存总数用于显示
       totalUsers.value = result.data.total || 0
@@ -301,10 +323,12 @@ const loadAdminInfo = async () => {
     // 根据后端实际返回结构处理（示例：{ code: 0, data: { ... } }）
     if (result.code === 0) {
       const data = result.data
+      const avatar = data.avatar || ''
+      const fullAvatar = avatar ? (avatar.startsWith('http') ? avatar : `http://localhost:8000${avatar}`) : ''
       adminInfo.value = {
         id: data.id || 0,
         name: data.username || data.name || '管理员',   // 优先取 username
-        avatar: data.avatar || ''
+        avatar: fullAvatar
       }
     } else {
       throw new Error(result.message || '获取管理员信息失败')
@@ -380,6 +404,73 @@ const handleLogout = async () => {
   } finally {
     if (logoutBtn) logoutBtn.disabled = false
   }
+}
+
+// ============================================
+// 头像完整 URL 转换（带时间戳防缓存）
+// ============================================
+
+const getFullAvatarUrl = (avatar: string): string => {
+  if (!avatar) return ''
+  if (avatar.startsWith('http')) {
+    return `${avatar}?t=${Date.now()}`
+  }
+  const baseURL = 'http://localhost:8000'
+  return `${baseURL}${avatar}?t=${Date.now()}`
+}
+
+// ============================================
+// admin头像上传
+// ============================================
+const triggerAdminAvatarUpload = () => {
+  adminAvatarInput.value?.click()
+}
+
+const handleAdminAvatarUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (file.size > 2 * 1024 * 1024) {
+    alert('图片大小不能超过2MB')
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('avatar', file)
+
+  try {
+    const response = await fetch('http://localhost:8000/api/user/avatar', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('admin_token') || ''}`
+        // 不要设置 Content-Type
+      },
+      body: formData
+    })
+
+    if (!response.ok) throw new Error(`上传失败 (HTTP ${response.status})`)
+    const result = await response.json()
+    if (result.code !== 0) throw new Error(result.message || '上传失败')
+
+    // 拼接完整 URL
+    const avatarUrl = result.data.avatar
+    const fullUrl = avatarUrl.startsWith('http') ? avatarUrl : `http://localhost:8000${avatarUrl}`
+    adminInfo.value.avatar = fullUrl
+
+    // 更新 localStorage（若其他地方使用了 admin_userInfo）
+    const saved = JSON.parse(localStorage.getItem('admin_userInfo') || '{}')
+    saved.avatar = fullUrl
+    localStorage.setItem('admin_userInfo', JSON.stringify(saved))
+
+    alert('头像更新成功')
+  } catch (error) {
+    console.error('管理员头像上传失败:', error)
+    alert(error instanceof Error ? error.message : '上传失败，请重试')
+  }
+
+  // 清空 input 值，以便重复选择同一文件
+  input.value = ''
 }
 
 // ============================================
@@ -908,5 +999,34 @@ onMounted(() => {
   .col-status {
     width: 60px;
   }
+}
+
+.avatar-wrapper {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 50%;
+  line-height: 0;
+}
+
+.avatar-wrapper:hover .avatar-hover-tip {
+  opacity: 1;
+}
+
+.avatar-hover-tip {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 0.5rem;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 </style>

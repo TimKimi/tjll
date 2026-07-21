@@ -33,11 +33,12 @@
           </button>
           <div class="user-profile" v-else @click="goToProfile">
             <img
-              v-if="userInfo.avatar"
-              :src="userInfo.avatar"
-              alt="用户头像"
-              class="header-avatar"
-            />
+  v-if="userInfo.avatar"
+  :src="getFullAvatarUrl(userInfo.avatar)"
+  alt="用户头像"
+  class="header-avatar"
+  @error="userInfo.avatar = ''"
+/>
             <i v-else class="fas fa-user-circle"></i>
             <span class="user-name-display">{{ userInfo.name || '用户' }}</span>
           </div>
@@ -97,7 +98,7 @@
 
       <!-- 快捷入口 -->
       <div class="quick-actions">
-        <div class="quick-action-item" @click="goToChatWithQuery('附近餐厅推荐')">
+        <div class="quick-action-item" @click="goToRestaurants('附近餐厅推荐')">
           <i class="fas fa-utensils"></i>
           <span>找餐厅</span>
         </div>
@@ -164,14 +165,20 @@ const checkLoginStatus = () => {
 
   if (token && userStr) {
     try {
-      userInfo.value = JSON.parse(userStr)
+      const parsed = JSON.parse(userStr)
+      // 兼容后端返回 username 字段的情况
+      parsed.name = parsed.name || parsed.username || '用户'
+      // 头像 URL 处理
+      if (parsed.avatar && !parsed.avatar.startsWith('http')) {
+        parsed.avatar = `http://localhost:8000${parsed.avatar}`
+      }
+      userInfo.value = parsed
       isLoggedIn.value = true
     } catch (e) {
       console.error('解析用户信息失败:', e)
     }
   }
 }
-
 onMounted(() => {
   checkLoginStatus()
   // 聚焦到输入框
@@ -197,8 +204,12 @@ const sendQuery = () => {
 // ============================================
 // 快捷入口点击 - 直接跳转到聊天并发送消息
 // ============================================
-const goToChatWithQuery = (query: string) => {
+const goToRestaurants = (query: string) => {
   router.push('/restaurants')
+}
+
+const goToChatWithQuery = (query: string) => {
+  router.push('/chat')
 }
 
 // ============================================
@@ -228,6 +239,18 @@ const handleSearch = (event: Event) => {
       query: { q: input.value.trim() }
     })
   }
+}
+
+// 头像完整 URL 转换
+const getFullAvatarUrl = (avatar: string): string => {
+  if (!avatar) return ''
+  // 如果已经是完整 URL，直接返回并加时间戳
+  if (avatar.startsWith('http')) {
+    return `${avatar}?t=${Date.now()}`
+  }
+  // 相对路径拼接后端地址
+  const baseURL = 'http://localhost:8000'
+  return `${baseURL}${avatar}?t=${Date.now()}`
 }
 </script>
 

@@ -335,6 +335,8 @@
   // 图片预览状态
   const showGalleryModal = ref(false)
   const currentImageIndex = ref(0)
+  //数据源
+  const source = ref(route.query.source as string || 'db')
 
   // ============================================
   // 评分表情映射
@@ -404,13 +406,18 @@
 const loadRestaurantDetail = async (id: string) => {
   isLoading.value = true
   try {
-    const response = await fetch(`http://localhost:8000/api/business/${id}/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    })
+// 根据 source 决定是否添加查询参数
+const url = source.value === 'yelp'
+  ? `http://localhost:8000/api/business/${id}/?source=yelp`
+  : `http://localhost:8000/api/business/${id}/`
+
+const response = await fetch(url, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+  }
+})
 
     if (!response.ok) {
       throw new Error(`请求失败 (HTTP ${response.status})`)
@@ -616,7 +623,7 @@ const isOpenNow = (hoursData: any, timezone?: string): boolean => {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: method === 'POST' ? JSON.stringify({
-        shop_id: restaurantData.value.id   // ✅ 改为 shop_id（下划线）
+        shop_id: restaurantData.value.id   // 改为 shop_id（下划线）
       }) : undefined
     })
 
@@ -716,12 +723,17 @@ const loadMoreReviews = async () => {
     const nextPage = reviewPage.value + 1
 
     const params = new URLSearchParams({
-      business_id: id,
-      page: String(nextPage),
-      page_size: String(REVIEW_PAGE_SIZE)
-    })
-    const url = `http://localhost:8000/api/review/list?${params.toString()}`
-    console.log('请求 URL：', url)
+  business_id: id,
+  page: String(nextPage),
+  page_size: String(REVIEW_PAGE_SIZE)
+})
+
+// 如果当前数据源是 yelp，则追加 source 参数
+if (source.value === 'yelp') {
+  params.append('source', 'yelp')
+}
+
+const url = `http://localhost:8000/api/review/list?${params.toString()}`
 
     const response = await fetch(url, {
       method: 'POST',

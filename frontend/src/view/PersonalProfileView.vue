@@ -18,11 +18,12 @@
           <div class="profile-user-card">
             <div class="profile-avatar-wrapper">
               <img
-                v-if="userInfo.avatar"
-                :src="userInfo.avatar"
-                alt="用户头像"
-                class="profile-avatar"
-              />
+  v-if="userInfo.avatar"
+  :src="getFullAvatarUrl(userInfo.avatar)"
+  alt="用户头像"
+  class="profile-avatar"
+  @error="userInfo.avatar = ''"
+/>
               <i v-else class="fas fa-user-circle profile-avatar-icon"></i>
               <button class="avatar-upload-btn" @click="triggerAvatarUpload">
                 <i class="fas fa-camera"></i>
@@ -392,7 +393,7 @@ const isLoadingFavorites = ref(false)
     userInfo.value = {
       id: data.id || '',
       name: data.username || data.name || '用户',
-      avatar: data.avatar || '',
+      avatar: data.avatar ? (data.avatar.startsWith('http') ? data.avatar : `http://localhost:8000${data.avatar}`) : '',
       email: data.email || '',
       bio: data.bio || '',
       isOnline: data.is_online ?? false,
@@ -527,23 +528,67 @@ const isLoadingFavorites = ref(false)
     avatarInput.value?.click()
   }
 
-  const handleAvatarUpload = (event: Event) => {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
+  const handleAvatarUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('图片大小不能超过2MB')
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      userInfo.value.avatar = e.target?.result as string
-      saveUserInfo()
-    }
-    reader.readAsDataURL(file)
+  if (file.size > 2 * 1024 * 1024) {
+    alert('图片大小不能超过2MB')
+    return
   }
+
+  // 1. 构建 FormData
+  const formData = new FormData()
+  formData.append('avatar', file)   // 字段名与后端一致
+
+  try {
+    // 2. 发送请求
+    const response = await fetch('http://localhost:8000/api/user/avatar', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        // 不要设置 Content-Type，浏览器会自动设为 multipart/form-data
+      },
+      body: formData
+    })
+
+    if (!response.ok) {
+      throw new Error(`上传失败 (HTTP ${response.status})`)
+    }
+
+    const result = await response.json()
+    if (result.code !== 0) {
+      throw new Error(result.message || '上传失败')
+    }
+
+    const baseURL = 'http://localhost:8000'
+const avatarUrl = result.data.avatar
+const fullUrl = avatarUrl.startsWith('http') ? avatarUrl : `${baseURL}${avatarUrl}`
+userInfo.value.avatar = fullUrl
+
+// 保存到 localStorage
+const saved = JSON.parse(localStorage.getItem('userInfo') || '{}')
+saved.avatar = fullUrl
+localStorage.setItem('userInfo', JSON.stringify(saved))
+
+  } catch (error) {
+    console.error('头像上传失败:', error)
+    alert(error instanceof Error ? error.message : '上传失败，请重试')
+  }
+}
+
+  // ============================================
+  // 头像完整 URL 转换
+  // ============================================
+const getFullAvatarUrl = (avatar: string): string => {
+  if (!avatar) return ''
+  if (avatar.startsWith('http')) {
+    return `${avatar}?t=${Date.now()}`
+  }
+  const baseURL = 'http://localhost:8000'
+  return `${baseURL}${avatar}?t=${Date.now()}`
+}
 
   // ============================================
   // 保存用户信息
