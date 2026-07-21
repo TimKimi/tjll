@@ -69,6 +69,19 @@ class UserInfo(BaseModel):
     role: UserRole = UserRole.USER
 
 
+class ForgotPasswordRequest(BaseModel):
+    """忘记密码请求。"""
+
+    email: str = Field(..., description="注册时使用的邮箱")
+
+
+class ResetPasswordRequest(BaseModel):
+    """重置密码请求。"""
+
+    token: str = Field(..., min_length=1, description="重置令牌")
+    password: str = Field(..., min_length=8, description="新密码")
+
+
 class TokenResponse(BaseModel):
     """登录/刷新 Token 响应。"""
 

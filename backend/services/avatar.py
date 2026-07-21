@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import uuid
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from backend.config.paths import PROJECT_ROOT
 from backend.core.exceptions import AppError
 from backend.models.app_user import AppUser
 from backend.schemas.user import AvatarResponse
+
+logger = logging.getLogger("backend.services.avatar")
 
 # 允许的图片 MIME 类型
 _ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/gif"}
@@ -43,13 +46,7 @@ class AvatarService:
         self.db = db
 
     async def upload_avatar(self, user_id: str, file: UploadFile) -> AvatarResponse:
-        """上传并压缩用户头像。
-
-        校验 → 压缩（最长边 ≤512px, JPEG quality=85）→ 落盘 → 更新 DB。
-
-        Raises:
-            AppError: 文件格式不支持、文件过大、图片解码失败。
-        """
+        """上传并压缩用户头像。"""
         # ── 校验 ──
         self._validate_file_type(file)
 
@@ -57,6 +54,7 @@ class AvatarService:
 
         content = await file.read()
         if len(content) > _MAX_FILE_SIZE:
+            logger.warning("头像文件过大 user_id=%s size=%d", user_id, len(content))
             raise AppError("文件大小超过限制（最大 2MB）", code=400)
 
         # ── 压缩 ──
@@ -79,6 +77,9 @@ class AvatarService:
             user.avatar = avatar_url
             await self.db.commit()
 
+        logger.info(
+            "头像上传成功 user_id=%s size=%d→%d", user_id, len(content), len(compressed)
+        )
         return AvatarResponse(avatar=avatar_url)
 
     # ── 校验 ──────────────────────────────────────────────
@@ -97,24 +98,18 @@ class AvatarService:
 
     @staticmethod
     def _compress_image(content: bytes, ext: str) -> bytes:
-        """压缩图片：最长边 ≤512px + 质量优化。
-
-        将 RGBA/P 模式转 RGB 以确保 JPEG 兼容。
-        """
+        """压缩图片：最长边 ≤512px + 质量优化。"""
         try:
             img = Image.open(io.BytesIO(content))
         except Exception as e:
             raise AppError("图片解码失败，请上传有效的图片文件", code=400) from e
 
-        # 统一为 RGB（RGBA 转 RGB 抛弃 alpha，P 调色板解包）
         if img.mode in ("RGBA", "LA", "P"):
             img = img.convert("RGB")
 
-        # 等比例缩放
         if img.width > _MAX_DIMENSION or img.height > _MAX_DIMENSION:
             img.thumbnail((_MAX_DIMENSION, _MAX_DIMENSION), Resampling.LANCZOS)
 
-        # 压缩输出（部分损坏的图片可打开但无法重编码）
         output = io.BytesIO()
         save_format = "JPEG" if ext in (".jpg", ".jpeg") else "PNG"
         try:

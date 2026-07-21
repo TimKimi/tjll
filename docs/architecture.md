@@ -40,13 +40,13 @@
 | 模块 | 前缀 | 说明 |
 |------|------|------|
 | `health.py` | `/health` | 健康检查 |
-| `auth.py` | `/api/auth` | 注册、登录、退出 |
+| `auth.py` | `/api/auth` | 注册、登录、退出、密码找回 |
 | `user.py` | `/api/user` | 用户信息获取与更新 |
 | `business.py` | `/api/business` | 商家列表、详情 |
 | `review.py` | `/api/review` | 评论列表、详情 |
 | `ai.py` | `/api/ai` | AI 对话、推荐、评论总结 |
-| `favorite.py` | `/api/favorites` | 收藏增删查 |
-| `admin.py` | `/api/admin` | 管理后台接口 |
+| `favorite.py` | `/api/favorites` | 收藏列表、添加、移除 |
+| `admin.py` | `/api/admin` | 管理员信息、用户列表、角色修改、删除用户 |
 
 ### 业务逻辑层 (`backend/services/`)
 

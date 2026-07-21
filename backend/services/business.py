@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from sqlalchemy import func, select
@@ -18,6 +19,8 @@ from backend.schemas.business import (
 )
 from backend.schemas.common import PaginatedData
 from backend.services.yelp_search import YelpSearchService
+
+logger = logging.getLogger("backend.services.business")
 
 
 def _parse_json_field(value: str | None) -> Any:

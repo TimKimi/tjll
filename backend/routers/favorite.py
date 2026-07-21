@@ -45,7 +45,7 @@ async def add_favorite(
     """添加商家到收藏。"""
     service = FavoriteService(db)
     try:
-        result = await service.add_favorite(user["sub"], req.shop_id)
+        result = await service.add_favorite(user["sub"], req.shop_id, source=req.source)
         return ApiResponse.ok(data=result, message="收藏成功")
     except AppError as e:
         raise HTTPException(status_code=e.code, detail=e.message)
