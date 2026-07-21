@@ -1,4 +1,8 @@
-"""pytest 共享夹具 — 数据库会话管理。"""
+"""pytest 共享夹具 — 数据库会话管理。
+
+注意：数据清理使用 DELETE 而非 TRUNCATE，且与测试数据在同一事务内。
+事务始终 rollback，因此各 xdist worker 的数据完全隔离，可安全并行。
+"""
 
 from __future__ import annotations
 
@@ -15,10 +19,19 @@ from backend.models.base import Base
 
 logger = logging.getLogger("tests.conftest")
 
+# 按 FK 依赖顺序排列，避免 DELETE 时违反外键约束
+_TABLES_TO_CLEAN = [
+    "favorites",
+    "reviews",
+    "businesses",
+    "app_users",
+    "users",
+]
+
 
 @pytest_asyncio.fixture(scope="function")
 async def create_tables():
-    """确保表存在并清空旧数据。"""
+    """确保表存在（不做数据清理，由 db_session 的 rollback 控制）。"""
     t0 = time.monotonic()
     logger.info("[setup] create engine...")
     engine = create_async_engine(
@@ -31,9 +44,6 @@ async def create_tables():
     async with engine.begin() as conn:
         logger.info("[setup] create_all...")
         await conn.run_sync(Base.metadata.create_all)
-        logger.info("[setup] truncating...")
-        await conn.execute(text("TRUNCATE TABLE businesses CASCADE"))
-        await conn.execute(text("TRUNCATE TABLE reviews CASCADE"))
         logger.info("[setup] ddl done")
     logger.info("[setup] dispose engine...")
     await engine.dispose()
@@ -42,7 +52,12 @@ async def create_tables():
 
 @pytest_asyncio.fixture
 async def db_session(create_tables) -> AsyncGenerator[AsyncSession, None]:
-    """Get db session, rollback after test."""
+    """Get db session, clean data in transaction, rollback after test.
+
+    清理 DELETE 与测试数据在同一个未提交的事务中，
+    最终的 rollback() 会撤销所有更改，不残留任何数据。
+    不同 xdist worker 的事务互相隔离，可安全并行执行。
+    """
     t0 = time.monotonic()
     logger.info("[session] create engine...")
     engine = create_async_engine(
@@ -58,12 +73,14 @@ async def db_session(create_tables) -> AsyncGenerator[AsyncSession, None]:
     )
     logger.info("[session] create session...")
     async with factory() as session:
+        # 清理旧数据 — 与后续测试操作在同一事务内，最终被 rollback
+        for table in _TABLES_TO_CLEAN:
+            await session.execute(text(f"DELETE FROM {table}"))
         logger.info("[session] ready (%.2fs)", time.monotonic() - t0)
         try:
             yield session
-            logger.info("[session] test done, cleanup...")
+            logger.info("[session] test done, rollback...")
         finally:
-            logger.info("[session] rollback...")
             await session.rollback()
             logger.info("[session] close session...")
     logger.info("[session] dispose engine...")
