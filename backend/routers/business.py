@@ -13,7 +13,7 @@ from backend.services.business import BusinessService
 router = APIRouter(prefix="/api/business", tags=["店铺"])
 
 
-@router.post(  # 改为 POST
+@router.post(
     "/list",
     summary="店铺列表",
     response_model=ApiResponse[PaginatedData[BusinessDetail]],
@@ -51,18 +51,38 @@ async def business_list(
     return ApiResponse.ok(data=result)
 
 
-@router.post(  # 改为 POST，路径保持不变
+@router.post(
     "/{business_id}",
     summary="店铺详情",
     response_model=ApiResponse[BusinessDetail],
 )
 async def business_detail(
     business_id: str,
+    source: str = Query(
+        default="db", description="数据来源，可选值：db（数据库）、yelp（Yelp API）"
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[BusinessDetail]:
-    """根据 ID 获取店铺详情（POST 方式，ID 在路径中）。"""
+    """根据 ID 获取店铺详情，支持从数据库或 Yelp API 获取。"""
     service = BusinessService(db)
-    biz = await service.get_by_id(business_id)
-    if not biz:
-        raise HTTPException(status_code=404, detail="店铺不存在")
-    return ApiResponse.ok(data=biz)
+
+    if source == "yelp":
+        # 从 Yelp API 获取
+        from backend.services.yelp import YelpService
+
+        yelp = YelpService()
+        try:
+            yelp_biz = await yelp.get_business(business_id)
+            # 转换为 BusinessDetail
+            from backend.services.yelp_search import YelpSearchService
+
+            biz_detail = YelpSearchService._to_business_detail(yelp_biz)
+            return ApiResponse.ok(data=biz_detail)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Yelp 商家不存在: {str(e)}")
+    else:
+        # 从数据库获取
+        biz = await service.get_by_id(business_id)
+        if not biz:
+            raise HTTPException(status_code=404, detail="店铺不存在")
+        return ApiResponse.ok(data=biz)
