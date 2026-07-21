@@ -86,7 +86,7 @@ def test_build_full_rag_chain_uses_session_id(monkeypatch):
             store[session_id] = InMemoryChatMessageHistory()
         return store[session_id]
 
-    monkeypatch.setattr(chains_mod, "get_history", fake_history)
+    monkeypatch.setattr(chains_mod, "get_history_by_session_key", fake_history)
     monkeypatch.setattr(chains_mod, "get_llm", lambda temperature=0.2: _fake_llm())
     monkeypatch.setattr(
         chains_mod,
@@ -95,11 +95,11 @@ def test_build_full_rag_chain_uses_session_id(monkeypatch):
     )
 
     chain = chains_mod.build_full_rag_chain()
-    cfg: RunnableConfig = {"configurable": {"session_id": "sec-001"}}
+    cfg: RunnableConfig = {"configurable": {"session_id": "u1::sec-001"}}
     out = chain.invoke({"query": "你好"}, config=cfg)
     assert out == "模拟回答"
-    assert "sec-001" in store
-    assert len(store["sec-001"].messages) >= 2
+    assert "u1::sec-001" in store
+    assert len(store["u1::sec-001"].messages) >= 2
 
 
 def test_build_rag_chain_with_history(monkeypatch):
@@ -113,7 +113,7 @@ def test_build_rag_chain_with_history(monkeypatch):
             store[session_id] = InMemoryChatMessageHistory()
         return store[session_id]
 
-    monkeypatch.setattr(chains_mod, "get_history", fake_history)
+    monkeypatch.setattr(chains_mod, "get_history_by_session_key", fake_history)
     monkeypatch.setattr(
         chains_mod, "get_retriever", lambda mode="hybrid", k=10: _FakeRetriever()
     )
@@ -125,7 +125,7 @@ def test_build_rag_chain_with_history(monkeypatch):
     monkeypatch.setattr(chains_mod, "get_llm", lambda temperature=0.2: _fake_llm())
 
     chain = chains_mod.build_rag_chain_with_history(recall_k=3, top_n=1)
-    cfg: RunnableConfig = {"configurable": {"session_id": "hist-1"}}
+    cfg: RunnableConfig = {"configurable": {"session_id": "u2::hist-1"}}
     out = chain.invoke({"query": "继续问"}, config=cfg)
     assert out == "模拟回答"
-    assert "hist-1" in store
+    assert "u2::hist-1" in store

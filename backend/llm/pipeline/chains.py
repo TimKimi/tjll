@@ -12,7 +12,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from backend.llm.client.llm import get_llm
 from backend.llm.pipeline.context import format_docs, retrieve_rerank_context
 from backend.llm.prompts.rag import RAG_PROMPT, RAG_PROMPT_WITH_HISTORY
-from backend.llm.session.history import get_history
+from backend.llm.session.history import get_history_by_session_key
 from backend.rag.retrieve import get_retriever, rerank_docs
 from backend.config import settings
 
@@ -91,7 +91,7 @@ def build_rag_chain_with_history(
 
     return RunnableWithMessageHistory(
         core_chain,
-        get_session_history=get_history,
+        get_session_history=get_history_by_session_key,
         input_messages_key="query",
         history_messages_key="history",
     )
@@ -114,7 +114,7 @@ def build_full_rag_chain():
 
     return RunnableWithMessageHistory(
         core_chain,
-        get_session_history=get_history,
+        get_session_history=get_history_by_session_key,
         input_messages_key="query",
         history_messages_key="history",
     )

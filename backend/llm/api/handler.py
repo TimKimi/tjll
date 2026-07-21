@@ -1,4 +1,4 @@
-"""面向其他后端模块的 ask 门面：只处理 query + section_id。"""
+"""面向其他后端模块的 ask ：只处理 query + section_id。"""
 
 from __future__ import annotations
 
@@ -34,7 +34,10 @@ def ask(req: AskRequest | dict[str, Any]) -> AskResponse:
         len(request.query),
     )
     try:
-        result = answer_query_with_sources(request.query, request.section_id)
+        uuid = (request.uuid or "").strip()
+        if not uuid:
+            raise ValueError("uuid is required")
+        result = answer_query_with_sources(request.query, request.section_id, uuid)
         sources = [
             RagSnippet(
                 content=str(item.get("content") or ""),

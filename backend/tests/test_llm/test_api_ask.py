@@ -12,9 +12,10 @@ from backend.llm.pipeline.rag_pipeline import RagAnswer
 def test_ask_from_dict_maps_fields(monkeypatch):
     import backend.llm.api.handler as handler_mod
 
-    def fake_pipeline(query: str, section_id: str) -> RagAnswer:
+    def fake_pipeline(query: str, section_id: str, uuid: str) -> RagAnswer:
         assert query == "适合约会吗"
         assert section_id == "sec-1"
+        assert uuid == "req-9"
         return RagAnswer(
             answer="适合",
             query=query,
@@ -69,7 +70,7 @@ def test_ask_from_model(monkeypatch):
     monkeypatch.setattr(
         handler_mod,
         "answer_query_with_sources",
-        lambda q, s: RagAnswer(
+        lambda q, s, u: RagAnswer(
             answer="ok",
             query=q,
             section_id=s,
@@ -79,11 +80,27 @@ def test_ask_from_model(monkeypatch):
     )
     from backend.llm.api import ask
 
-    resp = ask(AskRequest(query="hi", section_id="s2", uuid=None))
+    resp = ask(AskRequest(query="hi", section_id="s2", uuid="u2"))
     assert resp.answer == "ok"
-    assert resp.uuid is None
+    assert resp.uuid == "u2"
     assert resp.sources == []
     assert resp.history == []
+
+
+def test_ask_requires_uuid(monkeypatch):
+    import backend.llm.api.handler as handler_mod
+
+    monkeypatch.setattr(
+        handler_mod,
+        "answer_query_with_sources",
+        lambda q, s, u: RagAnswer(
+            answer="ok", query=q, section_id=s, sources=[], history=[]
+        ),
+    )
+    from backend.llm.api import ask
+
+    with pytest.raises(ValueError, match="uuid"):
+        ask(AskRequest(query="hi", section_id="s2", uuid=None))
 
 
 def test_ask_requires_query_and_section_id():
