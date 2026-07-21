@@ -40,7 +40,7 @@
               <i class="fas fa-list"></i>
               用户列表
             </h2>
-            <span class="table-count">共 {{ userList.length }} 位用户</span>
+            <span class="table-count">共 {{ totalUsers }} 位用户</span>
           </div>
           <div class="table-header-right">
             <div class="search-box">
@@ -175,6 +175,7 @@ interface AdminInfo {
 // ============================================
 const isLoading = ref(false)
 const userList = ref<User[]>([])
+const totalUsers = ref(0)
 const adminInfo = ref<AdminInfo>({
   id: 0,
   name: '管理员',
@@ -240,37 +241,35 @@ const formatTime = (isoString: string) => {
 const loadUsers = async () => {
   isLoading.value = true
   try {
-    // ========== 真实 API 调用（取消注释即可使用） ==========
-    // const response = await fetch('/api/admin/users', {
-    //   method: 'GET',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-    //   }
-    // })
-    // if (!response.ok) throw new Error('获取用户列表失败')
-    // const result = await response.json()
-    // if (result.code === 0) {
-    //   userList.value = result.data
-    // } else {
-    //   throw new Error(result.message || '获取用户列表失败')
-    // }
-    // ======================================================
-
-    // ========== 模拟数据（开发测试用，接入 API 后删除） ==========
-    await new Promise(resolve => setTimeout(resolve, 600))
-    userList.value = [
-      {
-        id: 1,
-        username: '张三',
-        avatar: 'https://ui-avatars.com/api/?name=张三&background=3b82f6&color=fff',
-        is_online: true,
-        email: 'zhangsan@example.com',
-        bio: '这个人很懒，什么都没写~',
-        register_time: '2026-07-15T14:30:00Z'
+    const response = await fetch('/api/admin/users', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('admin_token') || ''}`
       }
-    ]
-    // ======================================================
+    })
+    if (!response.ok) throw new Error('获取用户列表失败')
+    const result = await response.json()
+
+    if (result.code === 0) {
+      // 从 data.items 提取列表，并映射字段名
+      const items = result.data.items || []
+      userList.value = items.map((item: any) => ({
+  id: item.id || 0,
+  username: item.username || '用户',      // 与模板一致
+  avatar: item.avatar || '',
+  email: item.email || '',
+  bio: item.bio || '',
+  is_online: item.is_online ?? false,     // 与模板一致
+  register_time: item.register_time || '未知', // 与模板一致
+  role: item.role || 'user',
+}))
+
+      // 保存总数用于显示
+      totalUsers.value = result.data.total || 0
+    } else {
+      throw new Error(result.message || '获取用户列表失败')
+    }
 
     currentPage.value = 1
   } catch (error) {
@@ -338,12 +337,48 @@ const goHome = () => {
 // ============================================
 // 退出登录
 // ============================================
-const handleLogout = () => {
-  if (confirm('确定要退出管理后台吗？')) {
+const handleLogout = async () => {
+  if (!confirm('确定要退出登录吗？')) return
+
+  // 防止重复点击
+  const logoutBtn = document.querySelector('.logout-btn') as HTMLButtonElement
+  if (logoutBtn) logoutBtn.disabled = true
+
+  try {
+    const token = localStorage.getItem('admin_token')
+    const response = await fetch('http://localhost:8000/api/auth/logout', {
+      method: 'POST', // 根据 RESTful 规范，退出通常用 POST
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || ''}`
+      }
+      // 如果后端需要传递其他数据，可在此添加 body
+    })
+
+    // 如果后端返回非 2xx，依然可以尝试清除本地（但最好根据业务决定）
+    if (!response.ok) {
+      console.warn('退出接口响应异常，仍清除本地登录态')
+    }
+
+    // 无论接口成功与否，都清除本地存储（但最好接口成功后再清除，这里我建议接口成功后清除）
+    // 如果你希望接口成功后再清除，可将清除代码放在 response.ok 判断内
+    // 但为了用户体验，一般不管接口是否成功，都清除本地
     localStorage.removeItem('admin_token')
-localStorage.removeItem('admin_userInfo')
-localStorage.removeItem('admin_role')
+    localStorage.removeItem('admin_userInfo')
+    localStorage.removeItem('admin_role')
+    // 如果还有其他业务相关的本地存储，一并清除
+
+    // 跳转到登录页
     router.push('/admin/login')
+  } catch (error) {
+    console.error('退出请求失败:', error)
+    // 即使请求失败，也清除本地，以免用户卡住
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_userInfo')
+    localStorage.removeItem('admin_role')
+    router.push('/admin/login')
+  } finally {
+    if (logoutBtn) logoutBtn.disabled = false
   }
 }
 

@@ -203,16 +203,16 @@
   <!-- 收藏列表 -->
   <div v-else class="favorites-grid">
     <div
-      v-for="shop in favoritesList"
-      :key="shop.id"
-      class="favorite-card"
-      @click="goToRestaurant(shop.id)"
-    >
+  v-for="shop in favoritesList"
+  :key="shop.id"
+  class="favorite-card"
+  @click="goToRestaurant(shop.shopId)"
+>
       <div class="favorite-img">
         <img :src="shop.image" :alt="shop.name" />
-        <button class="favorite-remove" @click.stop="removeFavorite(shop.id)">
-          <i class="fas fa-times"></i>
-        </button>
+        <button class="favorite-remove" @click.stop="removeFavorite(shop.shopId)">
+  <i class="fas fa-times"></i>
+</button>
       </div>
       <div class="favorite-info">
         <h4>{{ shop.name }}</h4>
@@ -306,15 +306,17 @@
     active?: boolean
   }
 
-  // 收藏店铺类型
+// 收藏店铺类型（与后端字段对齐）
 interface FavoriteShop {
-  id: number
+  id: string | number      // 收藏记录ID（用于 key）
+  shopId: string | number  // 店铺ID（用于跳转和删除）
   name: string
-  image: string
+  image: string            // 映射自 image_url
   rating: number
-  price: number
+  price: number            // 字符串转数字
   address: string
   category?: string
+  createdAt?: string
 }
 
   // ============================================
@@ -625,14 +627,50 @@ const isLoadingFavorites = ref(false)
   // ============================================
   // 退出登录
   // ============================================
-  const handleLogout = () => {
-    if (confirm('确定要退出登录吗？')) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('userInfo')
-      localStorage.removeItem('favorites')
-      router.push('/')
+const handleLogout = async () => {
+  if (!confirm('确定要退出登录吗？')) return
+
+  // 防止重复点击
+  const logoutBtn = document.querySelector('.logout-btn') as HTMLButtonElement
+  if (logoutBtn) logoutBtn.disabled = true
+
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch('http://localhost:8000/api/auth/logout', {
+      method: 'POST', // 根据 RESTful 规范，退出通常用 POST
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token || ''}`
+      }
+      // 如果后端需要传递其他数据，可在此添加 body
+    })
+
+    // 如果后端返回非 2xx，依然可以尝试清除本地（但最好根据业务决定）
+    if (!response.ok) {
+      console.warn('退出接口响应异常，仍清除本地登录态')
     }
+
+    // 无论接口成功与否，都清除本地存储（但最好接口成功后再清除，这里我建议接口成功后清除）
+    // 如果你希望接口成功后再清除，可将清除代码放在 response.ok 判断内
+    // 但为了用户体验，一般不管接口是否成功，都清除本地
+    localStorage.removeItem('token')
+    localStorage.removeItem('userInfo')
+    localStorage.removeItem('role')
+    // 如果还有其他业务相关的本地存储，一并清除
+
+    // 跳转到登录页
+    router.push('/login')
+  } catch (error) {
+    console.error('退出请求失败:', error)
+    // 即使请求失败，也清除本地，以免用户卡住
+    localStorage.removeItem('token')
+    localStorage.removeItem('userInfo')
+    localStorage.removeItem('role')
+    router.push('/login')
+  } finally {
+    if (logoutBtn) logoutBtn.disabled = false
   }
+}
 
   // ============================================
 // 收藏功能
@@ -651,11 +689,25 @@ const loadFavorites = async (): Promise<void> => {
     })
 
     if (response.ok) {
-      const data = await response.json()
-      favoritesList.value = data.data || data || []
+      const result = await response.json()
+      // 从 data.items 提取列表
+      const items = result.data?.items || []
+      // 映射字段
+      favoritesList.value = items.map((item: any) => ({
+        id: item.id,
+        shopId: item.shop_id,
+        name: item.name || '未知店铺',
+        image: item.image_url || '',
+        rating: item.rating || 0,
+        price: Number(item.price) || 0,
+        address: item.address || '',
+        category: item.category || '',
+        createdAt: item.created_at,
+      }))
+      // 更新本地缓存（可选）
+      localStorage.setItem('favorites', JSON.stringify(favoritesList.value))
     } else {
       console.warn('获取收藏列表失败')
-      // 从本地缓存加载
       loadFavoritesFromCache()
     }
   } catch (error) {
@@ -683,13 +735,15 @@ const loadFavoritesFromCache = (): void => {
   favoritesList.value = []
 }
 
-// 移除收藏
-const removeFavorite = async (shopId: number): Promise<void> => {
-  const shop = favoritesList.value.find(s => s.id === shopId)
+// 移除收藏（参数为店铺ID，即 shop_id）
+const removeFavorite = async (shopId: string | number): Promise<void> => {
+  // 根据店铺ID找到对应的收藏项（用于显示名称）
+  const shop = favoritesList.value.find(s => s.shopId === shopId)
   if (!shop) return
 
   if (confirm(`确定要移除"${shop.name}"的收藏吗？`)) {
     try {
+      // 删除接口使用 shop_id（店铺ID）
       const response = await fetch(`/api/favorites/${shopId}`, {
         method: 'DELETE',
         headers: {
@@ -698,8 +752,8 @@ const removeFavorite = async (shopId: number): Promise<void> => {
       })
 
       if (response.ok || response.status === 204) {
-        // 从列表中移除
-        favoritesList.value = favoritesList.value.filter(s => s.id !== shopId)
+        // 从列表中移除（根据 shopId 匹配）
+        favoritesList.value = favoritesList.value.filter(s => s.shopId !== shopId)
         // 更新缓存
         localStorage.setItem('favorites', JSON.stringify(favoritesList.value))
       } else {
@@ -713,7 +767,7 @@ const removeFavorite = async (shopId: number): Promise<void> => {
 }
 
 // 跳转到餐厅详情页
-const goToRestaurant = (shopId: number): void => {
+const goToRestaurant = (shopId: string | number ): void => {
   router.push(`/restaurant/${shopId}`)
 }
   </script>
