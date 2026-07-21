@@ -2,7 +2,7 @@
 
 > **版本**: v0.2
 > **对齐说明**: 本文档基于前端需求，以后端（FastAPI + SQLAlchemy）的现有数据模型和接口风格为准重新整理。
-> **响应格式**: 使用后端统一的 `ApiResponse[T]` 结构（`code: 0` 表示成功），分页使用 `PaginatedData[T]`。
+> **响应格式**: 使用后端统一的 `ApiResponse[T]` 结构（`code: 200` 表示成功），分页使用 `PaginatedData[T]`。
 > **ID 类型**: 所有 business_id / review_id 均为字符串（Yelp 22 字符 ID），非自增整数。
 
 ---
@@ -11,15 +11,15 @@
 
 - [一、通用约定](#一通用约定)
 - [二、开发分支规划](#二开发分支规划)
-- [三、认证模块（Auth）—— ✅ 已完成](#三认证模块auth-已完成)
-- [四、用户模块（User）—— ✅ 已完成](#四用户模块user-已完成)
-- [五、商家模块（Business）—— 已有 + 增强](#五商家模块business已有--增强)
-- [六、评论模块（Review）—— 已有 + 改造](#六评论模块review已有--改造)
-- [七、对话模块（Conversation）—— 待开发](#七对话模块conversation待开发)
-- [八、AI 模块（AI）—— 已有 + 增强](#八ai模块ai已有--增强)
-- [九、收藏模块（Favorite）—— ✅ 已完成](#九收藏模块favorite-已完成)
-- [十、管理后台模块（Admin）—— 🟡 开发中](#十管理后台模块admin-开发中)
-- [十一、健康检查（Health）—— 已有](#十一健康检查health已有)
+- [三、认证模块（Auth）](#三认证模块auth)
+- [四、用户模块（User）](#四用户模块user)
+- [五、商家模块（Business）](#五商家模块business)
+- [六、评论模块（Review）](#六评论模块review)
+- [七、对话模块（Conversation）](#七对话模块conversation)
+- [八、AI 模块（AI）](#八ai模块ai)
+- [九、收藏模块（Favorite）](#九收藏模块favorite)
+- [十、管理后台模块（Admin）](#十管理后台模块admin)
+- [十一、健康检查（Health）](#十一健康检查health)
 - [十二、数据模型对齐](#十二数据模型对齐)
 - [十三、错误码汇总](#十三错误码汇总)
 
@@ -42,7 +42,7 @@
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "success",
   "data": {}
 }
@@ -50,12 +50,9 @@
 
 | 字段    | 类型   | 说明                    |
 |---------|--------|------------------------|
-| code    | int    | 0 成功，非 0 表示错误   |
+| code    | int    | 200 成功，非 200 表示错误 |
 | message | string | 提示信息                |
 | data    | T/null | 响应数据，失败时为 null |
-
-> **与前端文档差异**: 后端成功 `code=0`，前端原文要求 `code=200`。
-> **建议**: 前端按 `code === 0` 判断成功；如坚持 `code=200` 需在 `ApiResponse` 层做映射。
 
 ### 1.3 分页响应格式
 
@@ -63,7 +60,7 @@
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "success",
   "data": {
     "items": [],
@@ -98,27 +95,24 @@
 
 ## 二、开发分支规划
 
-按照项目 [Git Flow 简化版](../README.md#分支策略git-flow-简化版) 的分支策略，将 API 开发划分为以下独立分支：
+按照项目 [Git Flow 简化版](../README.md#分支策略git-flow-简化版) 的分支策略，API 开发划分以下分支：
 
-| # | 分支名 | 内容 | 依赖 | 工作量 | 状态 |
-|---|--------|------|------|--------|------|
-| 1 | `feat/user-auth` | 认证模块（注册/登录/退出）+ 用户模块（信息/头像上传） | 无（新建表） | 🔴🔴🔴 | ✅ 已完成 |
-| 2 | `feat/conversation` | 对话 CRUD + 消息管理 + 对接 AI Chat | `feat/user-auth` | 🔴🔴 | 📋 待开发 |
-| 3 | `feat/favorites` | 收藏模块（增/删/查） | `feat/user-auth` | 🟢 | ✅ 已完成 |
-| 4 | `feat/admin` | 管理员登录 + 用户管理列表 | `feat/user-auth` | 🟡 | 🟡 开发中 |
-| 5 | `feat/review-api` | 评论路由改造：改 POST 为 GET + 路径参数 | 无 | 🟡 | 📋 待开发 |
-| 6 | `feat/ai-response-shop` | AI Chat 响应增加推荐卡片 Shop 对象 | `feat/conversation` | 🔴 | 📋 待开发 |
-| 7 | `feat/avatar-upload` | 头像上传接口（文件存储 + URL 回显） | `feat/user-auth` | 🟡 | 📋 待开发 |
-
-**建议开发顺序**: `1 ✅ → 2 → 3 ✅ → 4 🟡`（可并行 `5、7`）→ `6`
+| 分支 | 内容 | 依赖 |
+|------|------|------|
+| `feat/user-auth` | 认证模块 + 用户模块 | 无（新建表） |
+| `feat/conversation` | 对话 CRUD + AI Chat 集成 | `feat/user-auth` |
+| `feat/favorites` | 收藏模块 | `feat/user-auth` |
+| `feat/admin` | 管理后台 | `feat/user-auth` |
+| `feat/review-api` | 评论路由改造 | 无 |
+| `feat/ai-response-shop` | AI Chat 推荐卡片 | `feat/conversation` |
+| `feat/avatar-upload` | 头像上传 | `feat/user-auth` |
 
 ---
 
-## 三、认证模块（Auth）—— ✅ 已完成
+## 三、认证模块（Auth）
 
 > **分支**: `feat/user-auth`
-> **状态**: ✅ 已合并至 `develop`
-> **说明**: 已完成注册、登录、管理员登录、退出登录接口。使用 `app_users` 表（应用用户）、JWT 签发与验证中间件、密码哈希（bcrypt）。
+> **说明**: 注册、登录、管理员登录、退出登录。使用 `app_users` 表、JWT 签发与验证、密码哈希（bcrypt）。
 
 ### 3.1 用户注册
 
@@ -138,7 +132,7 @@ POST /api/auth/register
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "注册成功",
   "data": {
     "id": "u_abc123",
@@ -153,7 +147,7 @@ POST /api/auth/register
 
 | code | message              |
 |------|----------------------|
-| 400  | 用户名已存在          |
+| 409  | 用户名已存在          |
 | 400  | 用户名格式错误        |
 | 400  | 密码长度至少为 8 位   |
 
@@ -179,7 +173,7 @@ POST /api/auth/login
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "登录成功",
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIs...",
@@ -202,7 +196,6 @@ POST /api/auth/login
 | code | message                  |
 |------|--------------------------|
 | 401  | 用户名或密码错误          |
-| 404  | 用户不存在                |
 
 > **字段差异**: `username` 而非前端文档的 `name`，`is_online` 而非 `isOnline`，遵循后端 `snake_case` 风格。
 
@@ -220,7 +213,7 @@ POST /api/auth/admin/login
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "登录成功",
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIs...",
@@ -254,7 +247,7 @@ POST /api/auth/logout
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "退出成功",
   "data": null
 }
@@ -264,11 +257,10 @@ POST /api/auth/logout
 
 ---
 
-## 四、用户模块（User）—— ✅ 已完成
+## 四、用户模块（User）
 
 > **分支**: `feat/user-auth`
-> **状态**: ✅ 已合并至 `develop`
-> **说明**: 已完成用户信息获取、更新接口。依赖认证模块的 JWT 中间件。
+> **说明**: 用户信息获取、更新。依赖认证模块的 JWT 中间件。
 
 ### 4.1 获取用户信息
 
@@ -282,7 +274,7 @@ GET /api/user/profile
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "id": "u_abc123",
     "username": "张三",
@@ -323,7 +315,7 @@ PUT /api/user/profile
 
 ---
 
-### 4.3 上传头像 —— 🟡 开发中
+### 4.3 上传头像
 
 > **分支**: `feat/avatar-upload`
 
@@ -344,7 +336,7 @@ POST /api/user/avatar
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "上传成功",
   "data": {
     "avatar": "https://example.com/uploads/avatars/u_abc123.jpg"
@@ -363,10 +355,10 @@ POST /api/user/avatar
 
 ---
 
-## 五、商家模块（Business）—— 已有 + 增强
+## 五、商家模块（Business）
 
 > **分支**: 无需新建分支，已有实现（`backend/routers/business.py`）
-> **说明**: 后端使用 Business 模型，数据来自 Yelp 学术数据集。
+> **说明**: 使用 Business 模型，数据来自 Yelp 学术数据集。
 > **前端映射**: 前端文档中的"餐厅"（Restaurant）和"推荐卡片"（Shop）均对应后端 Business 模型。
 
 ### 5.1 商家列表（已有）
@@ -394,7 +386,7 @@ GET /api/business/list
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "items": [
       {
@@ -468,10 +460,10 @@ GET /api/business/{business_id}
 
 ---
 
-## 六、评论模块（Review）—— 已有 + 改造
+## 六、评论模块（Review）
 
 > **分支**: `feat/review-api`
-> **说明**: 后端已有评论接口，但使用 POST 方法。建议按 RESTful 规范改造为 GET + 路径参数，以匹配前端 `GET /api/restaurants/{id}/reviews` 的设计。
+> **说明**: 评论接口目前使用 POST 方法。建议按 RESTful 规范改造为 GET + 路径参数。
 
 ### 6.1 商家评论列表（改造建议）
 
@@ -500,7 +492,7 @@ GET /api/business/{business_id}/reviews
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "items": [
       {
@@ -544,10 +536,10 @@ POST /api/review/{review_id}
 
 ---
 
-## 七、对话模块（Conversation）—— 待开发
+## 七、对话模块（Conversation）
 
 > **分支**: `feat/conversation`
-> **说明**: 后端尚无论对话管理，需新增 `conversations` 表和 `messages` 表，支持对话 CRUD 与 AI 对话集成。
+> **说明**: 新增 `conversations` 表和 `messages` 表，支持对话 CRUD 与 AI 对话集成。
 
 ### 7.1 获取对话列表
 
@@ -568,7 +560,7 @@ GET /api/conversations
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "items": [
       {
@@ -601,7 +593,7 @@ GET /api/conversations/{conversation_id}
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "id": "conv_001",
     "title": "推荐附近好吃的川菜",
@@ -649,7 +641,7 @@ POST /api/conversations
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "id": "conv_003",
     "title": "美食探索",
@@ -690,7 +682,7 @@ DELETE /api/conversations
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "清空成功",
   "data": null
 }
@@ -698,10 +690,10 @@ DELETE /api/conversations
 
 ---
 
-## 八、AI 模块（AI）—— 已有 + 增强
+## 八、AI 模块（AI）
 
 > **分支**: `feat/conversation`（对话集成）、`feat/ai-response-shop`（推荐卡片）
-> **说明**: 后端已有 `/api/ai/*` 四项接口，但前端需要的是整合了对话管理和推荐卡片的统一聊天接口。
+> **说明**: 已有 `/api/ai/*` 四项接口。
 
 ### 8.1 AI 对话（已有，需集成对话模块）
 
@@ -723,7 +715,7 @@ POST /api/ai/chat
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "reply": "根据你的需求，我为你推荐几家不错的餐厅：...",
     "conversation_id": "conv_123"
@@ -737,7 +729,7 @@ POST /api/ai/chat
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "reply": "根据您的需求，我为您推荐以下餐厅：",
     "conversation_id": "conv_001",
@@ -792,7 +784,7 @@ POST /api/ai/recommend
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "recommendations": [
       {
@@ -826,7 +818,7 @@ POST /api/ai/review-summary
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "business_id": "biz_001",
     "business_name": "蜀九香火锅",
@@ -860,7 +852,7 @@ POST /api/ai/generate-review
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "content": "⭐ 5星 非常棒！\n\n味道、服务都很满意..."
   }
@@ -871,11 +863,10 @@ POST /api/ai/generate-review
 
 ---
 
-## 九、收藏模块（Favorite）—— ✅ 已完成
+## 九、收藏模块（Favorite）
 
 > **分支**: `feat/favorites`
-> **状态**: ✅ 已合并至 `develop`
-> **说明**: 后端收藏功能已完成。新增 `favorites` 表（ORM 模型）、Pydantic Schema、Service 业务逻辑、Router API 端点，含完整单元测试套件。
+> **说明**: `favorites` 表 + CRUD 接口 + 单元测试。
 
 ### 9.1 获取收藏列表
 
@@ -896,7 +887,7 @@ GET /api/favorites
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "items": [
       {
@@ -945,7 +936,7 @@ POST /api/favorites
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "收藏成功",
   "data": {
     "id": "fav_001",
@@ -982,7 +973,7 @@ DELETE /api/favorites/{shop_id}
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "移除收藏成功",
   "data": null
 }
@@ -996,11 +987,10 @@ DELETE /api/favorites/{shop_id}
 
 ---
 
-## 十、管理后台模块（Admin）—— 🟡 开发中
+## 十、管理后台模块（Admin）
 
 > **分支**: `feat/admin`
-> **说明**: 依赖认证模块，仅 `role=admin` 的用户可访问。
-> **状态**: 🟡 后端接口实现中
+> **说明**: 仅 `role=admin` 的用户可访问。
 
 ### 10.1 获取管理员信息
 
@@ -1014,7 +1004,7 @@ GET /api/admin/profile
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "id": "u_admin",
     "username": "管理员",
@@ -1046,7 +1036,7 @@ GET /api/admin/users
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "items": [
       {
@@ -1078,7 +1068,7 @@ GET /api/admin/users
 
 ---
 
-## 十一、健康检查（Health）—— 已有
+## 十一、健康检查（Health）
 
 ```
 GET /health
@@ -1090,7 +1080,7 @@ GET /health
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "success",
   "data": {
     "status": "ok",
@@ -1149,7 +1139,7 @@ GET /health
 
 | code | 说明              |
 |------|------------------|
-| 0    | 成功              |
+| 200  | 成功              |
 | 400  | 请求参数错误       |
 | 401  | 未授权/认证失败    |
 | 403  | 权限不足           |
@@ -1157,4 +1147,4 @@ GET /health
 | 409  | 资源冲突（如重复收藏）|
 | 500  | 服务器内部错误     |
 
-> **与前端差异**: 前端文档中 `200` = 成功、`201` = 创建成功。后端统一使用 `code: 0` 表示成功，HTTP 状态码保持语义（200 正常、201 创建、204 删除等）。
+> **与前端差异**: 前端文档中 `200` = 成功、`201` = 创建成功。后端统一使用 `code: 200` 表示成功，HTTP 状态码保持语义（200 正常、201 创建、204 删除等）。

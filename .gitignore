@@ -72,8 +72,11 @@ htmlcov/
 backend/.env
 backend/.env.*
 
-# Model weights under backend/rag: keep placeholders only
-backend/rag/models/**
+# Runtime logs (never commit, regenerated at runtime)
+    logs/
+
+    # Model weights under backend/rag: keep placeholders only
+    backend/rag/models/**
 !backend/rag/models/**/
 !backend/rag/models/**/.gitkeep
 !backend/rag/models/**/README.md

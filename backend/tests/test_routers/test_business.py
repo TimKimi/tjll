@@ -52,7 +52,7 @@ class TestBusinessRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["total"] == 1
         assert len(data["data"]["items"]) == 1
         call_args = mock_service.list_businesses.call_args[0][0]
@@ -117,7 +117,7 @@ class TestBusinessRoutes:
         response = client.post("/api/business/b1")
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["id"] == "b1"
         mock_service.get_by_id.assert_called_once_with("b1")
 

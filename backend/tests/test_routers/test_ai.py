@@ -28,7 +28,7 @@ class TestAIRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["reply"] == "测试回复"
         mock_instance.chat.assert_called_once()
 
@@ -49,7 +49,7 @@ class TestAIRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["summary"] == "总结"
         mock_instance.recommend.assert_called_once()
 

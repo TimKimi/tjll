@@ -12,7 +12,7 @@ from PIL.Image import Resampling
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.config import PROJECT_ROOT
+from backend.config.paths import PROJECT_ROOT
 from backend.core.exceptions import AppError
 from backend.models.app_user import AppUser
 from backend.schemas.user import AvatarResponse

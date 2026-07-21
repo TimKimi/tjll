@@ -33,7 +33,7 @@ class TestAvatarRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["message"] == "上传成功"
         assert data["data"]["avatar"].endswith(".jpg")
 

@@ -31,7 +31,7 @@ class TestFavoriteRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["items"] == []
         assert data["data"]["total"] == 0
 
@@ -66,7 +66,7 @@ class TestFavoriteRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert len(data["data"]["items"]) == 1
         assert data["data"]["items"][0]["shop_id"] == "biz_001"
         assert data["data"]["items"][0]["name"] == "蜀九香火锅"
@@ -120,7 +120,7 @@ class TestFavoriteRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["shop_id"] == "biz_001"
         assert data["message"] == "收藏成功"
 
@@ -167,7 +167,7 @@ class TestFavoriteRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["message"] == "移除收藏成功"
 
     @patch("backend.routers.favorite.FavoriteService")

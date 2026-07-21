@@ -13,20 +13,20 @@ class TestApiResponse:
 
     def test_ok_without_data(self):
         resp = ApiResponse.ok()
-        assert resp.code == 0
+        assert resp.code == 200
         assert resp.message == "success"
         assert resp.data is None
 
     def test_ok_with_data(self):
         data = {"key": "value"}
         resp = ApiResponse.ok(data=data)
-        assert resp.code == 0
+        assert resp.code == 200
         assert resp.message == "success"
         assert resp.data == data
 
     def test_ok_with_custom_message(self):
         resp = ApiResponse.ok(message="自定义成功")
-        assert resp.code == 0
+        assert resp.code == 200
         assert resp.message == "自定义成功"
         assert resp.data is None
 

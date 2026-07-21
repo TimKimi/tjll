@@ -166,7 +166,8 @@ class TestLogin:
         req = LoginRequest(username="no_one", password="pass1234")
         with pytest.raises(AppError) as exc:
             await service.login(req)
-        assert "不存在" in str(exc.value)
+        assert "用户名或密码错误" in str(exc.value)
+        assert exc.value.code == 401
 
     @pytest.mark.asyncio
     async def test_login_updates_is_online(self, mock_db):
