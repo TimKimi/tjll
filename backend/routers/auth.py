@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.dependencies import get_current_user
 from backend.core.exceptions import AppError
 from backend.database import get_db
-from backend.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from backend.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+)
 from backend.schemas.common import ApiResponse
 from backend.services.auth import AuthService
 
@@ -85,3 +91,36 @@ async def logout(
     service = AuthService(db)
     await service.logout(user["sub"])
     return ApiResponse.ok(message="退出成功")
+
+
+@router.post(
+    "/forgot-password",
+    summary="忘记密码",
+    response_model=ApiResponse[None],
+)
+async def forgot_password(
+    req: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[None]:
+    """发送密码重置邮件到注册邮箱。"""
+    service = AuthService(db)
+    await service.forgot_password(req.email)
+    return ApiResponse.ok(message="如果该邮箱已注册，重置邮件已发送")
+
+
+@router.post(
+    "/reset-password",
+    summary="重置密码",
+    response_model=ApiResponse[None],
+)
+async def reset_password(
+    req: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[None]:
+    """使用重置令牌设置新密码。"""
+    service = AuthService(db)
+    try:
+        await service.reset_password(req.token, req.password)
+        return ApiResponse.ok(message="密码重置成功")
+    except AppError as e:
+        raise HTTPException(status_code=e.code, detail=e.message)

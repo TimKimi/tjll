@@ -232,3 +232,85 @@ class TestLogout:
         service = AuthService(mock_db)
         await service.logout("no_such_user")
         # should not raise
+
+
+class TestForgotPassword:
+    """测试密码找回。"""
+
+    @pytest.mark.asyncio
+    async def test_forgot_password_existing_user(self, mock_db):
+        """存在的邮箱应发送重置邮件（不抛出异常）。"""
+        from backend.services.auth import AuthService
+
+        mock_user = MagicMock()
+        mock_user.id = "u_abc"
+        mock_user.username = "test_user"
+        mock_user.email = "user@example.com"
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute.return_value = mock_result
+
+        service = AuthService(mock_db)
+        await service.forgot_password("user@example.com")
+        assert mock_user.reset_token is not None
+        assert mock_user.reset_token_exp is not None
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_forgot_password_nonexistent_email(self, mock_db):
+        """不存在的邮箱不应抛出异常（防止枚举）。"""
+        from backend.services.auth import AuthService
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+
+        service = AuthService(mock_db)
+        await service.forgot_password("no@one.com")
+        # should not raise
+
+
+class TestResetPassword:
+    """测试密码重置。"""
+
+    @pytest.mark.asyncio
+    async def test_reset_password_success(self, mock_db):
+        """有效的令牌应能重置密码。"""
+        from datetime import datetime, timedelta, timezone
+        from backend.services.auth import AuthService, _hash_token
+
+        raw_token = "valid_reset_token_123"
+        mock_user = MagicMock()
+        mock_user.id = "u_abc"
+        mock_user.reset_token = _hash_token(raw_token)
+        mock_user.reset_token_exp = datetime.now(timezone.utc).replace(
+            tzinfo=None
+        ) + timedelta(hours=1)
+        mock_user.password_hash = "old_hash"
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute.return_value = mock_result
+
+        service = AuthService(mock_db)
+        await service.reset_password(raw_token, "new_password_123")
+
+        assert mock_user.password_hash != "old_hash"
+        assert mock_user.reset_token is None
+        assert mock_user.reset_token_exp is None
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_reset_password_invalid_token(self, mock_db):
+        """无效的令牌应抛出异常。"""
+        from backend.core.exceptions import AppError
+        from backend.services.auth import AuthService
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+
+        service = AuthService(mock_db)
+        with pytest.raises(AppError, match="重置链接无效"):
+            await service.reset_password("bad_token", "new_pw")

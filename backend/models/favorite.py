@@ -29,7 +29,12 @@ class Favorite(Base):
     shop_id: Mapped[str] = mapped_column(
         String(22),
         index=True,
-        comment="商家 ID（对应 businesses.id）",
+        comment="商家 ID（businesses.id 或 Yelp API ID）",
+    )
+    source: Mapped[str] = mapped_column(
+        String(8),
+        default="db",
+        comment="数据来源：db / yelp",
     )
 
     # ── 元信息 ──

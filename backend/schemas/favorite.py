@@ -11,6 +11,7 @@ class AddFavoriteRequest(BaseModel):
     """添加收藏请求。"""
 
     shop_id: str = Field(..., min_length=1, description="商家 ID")
+    source: str = Field(default="db", description="数据来源：db / yelp")
 
 
 class FavoriteItem(BaseModel):
@@ -18,6 +19,7 @@ class FavoriteItem(BaseModel):
 
     id: str = Field(..., description="收藏记录 ID")
     shop_id: str = Field(..., description="商家 ID")
+    source: str = Field(default="db", description="数据来源：db / yelp")
     name: str = Field(default="", description="商家名称")
     image_url: str = Field(default="", description="商家封面图 URL")
     rating: float = Field(default=0.0, description="评分")
