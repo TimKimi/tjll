@@ -198,10 +198,7 @@ const sendQuery = () => {
 // 快捷入口点击 - 直接跳转到聊天并发送消息
 // ============================================
 const goToChatWithQuery = (query: string) => {
-  router.push({
-    path: '/chat',
-    query: { q: query }
-  })
+  router.push('/restaurants')
 }
 
 // ============================================
