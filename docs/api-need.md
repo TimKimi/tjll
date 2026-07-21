@@ -104,7 +104,7 @@
 |---|--------|------|------|--------|
 | 1 | `feat/user-auth` | 认证模块（注册/登录/退出）+ 用户模块（信息/头像上传） | 无（新建表） | 🔴🔴🔴 |
 | 2 | `feat/conversation` | 对话 CRUD + 消息管理 + 对接 AI Chat | `feat/user-auth` | 🔴🔴 |
-| 3 | `feat/favorites` | 收藏模块（增/删/查） | `feat/user-auth` | 🟡 |
+| 3 | `feat/favorites` | 收藏模块（增/删/查） | `feat/user-auth` | 🟢 已完成 |
 | 4 | `feat/admin` | 管理员登录 + 用户管理列表 | `feat/user-auth` | 🟡 |
 | 5 | `feat/review-api` | 评论路由改造：改 POST 为 GET + 路径参数 | 无 | 🟡 |
 | 6 | `feat/ai-response-shop` | AI Chat 响应增加推荐卡片 Shop 对象 | `feat/conversation` | 🔴 |
@@ -867,10 +867,10 @@ POST /api/ai/generate-review
 
 ---
 
-## 九、收藏模块（Favorite）—— 待开发
+## 九、收藏模块（Favorite）—— ✅ 已完成
 
 > **分支**: `feat/favorites`
-> **说明**: 后端尚无收藏功能，需新增 `favorites` 表，关联用户和商家。
+> **说明**: 后端收藏功能已完成。新增 `favorites` 表（ORM 模型）、Pydantic Schema、Service 业务逻辑、Router API 端点，含完整单元测试套件。
 
 ### 9.1 获取收藏列表
 
