@@ -1,10 +1,8 @@
-"""LLM 模块：客户端封装 + LangGraph ask 门面 + RAG 管线。
+"""LLM 模块。
 
-其他后端模块推荐只使用::
+协作入口::
 
     from backend.llm import ask, AskRequest, AskResponse
-
-不要直接依赖 ``backend.rag``。
 """
 
 from backend.llm.client.llm import (
@@ -27,7 +25,7 @@ from backend.llm.pipeline.rag_pipeline import (
 from backend.llm.schemas import AskRequest, AskResponse, HistoryMessage, RagSnippet
 
 __all__ = [
-    # 推荐：协作方门面（LangGraph 流式 ask）
+    # 门面
     "AskRequest",
     "AskResponse",
     "AskStream",
@@ -35,7 +33,7 @@ __all__ = [
     "RagSnippet",
     "ask",
     "release_ask_session",
-    # 进阶 / 内部
+    # 管线 / 客户端
     "RagAnswer",
     "answer_query",
     "answer_query_with_sources",

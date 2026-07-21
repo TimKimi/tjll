@@ -1,11 +1,4 @@
-"""LangGraph ask 子包。
-
-推荐导入::
-
-    from backend.llm import ask, AskRequest, AskResponse
-    # 或
-    from backend.llm.graph import ask, release_ask_session
-"""
+"""LangGraph ask 子包。"""
 
 from __future__ import annotations
 

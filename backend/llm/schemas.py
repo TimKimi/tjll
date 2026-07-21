@@ -1,4 +1,4 @@
-"""协作方请求/响应契约（同进程调用，非 HTTP）。"""
+"""ask 请求/响应模型。"""
 
 from __future__ import annotations
 
@@ -37,10 +37,7 @@ class HistoryMessage(BaseModel):
 
 
 class AskRequest(BaseModel):
-    """其他后端模块调用 ask() 的入参。
-
-    本阶段仅处理 query + section_id + uuid；附件字段可传但忽略。
-    """
+    """ask() 入参。附件字段可传，当前忽略。"""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -63,7 +60,7 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """ask() 返回给其他后端模块的结果。"""
+    """ask() 响应。"""
 
     model_config = ConfigDict(extra="ignore")
 

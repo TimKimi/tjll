@@ -1,4 +1,4 @@
-"""对外一条龙：query + section_id → 回答。"""
+"""RAG pipeline：query / uuid / section_id → 回答。"""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ logger = logging.getLogger("backend.llm.pipeline.rag_pipeline")
 
 @dataclass
 class RagAnswer:
-    """带来源与历史快照的 RAG 回答。"""
+    """含 sources 与 history 快照的回答。"""
 
     answer: str
     query: str
@@ -34,7 +34,7 @@ class RagAnswer:
 
 
 def _session_config(uuid: str, section_id: str) -> dict:
-    """uuid+section_id → LangChain configurable.session_id。"""
+    """构造 LangChain session_id 配置。"""
     return {"configurable": {"session_id": make_history_session_id(uuid, section_id)}}
 
 
@@ -51,7 +51,7 @@ def _sources_from_docs(docs: list[Document]) -> list[dict]:
 
 
 def _history_snapshot(messages: Sequence[BaseMessage]) -> list[dict]:
-    """本轮写入前的历史 → [{role, content}, ...]。"""
+    """消息列表转为 role/content 快照。"""
     out: list[dict] = []
     for msg in messages:
         content = str(getattr(msg, "content", "") or "")
@@ -72,7 +72,7 @@ def _json_log(payload: Any) -> str:
 
 
 def answer_query(query: str, section_id: str, uuid: str) -> str:
-    """非流式完整 RAG 回答（重述 + 检索 + rerank + Redis 历史）。"""
+    """非流式回答。"""
     setup_app_logging()
     logger.info(
         "answer_query uuid=%s section_id=%s query_len=%d",
@@ -89,7 +89,7 @@ def answer_query(query: str, section_id: str, uuid: str) -> str:
 
 
 def stream_answer_query(query: str, section_id: str, uuid: str) -> Iterator[str]:
-    """流式完整 RAG 回答。"""
+    """流式回答。"""
     setup_app_logging()
     logger.info(
         "stream_answer_query uuid=%s section_id=%s query_len=%d",
@@ -110,7 +110,7 @@ def stream_answer_query(query: str, section_id: str, uuid: str) -> Iterator[str]
 
 
 def answer_query_with_sources(query: str, section_id: str, uuid: str) -> RagAnswer:
-    """完整 RAG 回答，并返回精排后的资料片段 + 写入前历史快照。"""
+    """非流式回答，附带 sources 与写入前 history。"""
     setup_app_logging()
     logger.info(
         "answer_query_with_sources start uuid=%s section_id=%s query=%r",

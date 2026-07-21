@@ -36,7 +36,7 @@ class PendingTurn:
 
 @dataclass
 class AskSession:
-    """单个会话槽：内存中的 history，释放时才刷 Redis。"""
+    """单个会话槽：内存 history，轮次结束刷 Redis。"""
 
     uuid: str
     section_id: str
