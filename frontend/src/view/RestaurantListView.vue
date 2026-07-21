@@ -68,6 +68,63 @@
       </div>
     </transition>
 
+    <!-- 位置 & 数据源切换 -->
+<div class="filter-options-bar">
+  <div class="option-group">
+  <label for="location-select">城市</label>
+  <select
+    id="location-select"
+    v-model="filters.location"
+    @change="applyFilters"
+    :disabled="sourceType === 'db'"
+  >
+    <option value="">全部城市</option>
+    <option value="New York">New York</option>
+    <option value="Los Angeles">Los Angeles</option>
+    <option value="Chicago">Chicago</option>
+    <option value="Houston">Houston</option>
+    <option value="Phoenix">Phoenix</option>
+    <option value="Philadelphia">Philadelphia</option>
+    <option value="San Antonio">San Antonio</option>
+    <option value="San Diego">San Diego</option>
+    <option value="Dallas">Dallas</option>
+    <option value="San Jose">San Jose</option>
+    <option value="Austin">Austin</option>
+    <option value="Jacksonville">Jacksonville</option>
+    <option value="Fort Worth">Fort Worth</option>
+    <option value="Columbus">Columbus</option>
+    <option value="Charlotte">Charlotte</option>
+    <option value="San Francisco">San Francisco</option>
+    <option value="Indianapolis">Indianapolis</option>
+    <option value="Seattle">Seattle</option>
+    <option value="Denver">Denver</option>
+    <option value="Washington">Washington</option>
+  </select>
+  <span v-if="sourceType === 'db'" class="hint-text">（DB 无需城市）</span>
+  <span v-else class="hint-text" style="color:#eab308;">（必选）</span>
+</div>
+
+  <div class="option-group">
+    <label>数据源</label>
+    <div class="source-toggle">
+      <button
+        class="source-btn"
+        :class="{ active: sourceType === 'db' }"
+        @click="switchSource('db')"
+      >
+        DB
+      </button>
+      <button
+        class="source-btn"
+        :class="{ active: sourceType === 'yelp' }"
+        @click="switchSource('yelp')"
+      >
+        Yelp
+      </button>
+    </div>
+  </div>
+</div>
+
     <!-- 结果统计 -->
     <div class="result-info" v-if="total > 0">
       <span>共 {{ total }} 家餐厅</span>
@@ -147,6 +204,8 @@ import { handleApiError } from '@/utils/errorHandler'
 
 const router = useRouter()
 const toast = useToast()
+const STORAGE_KEY_SOURCE = 'restaurant_source'
+const STORAGE_KEY_LOCATION = 'restaurant_location'
 
 interface Shop {
   id: string | number
@@ -177,6 +236,7 @@ const filters = reactive({
   price: '',
   location: '',
 })
+const sourceType = ref('db')   // 可选 'db' 或 'yelp'
 
 const categories = ref<string[]>([])
 
@@ -216,9 +276,12 @@ const fetchShops = async (page: number = 1) => {
       page: String(page),
       page_size: String(pageSize.value),
       sort_by: filters.sort_by,
-      // location: "Chicago",
-      source: 'db',
+      source: sourceType.value        // 动态数据源
     })
+// 只有 Yelp 且选定了城市时才添加 location
+if (sourceType.value === 'yelp' && filters.location) {
+  params.append('location', filters.location)
+}
 
     if (searchKeyword.value.trim()) {
       params.append('keyword', searchKeyword.value.trim())
@@ -228,9 +291,6 @@ const fetchShops = async (page: number = 1) => {
     }
     if (filters.price) {
       params.append('price', filters.price)
-    }
-    if (filters.location) {
-      params.append('location', filters.location)
     }
 
     const response = await fetch(`http://localhost:8000/api/business/list?${params.toString()}`, {
@@ -302,6 +362,11 @@ const clearSearch = () => {
 }
 
 const applyFilters = () => {
+  // 如果当前是 Yelp 且 location 为空，自动填充默认值
+  if (sourceType.value === 'yelp' && !filters.location) {
+    filters.location = 'Chicago'
+  }
+  localStorage.setItem(STORAGE_KEY_LOCATION, filters.location)
   fetchShops(1)
 }
 
@@ -311,6 +376,15 @@ const resetFilters = () => {
   filters.sort_by = 'rating'
   filters.price = ''
   filters.location = ''
+
+  // 如果当前是 Yelp 模式，自动填充默认城市
+  if (sourceType.value === 'yelp') {
+    filters.location = 'Chicago'
+    localStorage.setItem(STORAGE_KEY_LOCATION, 'Chicago')
+  } else {
+    localStorage.setItem(STORAGE_KEY_LOCATION, '')
+  }
+
   fetchShops(1)
 }
 
@@ -319,7 +393,10 @@ const goToShop = (id: string | number) => {
     toast.showToast({ message: '餐厅ID无效，无法跳转', type: 'error' })
     return
   }
-  router.push(`/restaurant/${id}`)
+  router.push({
+    path: `/restaurant/${id}`,
+    query: { source: sourceType.value }
+  })
 }
 
 const goHome = () => {
@@ -327,8 +404,43 @@ const goHome = () => {
 }
 
 onMounted(() => {
+  // 读取保存的数据源
+  const savedSource = localStorage.getItem(STORAGE_KEY_SOURCE)
+  if (savedSource === 'db' || savedSource === 'yelp') {
+    sourceType.value = savedSource
+  }
+  // 读取保存的城市
+  const savedLocation = localStorage.getItem(STORAGE_KEY_LOCATION)
+  if (savedLocation) {
+    filters.location = savedLocation
+  }
+  // 若当前是 Yelp 且城市为空，设置默认并保存
+  if (sourceType.value === 'yelp' && !filters.location) {
+    filters.location = 'Chicago'
+    localStorage.setItem(STORAGE_KEY_LOCATION, 'Chicago')
+  }
+  // 发起首次请求
   fetchShops(1)
 })
+
+const switchSource = (source: string) => {
+  if (sourceType.value === source) return
+  sourceType.value = source
+
+  // 切换到 DB 时清空城市
+  if (source === 'db') {
+    filters.location = ''
+  } else {
+    // 切换到 Yelp 时，若城市为空则设置默认值
+    if (!filters.location) {
+      filters.location = 'Chicago'
+    }
+  }
+
+  // 触发搜索（重置到第一页）
+  fetchShops(1)
+  localStorage.setItem(STORAGE_KEY_SOURCE, source)
+}
 </script>
 
 <style scoped>
@@ -756,5 +868,110 @@ onMounted(() => {
   .header-title {
     font-size: 1rem;
   }
+}
+
+/* ===== 位置 & 数据源选项条 ===== */
+.filter-options-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.2rem 2rem;
+  padding: 0.6rem 1.2rem;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.option-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.option-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.option-group select {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.4rem;
+  background: white;
+  font-size: 0.85rem;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.option-group select:focus {
+  border-color: #3b82f6;
+}
+
+.source-toggle {
+  display: flex;
+  gap: 0.2rem;
+  background: #f1f5f9;
+  border-radius: 0.5rem;
+  padding: 0.2rem;
+}
+
+.source-btn {
+  padding: 0.25rem 0.8rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.source-btn.active {
+  background: white;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.source-btn:hover:not(.active) {
+  color: #1e293b;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .filter-options-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    padding: 0.6rem 1rem;
+  }
+
+  .option-group {
+    justify-content: space-between;
+  }
+
+  .option-group select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .source-toggle {
+    align-self: flex-start;
+  }
+}
+
+.hint-text {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin-left: 0.2rem;
+  white-space: nowrap;
+}
+
+.option-group select:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 </style>

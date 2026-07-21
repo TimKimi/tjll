@@ -141,7 +141,24 @@
 
           <div :class="['message-bubble', msg.role]">
             <div class="message-content">{{ msg.content }}</div>
-  
+
+              <!-- 选项区域（仅当有 options 且未处理） -->
+  <div v-if="msg.options && msg.options.length && !msg.isOptionHandled" class="options-container">
+    <div class="options-list">
+      <button
+        v-for="opt in msg.options"
+        :key="opt"
+        class="option-btn"
+        @click="selectOption(opt, msg.id)"
+      >
+        {{ opt }}
+      </button>
+    </div>
+    <button class="generate-btn" @click="generateFinal(msg.id)">
+      直接生成推荐
+    </button>
+  </div>
+
   <!-- 推荐卡片 - 点击进入详情页 -->
   <div v-if="msg.shop" class="recommend-card" @click="viewShopDetail(msg.shop.id)">
     <div class="card-image">
@@ -157,12 +174,12 @@
           <span class="review-count">({{ msg.shop.reviewCount }}条)</span>
         </div>
       </div>
-      
+
       <div class="reason">
         <i class="fas fa-lightbulb"></i>
         <span>{{ msg.shop.reason }}</span>
       </div>
-      
+
       <div class="shop-info-grid">
         <div class="info-item">
           <i class="fas fa-coins"></i>
@@ -181,18 +198,18 @@
           <span>{{ msg.shop.phone }}</span>
         </div>
       </div>
-      
+
       <div class="shop-tags">
         <span v-for="tag in msg.shop.tags" :key="tag" class="tag">
           {{ tag }}
         </span>
       </div>
-      
+
       <div class="shop-summary">
         <i class="fas fa-quote-left"></i>
         <span>{{ msg.shop.summary }}</span>
       </div>
-      
+
       <!-- 只有一个操作按钮 -->
       <div class="card-action">
         <button class="detail-btn">
@@ -202,7 +219,7 @@
       </div>
     </div>
   </div>
-  
+
   <div class="message-time">{{ msg.time }}</div>
           </div>
 
@@ -242,8 +259,8 @@
           />
 
 <!-- 语音按钮 -->
-<button 
-  class="tool-btn" 
+<button
+  class="tool-btn"
   title="语音输入"
   @click="toggleRecording"
   :class="{ recording: isRecording }"
@@ -289,11 +306,13 @@ const route = useRoute()
 // ============================================
 
 interface Message {
-  id: number
+  id: string
   role: 'user' | 'assistant'
   content: string
   time: string
   shop?: RecommendShop  // 添加推荐卡片数据
+  options?: string[]   // 选项列表（仅 assistant 消息携带）
+  isOptionHandled?: boolean // 标记该选项是否已被用户处理（点击后禁用）
 }
 
 interface Conversation {
@@ -700,94 +719,90 @@ const clearAllHistory = async (): Promise<void> => {
 // 12. 核心功能：发送消息
 // ============================================
 
-const sendMessage = async (text: string): Promise<void> => {
+const sendMessage = async (
+  text: string,
+  extra?: { parentId?: string; action?: 'generate' }
+) => {
   const trimmed = text.trim()
   if (!trimmed || isLoading.value) return
 
-  // 如果没有当前对话，先创建一个
-  let convId = currentConversationId.value
-  if (!convId) {
-    const newId = await createNewConversation()
-    if (newId) {
-      convId = newId
-    } else {
-      // 创建失败，使用本地临时 ID
-      convId = Date.now()
-      const tempConv: Conversation = {
-        id: convId,
-        title: '新对话',
-        time: getCurrentTime(),
-        icon: 'fas fa-comment',
-        active: true,
-      }
-      conversationList.value.unshift(tempConv)
-      currentConversationId.value = convId
-    }
-  }
-
-  const userMessage: Message = {
-    id: Date.now(),
+  // 创建用户消息（如果是点击“直接生成”，内容使用约定标识）
+  const userMsg: Message = {
+    id: crypto.randomUUID(),
     role: 'user',
-    content: trimmed,
+    content: extra?.action === 'generate' ? '直接生成推荐' : trimmed,
     time: getCurrentTime(),
   }
-  messages.value.push(userMessage)
+  messages.value.push(userMsg)
   inputText.value = ''
   await scrollToBottom()
 
-  // 调用 AI API
-  await callAIApi(trimmed, convId)
+  // 调用 AI 接口，传递 parentId 和 action
+  await callAIApi(trimmed, extra?.parentId, extra?.action)
 }
 
 // ============================================
 // 13. AI API 调用
 // ============================================
 
-const callAIApi = async (userInput: string, conversationId: number): Promise<void> => {
+const callAIApi = async (
+  userInput: string,
+  parentId?: string,
+  action?: 'generate'
+) => {
   isLoading.value = true
-
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: userInput,
-        conversationId: conversationId,
+        conversationId: currentConversationId.value,
         userId: userInfo.value.id,
         userName: userInfo.value.name,
+        parentId,          // 关联到哪条选项消息
+        action,            // 是否请求直接生成
       }),
     })
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
     const data = await response.json()
-    const assistantContent = data.content || data.message || data.reply || '收到回复'
 
-    // 生成推荐卡片
-    let shopData: RecommendShop | undefined = undefined
-    
-    // 如果后端返回了商家数据
-    if (data.shop) {
-      shopData = data.shop
-    } 
+    // ========== 接口标注 ==========
+    // 【推荐卡片接口】/api/chat POST
+    // 当 data.type === 'final' 时返回最终推荐，data.shop 为卡片数据
+    // 【选项接口】/api/chat POST
+    // 当 data.type === 'options' 时返回选项列表，data.options 为 string[]
+    // ===============================
 
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'assistant',
-      content: assistantContent,
-      time: getCurrentTime(),
-      shop: shopData
-    })
+    if (data.type === 'options') {
+      // 添加带选项的 assistant 消息
+      messages.value.push({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: data.content || '请选择以下选项：',
+        time: getCurrentTime(),
+        options: data.options || [],
+        isOptionHandled: false,
+      })
+    } else {
+      // 最终推荐（可能包含 shop）
+      messages.value.push({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: data.content || '为您推荐：',
+        time: getCurrentTime(),
+        shop: data.shop,   // 推荐卡片数据
+      })
+    }
 
+    // 刷新侧边栏对话列表（更新标题等）
     await loadConversations()
   } catch (error) {
     console.error('AI 调用失败:', error)
     messages.value.push({
-      id: Date.now() + 1,
+      id: crypto.randomUUID(),
       role: 'assistant',
       content: '抱歉，我暂时无法回答，请稍后再试。',
       time: getCurrentTime(),
@@ -839,7 +854,7 @@ const handleNewConversation = async (): Promise<void> => {
 const processQueryParam = async (): Promise<void> => {
   // 防止重复处理
   if (hasProcessedQuery.value) return
-  
+
   const query = route.query.q as string
   if (query && query.trim()) {
     hasProcessedQuery.value = true
@@ -903,7 +918,7 @@ recognition.value.onresult = (event: any) => {
   const results = event.results
   const transcript = results[0][0].transcript
   inputText.value = transcript  // ✅ 只填入输入框
-  
+
   // ✅ 如果是最终结果，只停止录音，不自动发送
   if (results[0].isFinal) {
     isRecording.value = false
@@ -986,7 +1001,7 @@ const updateAudioLevel = () => {
     audioLevel.value = 0
     return
   }
-  
+
   // ✅ 使用类型断言 as Uint8Array<ArrayBuffer>
   analyser.getByteFrequencyData(dataArray as Uint8Array<ArrayBuffer>)
   let sum = 0
@@ -995,7 +1010,7 @@ const updateAudioLevel = () => {
   }
   const avg = sum / dataArray.length
   audioLevel.value = Math.min((avg / 128) * 100, 100)
-  
+
   animationId = requestAnimationFrame(updateAudioLevel)
 }
 
@@ -1020,6 +1035,29 @@ const stopAudioMonitoring = () => {
   }
   analyser = null
   dataArray = null
+}
+
+// ============================================
+// 21. AI选项
+// ============================================
+
+// 点击选项按钮
+const selectOption = (option: string, parentId: string) => {
+  // 将原选项消息标记为已处理，禁用按钮
+  const parentMsg = messages.value.find(m => m.id === parentId)
+  if (parentMsg) parentMsg.isOptionHandled = true
+
+  // 发送用户的选择（不带 action，让后端继续返回选项或最终推荐）
+  sendMessage(option, { parentId })
+}
+
+// 点击“直接生成推荐”
+const generateFinal = (parentId: string) => {
+  const parentMsg = messages.value.find(m => m.id === parentId)
+  if (parentMsg) parentMsg.isOptionHandled = true
+
+  // 发送特殊指令，携带 action: 'generate'
+  sendMessage('直接生成', { parentId, action: 'generate' })
 }
 </script>
 
@@ -2373,5 +2411,50 @@ const stopAudioMonitoring = () => {
     opacity: 0;
     transform: translate(-50%, -50%) scale(1.6);
   }
+}
+
+/* 选项样式*/
+.options-container {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.options-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.option-btn {
+  padding: 0.3rem 1rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  font-size: 0.8rem;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.option-btn:hover {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.generate-btn {
+  padding: 0.3rem 1.2rem;
+  background: #f59e0b;
+  border: none;
+  border-radius: 1.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.generate-btn:hover {
+  background: #d97706;
 }
 </style>
