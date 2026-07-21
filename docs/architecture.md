@@ -4,7 +4,7 @@
 
 ---
 
-## 一、总体架构
+## 总体架构
 
 ```
 ┌─────────────┐      ┌──────────────┐      ┌──────────────┐
@@ -33,34 +33,34 @@
 
 ---
 
-## 二、后端模块划分
+## 后端模块划分
 
-### 2.1 路由层 (`backend/routers/`)
+### 路由层 (`backend/routers/`)
 
-| 模块 | 前缀 | 说明 | 状态 |
-|------|------|------|------|
-| `health.py` | `/health` | 健康检查 | ✅ 已有 |
-| `auth.py` | `/api/auth` | 注册、登录、退出 | ✅ 已实现 |
-| `user.py` | `/api/user` | 用户信息获取与更新 | ✅ 已实现 |
-| `business.py` | `/api/business` | 商家列表、详情 | ✅ 已有 |
-| `review.py` | `/api/review` | 评论列表、详情 | ✅ 已有 |
-| `ai.py` | `/api/ai` | AI 对话、推荐、评论总结 | ✅ 已有 |
-| `favorite.py` | `/api/favorites` | 收藏增删查 | ✅ 已实现 |
-| `admin.py` | `/api/admin` | 管理后台接口 | 🟡 开发中 |
-
-### 2.2 业务逻辑层 (`backend/services/`)
-
-| 模块 | 说明 | 状态 |
+| 模块 | 前缀 | 说明 |
 |------|------|------|
-| `auth.py` | 注册/登录/退出逻辑 | ✅ |
-| `user.py` | 用户信息 CRUD | ✅ |
-| `business.py` | 商家查询（DB + Yelp API） | ✅ |
-| `review.py` | 评论查询 | ✅ |
-| `ai.py` | AI 对话/推荐/总结 | ✅ |
-| `favorite.py` | 收藏管理 | ✅ |
-| `yelp.py` / `yelp_search.py` | Yelp 外部 API 调用 | ✅ |
+| `health.py` | `/health` | 健康检查 |
+| `auth.py` | `/api/auth` | 注册、登录、退出 |
+| `user.py` | `/api/user` | 用户信息获取与更新 |
+| `business.py` | `/api/business` | 商家列表、详情 |
+| `review.py` | `/api/review` | 评论列表、详情 |
+| `ai.py` | `/api/ai` | AI 对话、推荐、评论总结 |
+| `favorite.py` | `/api/favorites` | 收藏增删查 |
+| `admin.py` | `/api/admin` | 管理后台接口 |
 
-### 2.3 数据模型层 (`backend/models/`)
+### 业务逻辑层 (`backend/services/`)
+
+| 模块 | 说明 |
+|------|------|
+| `auth.py` | 注册/登录/退出逻辑 |
+| `user.py` | 用户信息 CRUD |
+| `business.py` | 商家查询（DB + Yelp API） |
+| `review.py` | 评论查询 |
+| `ai.py` | AI 对话/推荐/总结 |
+| `favorite.py` | 收藏管理 |
+| `yelp.py` / `yelp_search.py` | Yelp 外部 API 调用 |
+
+### 数据模型层 (`backend/models/`)
 
 | 模型 | 表名 | 说明 |
 |------|------|------|
@@ -69,10 +69,8 @@
 | `User` (Yelp) | `users` | Yelp 用户（数据集） |
 | `AppUser` | `app_users` | 平台应用用户 |
 | `Favorite` | `favorites` | 用户收藏 |
-| `Conversation` | `conversations` | 对话（待创建） |
-| `Message` | `messages` | 消息（待创建） |
 
-### 2.4 数据流示意
+### 数据流示意
 
 ```
 Frontend → Router → Service → Model/ORM → PostgreSQL
@@ -80,50 +78,11 @@ Frontend → Router → Service → Model/ORM → PostgreSQL
             Pydantic Schema (验证/序列化)
 ```
 
----
-
-## 三、前后端数据对齐
-
-### 3.1 统一响应格式
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
-
-### 3.2 分页响应格式
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {
-    "items": [],
-    "total": 100,
-    "page": 1,
-    "page_size": 10,
-    "total_pages": 10
-  }
-}
-```
-
-### 3.3 字段映射
-
-| 前端字段 | 后端字段 | 说明 |
-|---------|---------|------|
-| `name` | `username` | 用户名 |
-| `isOnline` | `is_online` | 在线状态 |
-| `image` | `image_url` | 封面图/头像 |
-| `images` | `photos` | 图片列表 |
-| `lat/lng` | `latitude/longitude` | 坐标 |
-| `shopId` | `shop_id` | 商家 ID |
+> 字段映射与 API 响应格式详见 [`docs/api-need.md`](api-need.md)。
 
 ---
 
-## 四、认证架构
+## 认证架构
 
 ```
 用户 → 注册/登录 → JWT 签发 → 后续请求携带 Bearer Token
@@ -141,7 +100,7 @@ Frontend → Router → Service → Model/ORM → PostgreSQL
 
 ---
 
-## 五、RAG 架构（独立子系统）
+## RAG 架构（独立子系统）
 
 ```
 Yelp Dataset → 数据清洗 → OpenSearch Index
@@ -149,4 +108,4 @@ Yelp Dataset → 数据清洗 → OpenSearch Index
 用户 Query → LLM → 检索增强 → 排序重排 → 最终响应
 ```
 
-> 详见 `backend/docs/rag-llm-backend-guide.md`
+> 详见 [`docs/guides/rag-llm.md`](guides/rag-llm.md)

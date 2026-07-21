@@ -17,7 +17,7 @@ class TestHealthRoutes:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["message"] == "success"
         assert data["data"]["status"] == "ok"
         assert data["data"]["service"] == "TJLL API"

@@ -152,14 +152,13 @@ tjll/
 │   ├── services/           # 业务逻辑层
 │   ├── tests/              # 测试
 │   └── rag/                # 文档 / 检索 / OpenSearch / 模型权重
-├── docs/                   # 项目级文档
-│   ├── api-need.md         # API 接口需求文档（前后端对齐）
-│   ├── architecture.md     # 项目架构文档
-│   ├── commands.md         # 命令参考
+├── docs/                   # 文档
+│   ├── api-need.md         # API 接口定义（前后端对齐）
+│   ├── architecture.md     # 项目架构
+│   ├── commands.md         # 命令速查
 │   ├── decision-records.md # 架构决策记录（ADR）
-│   ├── development-log.md  # 开发日志
-│   ├── requirements.md     # 项目需求文档
-│   └── todo.md             # 待办任务清单
+│   └── guides/             # 开发指南
+├── logs/                   # 运行时日志
 ├── frontend/               # 前端代码（TODO）
 ├── data/                   # Yelp 数据集
 ├── .github/workflows/      # GitHub Actions CI
@@ -170,30 +169,9 @@ tjll/
 └── README.md
 ```
 
-### 关键文档索引
 
-| 文档 | 说明 |
-|------|------|
-| [`docs/api-need.md`](docs/api-need.md) | API 接口需求文档（前后端字段对齐） |
-| [`docs/architecture.md`](docs/architecture.md) | 项目架构说明 |
-| [`docs/decision-records.md`](docs/decision-records.md) | 架构决策记录 |
-| [`docs/commands.md`](docs/commands.md) | 常用命令参考 |
-| [`docs/requirements.md`](docs/requirements.md) | 项目需求总览 |
-| [`docs/development-log.md`](docs/development-log.md) | 开发日志 |
-| [`docs/todo.md`](docs/todo.md) | 待办任务清单 |
-
----
 
 ## 开发流程
-
-### 0. 文档先行
-
-在开始任何开发之前，先确保文档已更新：
-
-1. 更新 [`docs/todo.md`](docs/todo.md) — 标记当前任务状态
-2. 更新 [`docs/development-log.md`](docs/development-log.md) — 记录开发节点
-3. 更新 [`docs/api-need.md`](docs/api-need.md) — 同步 API 进度
-4. 更新 [`docs/decision-records.md`](docs/decision-records.md) — 记录关键决策
 
 ### 1. 日常开发循环
 

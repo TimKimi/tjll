@@ -1,16 +1,23 @@
-"""Settings 配置模型单元测试 —— 只测有逻辑的属性和函数。"""
+"""Settings 配置模型单元测试 —— 只测有逻辑的属性和函数。
+
+注：Pyright/Pylance 对 pydantic Mixin 继承字段无法静态解析，
+    但运行时完全正常（21 个 "No parameter named" 均为误报）。
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from backend.config import REPO_ROOT, Settings, _resolve_path
+from typing import Any  # noqa: F401 — 用于 Settings(**kwargs) 的类型擦除
+
+from backend.config import Settings
+from backend.config.paths import REPO_ROOT, resolve_path
 
 
 def test_resolve_path_absolute():
     """绝对路径直接返回。"""
     abs_path = str(REPO_ROOT / "some" / "path")
-    assert _resolve_path(abs_path) == abs_path
+    assert resolve_path(abs_path) == abs_path
 
 
 def test_repo_root_paths():

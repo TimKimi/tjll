@@ -45,7 +45,7 @@ class TestReviewRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["total"] == 1
         mock_service.list_by_business.assert_called_once_with(
             business_id="b1", page=1, page_size=10, sort_by="time", source="db"
@@ -99,7 +99,7 @@ class TestReviewRoutes:
         response = client.post("/api/review/r1")
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["id"] == "r1"
         mock_service.get_by_id.assert_called_once_with("r1")
 

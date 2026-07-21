@@ -33,7 +33,7 @@ class AuthService:
         """
         existing = await self._find_by_username(req.username)
         if existing:
-            raise AppError("用户名已存在", code=400)
+            raise AppError("用户名已存在", code=409)
 
         user = AppUser(
             id=uuid.uuid4().hex[:22],
@@ -65,7 +65,7 @@ class AuthService:
         """
         user = await self._find_by_username(req.username)
         if not user:
-            raise AppError("用户不存在", code=404)
+            raise AppError("用户名或密码错误", code=401)
 
         if not verify_password(req.password, user.password_hash):
             raise AppError("密码错误", code=401)

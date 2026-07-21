@@ -30,18 +30,18 @@ class TestAuthRoutes:
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["token"] == "eyJ.test.token"
         assert data["data"]["user"]["username"] == "新用户"
 
     @patch("backend.routers.auth.AuthService")
     def test_register_duplicate(self, mock_service_class, client):
-        """重复用户名应返回 400。"""
+        """重复用户名应返回 409。"""
         from backend.core.exceptions import AppError
 
         mock_instance = mock_service_class.return_value
         mock_instance.register = AsyncMock(
-            side_effect=AppError("用户名已存在", code=400)
+            side_effect=AppError("用户名已存在", code=409)
         )
         response = client.post(
             "/api/auth/register",
@@ -51,7 +51,7 @@ class TestAuthRoutes:
                 "email": "dup@example.com",
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 409
 
     @patch("backend.routers.auth.AuthService")
     def test_login_success(self, mock_service_class, client):
@@ -69,7 +69,7 @@ class TestAuthRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["token"] == "eyJ.login.token"
 
     @patch("backend.routers.auth.AuthService")
@@ -96,7 +96,7 @@ class TestAuthRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["message"] == "退出成功"
 
     @patch("backend.routers.auth.AuthService")

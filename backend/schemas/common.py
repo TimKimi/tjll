@@ -12,13 +12,13 @@ T = TypeVar("T")
 class ApiResponse(BaseModel, Generic[T]):
     """统一响应格式。"""
 
-    code: int = Field(default=0, description="状态码，0 表示成功")
+    code: int = Field(default=200, description="状态码，200 表示成功")
     message: str = Field(default="success", description="提示信息")
     data: T | None = Field(default=None, description="响应数据")
 
     @classmethod
     def ok(cls, data: T | None = None, message: str = "success") -> "ApiResponse[T]":
-        return cls(code=0, message=message, data=data)
+        return cls(code=200, message=message, data=data)
 
     @classmethod
     def fail(cls, code: int = 400, message: str = "error") -> "ApiResponse[T]":

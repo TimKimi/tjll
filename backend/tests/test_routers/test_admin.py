@@ -38,7 +38,7 @@ class TestAdminRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["id"] == "u_admin"
         assert data["data"]["username"] == "管理员"
         assert data["data"]["role"] == "admin"
@@ -78,7 +78,7 @@ class TestAdminRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["items"] == []
         assert data["data"]["total"] == 0
 
@@ -123,7 +123,7 @@ class TestAdminRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert len(data["data"]["items"]) == 2
         assert data["data"]["items"][0]["username"] == "张三"
         assert data["data"]["items"][0]["role"] == "user"

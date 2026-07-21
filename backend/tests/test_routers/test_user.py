@@ -23,7 +23,7 @@ class TestUserRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["username"] == "张三"
 
     @patch("backend.routers.user.UserService")
@@ -53,5 +53,5 @@ class TestUserRoutes:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["code"] == 0
+        assert data["code"] == 200
         assert data["data"]["username"] == "新名字"
