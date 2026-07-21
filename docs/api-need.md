@@ -11,14 +11,14 @@
 
 - [一、通用约定](#一通用约定)
 - [二、开发分支规划](#二开发分支规划)
-- [三、认证模块（Auth）—— 待开发](#三认证模块auth待开发)
-- [四、用户模块（User）—— 待开发](#四用户模块user待开发)
+- [三、认证模块（Auth）—— ✅ 已完成](#三认证模块auth-已完成)
+- [四、用户模块（User）—— ✅ 已完成](#四用户模块user-已完成)
 - [五、商家模块（Business）—— 已有 + 增强](#五商家模块business已有--增强)
 - [六、评论模块（Review）—— 已有 + 改造](#六评论模块review已有--改造)
 - [七、对话模块（Conversation）—— 待开发](#七对话模块conversation待开发)
 - [八、AI 模块（AI）—— 已有 + 增强](#八ai模块ai已有--增强)
-- [九、收藏模块（Favorite）—— 待开发](#九收藏模块favorite待开发)
-- [十、管理后台模块（Admin）—— 待开发](#十管理后台模块admin待开发)
+- [九、收藏模块（Favorite）—— ✅ 已完成](#九收藏模块favorite-已完成)
+- [十、管理后台模块（Admin）—— 🟡 开发中](#十管理后台模块admin-开发中)
 - [十一、健康检查（Health）—— 已有](#十一健康检查health已有)
 - [十二、数据模型对齐](#十二数据模型对齐)
 - [十三、错误码汇总](#十三错误码汇总)
@@ -100,24 +100,25 @@
 
 按照项目 [Git Flow 简化版](../README.md#分支策略git-flow-简化版) 的分支策略，将 API 开发划分为以下独立分支：
 
-| # | 分支名 | 内容 | 依赖 | 工作量 |
-|---|--------|------|------|--------|
-| 1 | `feat/user-auth` | 认证模块（注册/登录/退出）+ 用户模块（信息/头像上传） | 无（新建表） | 🔴🔴🔴 |
-| 2 | `feat/conversation` | 对话 CRUD + 消息管理 + 对接 AI Chat | `feat/user-auth` | 🔴🔴 |
-| 3 | `feat/favorites` | 收藏模块（增/删/查） | `feat/user-auth` | 🟢 已完成 |
-| 4 | `feat/admin` | 管理员登录 + 用户管理列表 | `feat/user-auth` | 🟡 |
-| 5 | `feat/review-api` | 评论路由改造：改 POST 为 GET + 路径参数 | 无 | 🟡 |
-| 6 | `feat/ai-response-shop` | AI Chat 响应增加推荐卡片 Shop 对象 | `feat/conversation` | 🔴 |
-| 7 | `feat/avatar-upload` | 头像上传接口（文件存储 + URL 回显） | `feat/user-auth` | 🟡 |
+| # | 分支名 | 内容 | 依赖 | 工作量 | 状态 |
+|---|--------|------|------|--------|------|
+| 1 | `feat/user-auth` | 认证模块（注册/登录/退出）+ 用户模块（信息/头像上传） | 无（新建表） | 🔴🔴🔴 | ✅ 已完成 |
+| 2 | `feat/conversation` | 对话 CRUD + 消息管理 + 对接 AI Chat | `feat/user-auth` | 🔴🔴 | 📋 待开发 |
+| 3 | `feat/favorites` | 收藏模块（增/删/查） | `feat/user-auth` | 🟢 | ✅ 已完成 |
+| 4 | `feat/admin` | 管理员登录 + 用户管理列表 | `feat/user-auth` | 🟡 | 🟡 开发中 |
+| 5 | `feat/review-api` | 评论路由改造：改 POST 为 GET + 路径参数 | 无 | 🟡 | 📋 待开发 |
+| 6 | `feat/ai-response-shop` | AI Chat 响应增加推荐卡片 Shop 对象 | `feat/conversation` | 🔴 | 📋 待开发 |
+| 7 | `feat/avatar-upload` | 头像上传接口（文件存储 + URL 回显） | `feat/user-auth` | 🟡 | 📋 待开发 |
 
-**建议开发顺序**: `1 → 2 → 3 → 4`（可并行 `5、7`）→ `6`
+**建议开发顺序**: `1 ✅ → 2 → 3 ✅ → 4 🟡`（可并行 `5、7`）→ `6`
 
 ---
 
-## 三、认证模块（Auth）—— 待开发
+## 三、认证模块（Auth）—— ✅ 已完成
 
 > **分支**: `feat/user-auth`
-> **说明**: 后端目前无认证体系，需新增 `users` 表（应用用户）、JWT 签发与验证中间件、密码哈希（bcrypt）。
+> **状态**: ✅ 已合并至 `develop`
+> **说明**: 已完成注册、登录、管理员登录、退出登录接口。使用 `app_users` 表（应用用户）、JWT 签发与验证中间件、密码哈希（bcrypt）。
 
 ### 3.1 用户注册
 
@@ -263,10 +264,11 @@ POST /api/auth/logout
 
 ---
 
-## 四、用户模块（User）—— 待开发
+## 四、用户模块（User）—— ✅ 已完成
 
 > **分支**: `feat/user-auth`
-> **说明**: 依赖认证模块的 JWT 中间件。
+> **状态**: ✅ 已合并至 `develop`
+> **说明**: 已完成用户信息获取、更新接口。依赖认证模块的 JWT 中间件。
 
 ### 4.1 获取用户信息
 
@@ -870,6 +872,7 @@ POST /api/ai/generate-review
 ## 九、收藏模块（Favorite）—— ✅ 已完成
 
 > **分支**: `feat/favorites`
+> **状态**: ✅ 已合并至 `develop`
 > **说明**: 后端收藏功能已完成。新增 `favorites` 表（ORM 模型）、Pydantic Schema、Service 业务逻辑、Router API 端点，含完整单元测试套件。
 
 ### 9.1 获取收藏列表
@@ -991,10 +994,11 @@ DELETE /api/favorites/{shop_id}
 
 ---
 
-## 十、管理后台模块（Admin）—— 待开发
+## 十、管理后台模块（Admin）—— 🟡 开发中
 
 > **分支**: `feat/admin`
 > **说明**: 依赖认证模块，仅 `role=admin` 的用户可访问。
+> **状态**: 🟡 后端接口实现中
 
 ### 10.1 获取管理员信息
 
