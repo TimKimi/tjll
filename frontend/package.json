@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.3.0",
+    "tz-lookup": "^6.1.25",
     "vue": "^3.5.38",
     "vue-router": "^5.1.0"
   },
