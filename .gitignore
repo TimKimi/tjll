@@ -6,6 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+# IDE / stubgen 旁路生成的 stub（会遮蔽真实 .py，导致 mypy attr-defined）
+backend/**/*.pyi
+
 # Virtual environments
 .venv
 

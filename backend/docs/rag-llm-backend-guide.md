@@ -44,20 +44,67 @@ payload = resp.model_dump()
 | `uuid` | 否 | 请求关联 ID，原样回传，不参与历史 |
 | `docx` / `doc` / `md` / `pdf` / `images` | 否 | **占位**：可传，当前忽略；后续可能按附件分流路由 |
 
-### 响应字段
+### 响应字段（`AskResponse` / `model_dump()`）
 
-| 字段 | 说明 |
-|------|------|
-| `query` | 原问题 |
-| `section_id` | 会话 ID |
-| `uuid` | 入参回传（未传则为 `null`） |
-| `answer` | LLM 回复文本 |
-| `sources` | `[{ "content": str, "metadata": dict }, ...]`：片段正文 + 索引全字段（**不含** `embedding`） |
-| `history` | `[{ "role": "user"\|"assistant"\|"system", "content": str }, ...]`：本轮写入前 Redis 中已有的消息 |
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `query` | `str` | 本轮原问题 |
+| `section_id` | `str` | 会话 ID |
+| `uuid` | `str \| null` | 入参回传（未传则为 `null`） |
+| `answer` | `str` | 本轮 LLM 回复全文 |
+| `sources` | `list[RagSnippet]` | 本轮检索/精排后的片段（无 embedding） |
+| `history` | `list[HistoryMessage]` | 本轮写入 Redis **之前**已有的会话消息 |
 
-`sources[].metadata` 透传 OpenSearch `_source` 除 `embedding` / `text` 外的字段，并附带 `score`、`rerank_score` 等。常见键（Yelp）：`chunk_id`、`document_id`、`chunk_index`、`polarity`、`id`、`name`、`alias`、`is_last_chunk` 等。PDF 遗留数据可能仍有 `source_file`，Yelp chunk 通常没有。
+`RagSnippet`：
 
-`history` **不含**本轮的 `query` / `answer`（二者已在响应顶层）；首次提问时 `history` 为空列表。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `content` | `str` | 片段正文（索引字段 `text`） |
+| `metadata` | `dict` | 索引全字段（除 `embedding` / `text`）+ `score` / `rerank_score` 等 |
+
+`HistoryMessage`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `role` | `"user" \| "assistant" \| "system"` | 角色 |
+| `content` | `str` | 消息正文 |
+
+示例（`resp.model_dump()`）：
+
+```json
+{
+  "query": "这家店适合约会吗？",
+  "section_id": "user-42-session-1",
+  "uuid": "req-550e8400",
+  "answer": "根据现有资料……",
+  "sources": [
+    {
+      "content": "服务很好，食物新鲜……",
+      "metadata": {
+        "chunk_id": "biz_pos_0000",
+        "document_id": "biz",
+        "chunk_index": 0,
+        "score": 1.23,
+        "rerank_score": 0.91,
+        "polarity": "positive",
+        "id": "biz",
+        "name": "Acme Oyster House",
+        "alias": "acme-oyster-house",
+        "is_last_chunk": true
+      }
+    }
+  ],
+  "history": [
+    { "role": "user", "content": "推荐一家性价比高的餐厅" },
+    { "role": "assistant", "content": "推荐 Acme Oyster House……" }
+  ]
+}
+```
+
+说明：
+
+- `sources[].metadata` 常见键（Yelp）：`chunk_id`、`document_id`、`chunk_index`、`polarity`、`id`、`name`、`alias`、`is_last_chunk`、`score`、`rerank_score` 等。PDF 遗留数据可能仍有 `source_file`，Yelp chunk 通常没有。
+- `history` **不含**本轮的 `query` / `answer`（二者已在响应顶层）；首次提问时 `history` 为 `[]`。
 
 ### 本阶段唯一处理路径
 
@@ -129,10 +176,7 @@ just index-cleaned-recreate      # 删除索引重建后再复写
 
 ## 4. 有显卡：在项目 `.venv` 中换成 CUDA 版 PyTorch
 
-### 为什么要改 `.venv`？
-
-- `just` / `uv run` 使用的是仓库根目录 **`.venv`**，不是 conda 的 `ai` 环境。
-- llama.cpp 离线清洗可以自己走 GPU；**BGE embedding / rerank 走 PyTorch**。若 `.venv` 里是 `torch==...+cpu`，即使本机有显卡也无法加速。
+`just` / `uv run` 使用仓库根目录 **`.venv`**。llama.cpp 离线清洗可自行走 GPU；**BGE embedding / rerank 走 PyTorch**。若 `.venv` 里是 `torch==...+cpu`，即使本机有显卡也无法加速。
 
 ### 操作步骤（在仓库根目录）
 
@@ -162,23 +206,12 @@ cd D:\softwareinstal\pycharm\program\SHIXUNDAXIANGMU\tjll
 | 文件 | 改什么 |
 |------|--------|
 | 仓库根目录 **`.env`**（本地，勿提交） | 设 `EMBEDDING_DEVICE=cuda` |
-| **`.env.example`** | 仅作文档参考，保持说明即可；每人本地 `.env` 自行改 |
-| **`uv.lock` / `pyproject.toml`** | **默认不要改**。CUDA 轮与平台相关，用上面 pip 覆盖本机 `.venv` 即可。全员统一再考虑写进锁文件 |
+| **`.env.example`** | 仅作文档参考；每人本地 `.env` 自行改 |
+| **`uv.lock` / `pyproject.toml`** | **默认不要改**。CUDA 轮与平台相关，用上面 pip 覆盖本机 `.venv` 即可 |
 
 说明：代码里若请求 `cuda` 但当前 Torch 无 CUDA，会自动回退到 `cpu` 并打 warning（见 `backend/rag/document/embed.py`）。装好 CUDA torch 并设置 `EMBEDDING_DEVICE=cuda` 后即可走 GPU。
 
-### 与 conda `ai` 的关系
-
-- 在 `ai` 里装 CUDA torch **不会**自动让 `just index-cleaned-*` / `uv run` 变快。
-- 若你坚持用 conda 跑脚本，需显式：
-
-```powershell
-conda activate ai
-cd D:\softwareinstal\pycharm\program\SHIXUNDAXIANGMU\tjll
-python -m backend.rag.scripts.index_cleaned_yelp --mode backfill
-```
-
-团队协作仍以 **`.venv` + just** 为准。
+团队协作以 **`.venv` + just** 为准。
 
 ---
 
@@ -187,7 +220,7 @@ python -m backend.rag.scripts.index_cleaned_yelp --mode backfill
 `ask` / 检索 / 入库脚本会把日志写到 `backend/docs/`（可由 `.env` 的 `LOG_DIR` / `LOG_LEVEL` 调整；**只写文件，不打控制台**）：
 
 | 文件 | Logger |
-|------|----------|
+|------|--------|
 | `backend/docs/llm.log` | `backend.llm.*` |
 | `backend/docs/rag.log` | `backend.rag.*` |
 
