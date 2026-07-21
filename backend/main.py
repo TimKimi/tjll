@@ -14,14 +14,19 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.database import engine
 from backend.models.base import Base
+from backend.routers import admin as admin_router
 from backend.routers import ai as ai_router
 from backend.routers import auth as auth_router
 from backend.routers import business as business_router
+from backend.routers import favorite as favorite_router
 from backend.routers import health as health_router
 from backend.routers import review as review_router
 from backend.routers import user as user_router
@@ -53,6 +58,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── 静态文件（头像上传） ────────────────────────────────
+_static_dir = Path(__file__).resolve().parent / "static"
+_static_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
 # ── 注册路由（统一入口） ──────────────────────────────────
 app.include_router(health_router.router)
 app.include_router(auth_router.router)
@@ -60,3 +70,5 @@ app.include_router(user_router.router)
 app.include_router(business_router.router)
 app.include_router(review_router.router)
 app.include_router(ai_router.router)
+app.include_router(favorite_router.router)
+app.include_router(admin_router.router)

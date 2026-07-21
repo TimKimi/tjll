@@ -7,7 +7,7 @@ import RegisterView from '../view/RegisterView.vue'
 import PersonalProfileView from '../view/PersonalProfileView.vue'
 import RestaurantView from '../view/RestaurantView.vue'
 import AdminView from '../view/AdminView.vue'
-import ForgotPasswordView from '../view/ForgotPasswordView.vue'
+import RestaurantListView from '../view/RestaurantListView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -77,15 +77,14 @@ const router = createRouter({
       }
     },
     {
-      path: '/forgot-password',
-      name: 'forgot-password',
-      component: ForgotPasswordView,
+      path: '/restaurants',
+      name: 'reataurants',
+      component: RestaurantListView,
       meta: {
-        title: '找回密码',
+        title: '发现餐厅',
         requiresAuth: false,
       }
     },
-
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',

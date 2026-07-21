@@ -18,14 +18,14 @@
           </button>
         </div>
       </header>
-  
+
       <div class="restaurant-content" ref="restaurantContent">
         <!-- 加载状态 -->
         <div v-if="isLoading" class="loading-state">
           <i class="fas fa-spinner fa-spin"></i>
           <p>加载餐厅信息...</p>
         </div>
-  
+
         <!-- 餐厅信息 -->
         <div v-else-if="restaurantData" class="restaurant-detail">
           <!-- 图片轮播 -->
@@ -51,7 +51,7 @@
               </div>
             </div>
           </div>
-  
+
           <!-- 基本信息 -->
           <div class="restaurant-info-section">
             <div class="info-header">
@@ -75,7 +75,7 @@
                 {{ restaurantData.isOpen ? '营业中' : '已休息' }}
               </div>
             </div>
-  
+
             <!-- 营业信息 -->
             <div class="restaurant-info-grid">
               <div class="info-item">
@@ -100,7 +100,7 @@
                 </div>
               </div>
             </div>
-  
+
             <!-- 操作按钮 -->
             <div class="action-buttons">
               <button class="action-btn-primary navigate" @click="navigateToRestaurant">
@@ -116,7 +116,7 @@
                 分享
               </button>
             </div>
-  
+
             <!-- 特色标签 -->
             <div class="restaurant-tags-section" v-if="restaurantData.tags && restaurantData.tags.length">
               <h3 class="section-title">
@@ -129,15 +129,15 @@
                 </span>
               </div>
             </div>
-  
+
             <!-- 推荐理由 -->
             <div class="restaurant-reason" v-if="restaurantData.reason">
               <h3 class="section-title">
                 <i class="fas fa-lightbulb"></i>
                 推荐理由
               </h3>
-              <div 
-                class="reason-content" 
+              <div
+                class="reason-content"
                 :style="{
                   background: getReasonColor(restaurantData.rating).bg,
                   borderLeftColor: getReasonColor(restaurantData.rating).border
@@ -147,7 +147,7 @@
                 <p :style="{ color: getReasonColor(restaurantData.rating).text }">{{ restaurantData.reason }}</p>
               </div>
             </div>
-  
+
             <!-- 用户评价摘要 -->
             <div class="restaurant-summary-section" v-if="restaurantData.summary">
               <h3 class="section-title">
@@ -159,7 +159,7 @@
                 <p>{{ restaurantData.summary }}</p>
               </div>
             </div>
-  
+
             <!-- 评价列表 -->
             <div class="reviews-section" v-if="restaurantData.reviews && restaurantData.reviews.length">
               <div class="reviews-header">
@@ -188,7 +188,7 @@
                   <p class="review-content">{{ review.content }}</p>
                 </div>
               </div>
-              
+
               <!-- 加载更多按钮 -->
               <div v-if="hasMoreReviews" class="load-more-wrapper">
                 <button class="load-more-btn" @click="loadMoreReviews" :disabled="isLoadingMore">
@@ -199,7 +199,7 @@
             </div>
           </div>
         </div>
-  
+
         <!-- 空状态 -->
         <div v-else class="empty-state">
           <i class="fas fa-store-slash"></i>
@@ -207,7 +207,7 @@
           <button class="empty-btn" @click="goBack">返回首页</button>
         </div>
       </div>
-  
+
       <!-- 底部固定导航 -->
       <div class="bottom-nav" v-if="restaurantData">
         <div class="bottom-nav-content">
@@ -234,7 +234,7 @@
           </div>
         </div>
       </div>
-  
+
       <!-- 图片预览弹窗 -->
       <Teleport to="body">
         <div v-if="showGalleryModal" class="gallery-modal" @click="closeGallery">
@@ -243,8 +243,8 @@
               <i class="fas fa-times"></i>
             </button>
             <div class="gallery-image-wrapper">
-              <img 
-                :src="restaurantData?.images?.[currentImageIndex]" 
+              <img
+                :src="restaurantData?.images?.[currentImageIndex]"
                 :alt="restaurantData?.name"
                 class="gallery-image"
               />
@@ -252,17 +252,17 @@
             <div class="gallery-counter" v-if="restaurantData?.images && restaurantData.images.length > 1">
               {{ currentImageIndex + 1 }} / {{ restaurantData.images.length }}
             </div>
-            <button 
+            <button
               v-if="restaurantData?.images && restaurantData.images.length > 1"
-              class="gallery-nav gallery-prev" 
+              class="gallery-nav gallery-prev"
               @click.stop="prevImage"
               :disabled="currentImageIndex === 0"
             >
               <i class="fas fa-chevron-left"></i>
             </button>
-            <button 
+            <button
               v-if="restaurantData?.images && restaurantData.images.length > 1"
-              class="gallery-nav gallery-next" 
+              class="gallery-nav gallery-next"
               @click.stop="nextImage"
               :disabled="currentImageIndex === (restaurantData?.images?.length || 0) - 1"
             >
@@ -273,14 +273,18 @@
       </Teleport>
     </div>
   </template>
-  
+
   <script setup lang="ts">
   import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
-  
+  import { useToast } from '@/composables/useToast'
+  import { handleApiError } from '@/utils/errorHandler'
+  import tzlookup from 'tz-lookup'
+
+  const toast = useToast()
   const route = useRoute()
   const router = useRouter()
-  
+
   // ============================================
   // 类型定义
   // ============================================
@@ -292,9 +296,9 @@
     content: string
     time: string
   }
-  
+
   interface RestaurantData {
-    id: number
+    id: string
     name: string
     image: string
     images?: string[]
@@ -313,7 +317,7 @@
     lat?: number
     lng?: number
   }
-  
+
   // ============================================
   // 状态
   // ============================================
@@ -321,16 +325,17 @@
   const restaurantData = ref<RestaurantData | null>(null)
   const isFavorited = ref(false)
   const restaurantContent = ref<HTMLElement | null>(null)
-  
+
   // 评论分页状态
   const REVIEW_PAGE_SIZE = 10
   const reviewPage = ref(1)
   const isLoadingMore = ref(false)
-  
+  const reviewTotal = ref(0)            // 新增：总评论数
+
   // 图片预览状态
   const showGalleryModal = ref(false)
   const currentImageIndex = ref(0)
-  
+
   // ============================================
   // 评分表情映射
   // ============================================
@@ -342,7 +347,7 @@
     if (rating >= 2.5) return '😕'
     return '😞'
   }
-  
+
   // ============================================
   // 推荐理由颜色映射
   // ============================================
@@ -377,7 +382,7 @@
       }
     }
   }
-  
+
   // ============================================
   // 生命周期
   // ============================================
@@ -388,92 +393,202 @@
     }
     window.addEventListener('keydown', handleKeydown)
   })
-  
+
   onUnmounted(() => {
     window.removeEventListener('keydown', handleKeydown)
   })
-  
+
   // ============================================
-  // 【API 接口1】获取餐厅详情
+  // 【API 接口1】获取餐厅详情（使用 tz-lookup）
   // ============================================
-  // 接口地址: GET /api/restaurants/{id}
-  // 请求头: Authorization: Bearer {token}
-  // 响应: { code: 200, data: RestaurantData }
-  // ============================================
-  const loadRestaurantDetail = async (id: string) => {
-    isLoading.value = true
-    try {
-      // ========== 真实 API 调用（取消注释即可使用） ==========
-      // const response = await fetch(`/api/restaurants/${id}`, {
-      //   method: 'GET',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      //   }
-      // })
-      // if (!response.ok) throw new Error('获取餐厅详情失败')
-      // const result = await response.json()
-      // restaurantData.value = result.data
-      // ======================================================
-  
-      // ========== 模拟数据（开发测试用，接入 API 后删除） ==========
-      await new Promise(resolve => setTimeout(resolve, 500))
-      restaurantData.value = {
-        id: Number(id),
-        name: '蜀九香火锅',
-        image: 'https://picsum.photos/seed/restaurant1/800/400',
-        images: [
-          'https://picsum.photos/seed/restaurant1/800/400',
-          'https://picsum.photos/seed/restaurant2/800/400',
-          'https://picsum.photos/seed/restaurant3/800/400'
-        ],
-        rating: 4.8,
-        reviewCount: 326,
-        price: 120,
-        address: '成都市锦江区春熙路88号',
-        hours: '10:00 - 22:00',
-        phone: '028-88888888',
-        category: '火锅',
-        isOpen: true,
-        reason: '口碑极佳，环境舒适，性价比高，是成都必吃的火锅之一',
-        summary: '"味道正宗，服务热情，排队也值得！"',
-        tags: ['🫕 正宗川味', '👨‍👩‍👧‍👦 适合聚餐', '🏠 环境优雅', '📸 适合拍照'],
-        lat: 30.6595,
-        lng: 104.0786,
-        reviews: [
-          { id: 1, userName: '美食达人小王', rating: 5, content: '味道太棒了！强烈推荐！', time: '2026-07-15' },
-          { id: 2, userName: '爱吃的小李', rating: 4, content: '环境很好，价格适中。', time: '2026-07-14' },
-          { id: 3, userName: '探店达人张张', rating: 5, content: '强烈推荐！锅底香而不腻！', time: '2026-07-13' },
-          { id: 4, userName: '火锅爱好者老李', rating: 5, content: '成都最好吃的火锅之一！', time: '2026-07-12' },
-          { id: 5, userName: '美食探店小刘', rating: 4, content: '味道不错，价格合理。', time: '2026-07-11' },
-          { id: 6, userName: '成都本地人老张', rating: 5, content: '从小吃到大的味道！', time: '2026-07-10' },
-          { id: 7, userName: '旅游达人小美', rating: 5, content: '来成都必吃的火锅！', time: '2026-07-09' },
-          { id: 8, userName: '美食博主阿杰', rating: 4, content: '整体不错，价格略贵。', time: '2026-07-08' },
-          { id: 9, userName: '学生党小杨', rating: 4, content: '好吃，但有点贵。', time: '2026-07-07' },
-          { id: 10, userName: '家庭聚餐代表', rating: 5, content: '很适合家庭聚餐！', time: '2026-07-06' },
-          { id: 11, userName: '火锅控小刘', rating: 5, content: '成都火锅的天花板！', time: '2026-07-05' },
-          { id: 12, userName: '美食评论家老王', rating: 4, content: '味道正宗，服务有待提升。', time: '2026-07-04' },
-          { id: 13, userName: '情侣约会指南', rating: 5, content: '氛围很好，适合情侣约会！', time: '2026-07-03' },
-          { id: 14, userName: '成都土著小赵', rating: 5, content: '吃了十年的老店！', time: '2026-07-02' },
-          { id: 15, userName: '美食探店小分队', rating: 4, content: '整体不错，排队太久。', time: '2026-07-01' },
-          { id: 16, userName: '吃货小胖', rating: 5, content: '好吃到哭！必点牛肉和毛肚！', time: '2026-06-30' },
-          { id: 17, userName: '美食达人小陈', rating: 4, content: '味道不错，价格略高。', time: '2026-06-29' },
-          { id: 18, userName: '旅游博主小刘', rating: 5, content: '来成都旅游必打卡！', time: '2026-06-28' },
-          { id: 19, userName: '本地吃货老李', rating: 5, content: '成都最好吃的火锅！', time: '2026-06-27' },
-          { id: 20, userName: '美食家小张', rating: 4, content: '味道正宗，价格偏贵。', time: '2026-06-26' }
-        ]
+const loadRestaurantDetail = async (id: string) => {
+  isLoading.value = true
+  try {
+    const response = await fetch(`http://localhost:8000/api/business/${id}/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
-      // ======================================================
-  
-      reviewPage.value = 1
-      checkFavorite()
-    } catch (error) {
-      console.error('加载餐厅详情失败:', error)
-    } finally {
-      isLoading.value = false
+    })
+
+    if (!response.ok) {
+      throw new Error(`请求失败 (HTTP ${response.status})`)
+    }
+
+    const result = await response.json()
+    if (result.code !== 0) {
+      throw new Error(result.message || '获取餐厅详情失败')
+    }
+
+    const data = result.data
+
+    // 1. 判断是否永久关闭
+    const isClosed = data.is_closed === true || data.is_closed === 'true'
+    let isOpen = false
+
+    // 2. 获取时区（优先使用后端返回的 timezone，否则用经纬度查询）
+    let timezone: string | undefined = data.timezone
+    if (!timezone && data.coordinates?.latitude && data.coordinates?.longitude) {
+      try {
+        timezone = tzlookup(data.coordinates.latitude, data.coordinates.longitude)
+      } catch (error) {
+        console.warn('时区查询失败，将使用本地时间', error)
+        timezone = undefined
+      }
+    }
+
+    // 3. 若未永久关闭且存在营业数据，判断当前是否营业
+    if (!isClosed && data.hours) {
+      isOpen = isOpenNow(data.hours, timezone)
+    }
+
+    // 4. 映射数据
+    const mappedData: RestaurantData = {
+      id: data.id,
+      name: data.name,
+      image: data.image_url || data.photos?.[0] || '',
+      images: data.photos || [],
+      rating: data.rating || 0,
+      reviewCount: data.review_count || 0,
+      price: typeof data.price === 'string' ? parseFloat(data.price) || 0 : (data.price || 0),
+      address: data.location?.display_address?.join(' ') || data.location?.address1 || '',
+      hours: data.hours ? formatHours(data.hours, timezone) : '暂未提供',
+      phone: data.display_phone || data.phone || '',
+      category: extractCategory(data.categories),
+      isOpen: isOpen,
+      reason: '',
+      summary: '',
+      tags: extractTags(data.categories, data.transactions),
+      lat: data.coordinates?.latitude,
+      lng: data.coordinates?.longitude,
+      reviews: (data as any).reviews || []
+    }
+
+    restaurantData.value = mappedData
+    reviewTotal.value = mappedData.reviewCount
+    reviewPage.value = 0
+
+    checkFavorite()
+    restaurantData.value!.reviews = []
+    await loadMoreReviews()
+
+  } catch (error) {
+    console.error('加载餐厅详情失败:', error)
+    const toastOptions = handleApiError(error, '加载餐厅详情失败')
+    toast.showToast(toastOptions)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 从 categories 数组中提取第一个分类名称
+const extractCategory = (categories: any[]): string => {
+  if (!categories || categories.length === 0) return '未分类'
+  const first = categories[0]
+  return typeof first === 'string' ? first : (first.title || first.name || '')
+}
+
+// 生成标签（可从分类或交易类型中提取）
+const extractTags = (categories: any[], transactions: any[]): string[] => {
+  const tags: string[] = []
+  if (categories && categories.length) {
+    categories.forEach(cat => {
+      const title = cat.title || cat.name || ''
+      if (title) tags.push(title)
+    })
+  }
+  if (transactions && transactions.length) {
+    transactions.forEach(t => {
+      if (typeof t === 'string') tags.push(t)
+      else if (t.name) tags.push(t.name)
+    })
+  }
+  return tags.slice(0, 10) // 最多显示10个，可调整
+}
+
+// ============================================
+// 辅助函数：获取指定时区的当前星期和分钟数
+// ============================================
+const getLocalTimeInTimezone = (timezone?: string) => {
+  const now = new Date()
+  if (timezone) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+    const parts = formatter.formatToParts(now)
+    let year = 0, month = 0, day = 0, hour = 0, minute = 0
+    for (const p of parts) {
+      if (p.type === 'year') year = parseInt(p.value)
+      else if (p.type === 'month') month = parseInt(p.value)
+      else if (p.type === 'day') day = parseInt(p.value)
+      else if (p.type === 'hour') hour = parseInt(p.value)
+      else if (p.type === 'minute') minute = parseInt(p.value)
+    }
+    const localDate = new Date(year, month - 1, day)
+    const dayOfWeek = localDate.getDay()
+    return { dayOfWeek, minutes: hour * 60 + minute }
+  } else {
+    const localDate = new Date()
+    return {
+      dayOfWeek: localDate.getDay(),
+      minutes: localDate.getHours() * 60 + localDate.getMinutes()
     }
   }
-  
+}
+
+// ============================================
+// 格式化营业时间（支持时区）
+// ============================================
+const formatHours = (hoursData: any, timezone?: string): string => {
+  if (!hoursData?.open || !Array.isArray(hoursData.open)) {
+    return '暂未提供'
+  }
+  const { dayOfWeek } = getLocalTimeInTimezone(timezone)
+  const match = hoursData.open.find((item: any) => {
+    const jsDay = (item.day + 1) % 7
+    return jsDay === dayOfWeek
+  })
+  if (match) {
+    const start = match.start.padStart(4, '0')
+    const end = match.end.padStart(4, '0')
+    return `${start.slice(0,2)}:${start.slice(2)} - ${end.slice(0,2)}:${end.slice(2)}`
+  }
+  return '今日休息'
+}
+
+// ============================================
+// 判断当前是否营业（基于当地时区）
+// ============================================
+const isOpenNow = (hoursData: any, timezone?: string): boolean => {
+  if (!hoursData?.open || !Array.isArray(hoursData.open)) {
+    return false
+  }
+  const { dayOfWeek, minutes } = getLocalTimeInTimezone(timezone)
+  const match = hoursData.open.find((item: any) => {
+    const jsDay = (item.day + 1) % 7
+    return jsDay === dayOfWeek
+  })
+  if (!match) return false
+
+  const startStr = match.start.padStart(4, '0')
+  const endStr = match.end.padStart(4, '0')
+  const start = parseInt(startStr.slice(0,2)) * 60 + parseInt(startStr.slice(2))
+  let end = parseInt(endStr.slice(0,2)) * 60 + parseInt(endStr.slice(2))
+  if (end < start) end += 24 * 60
+
+  if (start > end) {
+    return minutes >= start || minutes <= end
+  } else {
+    return minutes >= start && minutes <= end
+  }
+}
   // ============================================
   // 【API 接口2】收藏/取消收藏
   // ============================================
@@ -484,14 +599,14 @@
   // ============================================
   const toggleFavorite = async () => {
     if (!restaurantData.value) return
-    
+
     // ========== 真实 API 调用（取消注释即可使用） ==========
     // try {
-    //   const url = isFavorited.value 
-    //     ? `/api/favorites/${restaurantData.value.id}` 
+    //   const url = isFavorited.value
+    //     ? `/api/favorites/${restaurantData.value.id}`
     //     : '/api/favorites'
     //   const method = isFavorited.value ? 'DELETE' : 'POST'
-    //   
+    //
     //   const response = await fetch(url, {
     //     method,
     //     headers: {
@@ -507,7 +622,7 @@
     //   alert('操作失败，请稍后重试')
     // }
     // ======================================================
-  
+
     // ========== 本地模拟（开发测试用，接入 API 后删除） ==========
     isFavorited.value = !isFavorited.value
     const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
@@ -522,7 +637,7 @@
     localStorage.setItem('favorites', JSON.stringify(favorites))
     // ======================================================
   }
-  
+
   // ============================================
   // 检查收藏状态
   // ============================================
@@ -531,77 +646,112 @@
     const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
     isFavorited.value = favorites.includes(restaurantData.value.id)
   }
-  
-  // ============================================
-  // 【API 接口3】加载更多评论
-  // ============================================
-  // 接口地址: GET /api/restaurants/{id}/reviews?page={page}&limit={limit}
-  // 请求头: Authorization: Bearer {token}
-  // 响应: { code: 200, data: { list: Review[], total: number, hasMore: boolean } }
-  // ============================================
-  const loadMoreReviews = async () => {
-    if (isLoadingMore.value || !hasMoreReviews.value) return
-    
-    isLoadingMore.value = true
-    
-    // ========== 真实 API 调用（取消注释即可使用） ==========
-    // try {
-    //   const nextPage = reviewPage.value + 1
-    //   const response = await fetch(
-    //     `/api/restaurants/${restaurantData.value?.id}/reviews?page=${nextPage}&limit=${REVIEW_PAGE_SIZE}`,
-    //     {
-    //       headers: {
-    //         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-    //       }
-    //     }
-    //   )
-    //   if (!response.ok) throw new Error('加载评论失败')
-    //   const result = await response.json()
-    //   const newReviews = result.data.list
-    //   restaurantData.value!.reviews = [...(restaurantData.value!.reviews || []), ...newReviews]
-    //   reviewPage.value = nextPage
-    // } catch (error) {
-    //   console.error('加载评论失败:', error)
-    //   alert('加载评论失败，请稍后重试')
-    // } finally {
-    //   isLoadingMore.value = false
-    // }
-    // ======================================================
-  
-    // ========== 本地模拟（开发测试用，接入 API 后删除） ==========
-    await new Promise(resolve => setTimeout(resolve, 600))
-    reviewPage.value++
-    isLoadingMore.value = false
-    // ======================================================
-  
+
+// ============================================
+// 【API 接口3】加载更多评论
+// 接口地址: POST /api/review/list/
+// 请求头: Authorization: Bearer {token}
+// 请求体: { business_id, page, page_size, sort_by, source }
+// 响应: { code: 0, data: { items: [], total: 0 } }
+// ============================================
+const loadMoreReviews = async () => {
+  if (isLoadingMore.value || !hasMoreReviews.value) return
+
+  const id = restaurantData.value?.id
+  if (!id) {
+    console.error('餐厅 ID 不存在，无法加载评论')
+    return
+  }
+
+  isLoadingMore.value = true
+
+  try {
+    const nextPage = reviewPage.value + 1
+
+    const params = new URLSearchParams({
+      business_id: id,
+      page: String(nextPage),
+      page_size: String(REVIEW_PAGE_SIZE)
+    })
+    const url = `http://localhost:8000/api/review/list?${params.toString()}`
+    console.log('请求 URL：', url)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      }
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text()
+      console.error('服务器错误详情：', errorBody)
+      throw new Error(`HTTP ${response.status}: ${errorBody}`)
+    }
+
+    const result = await response.json()
+    console.log('完整响应：', result)
+console.log('items 长度：', result.data?.items?.length)
+console.log('total：', result.data?.total)
+    if (result.code !== 0) {
+      throw new Error(result.message || '接口返回错误码')
+    }
+
+    const items = result.data?.items || []
+    const total = result.data?.total || 0
+    reviewTotal.value = total
+
+    const newReviews = items.map((item: any) => ({
+      id: item.id,
+      userName: item.user?.name || '匿名用户',
+      avatar: item.user?.image_url || item.user?.profile_url || '',
+      rating: item.rating || 0,
+      content: item.text || '',
+      time: item.time_created || ''
+    }))
+
+    restaurantData.value!.reviews = [
+      ...(restaurantData.value!.reviews || []),
+      ...newReviews
+    ]
+    reviewPage.value = nextPage
+
     await nextTick()
     const reviewItems = document.querySelectorAll('.review-item')
     if (reviewItems.length > 0) {
       const lastItem = reviewItems[reviewItems.length - 1]
       lastItem?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
+
+  } catch (error) {
+    console.error('加载评论失败：', error)
+    const toastOptions = handleApiError(error, '加载评论失败')
+    toast.showToast(toastOptions)
+  } finally {
+    isLoadingMore.value = false
   }
-  
+}
   // ============================================
   // 评论分页计算属性
   // ============================================
-  const displayedReviews = computed(() => {
-    if (!restaurantData.value?.reviews) return []
-    const reviews = restaurantData.value.reviews
-    const end = reviewPage.value * REVIEW_PAGE_SIZE
-    return reviews.slice(0, end)
-  })
-  
-  const hasMoreReviews = computed(() => {
-    if (!restaurantData.value?.reviews) return false
-    return restaurantData.value.reviews.length > displayedReviews.value.length
-  })
-  
-  const remainingReviewsCount = computed(() => {
-    if (!restaurantData.value?.reviews) return 0
-    return restaurantData.value.reviews.length - displayedReviews.value.length
-  })
-  
+// 已显示评论数量
+const displayedReviews = computed(() => {
+  if (!restaurantData.value?.reviews) return []
+  return restaurantData.value.reviews
+})
+
+// 是否有更多评论（依据接口返回的 total 和 hasMore）
+const hasMoreReviews = computed(() => {
+  if (!restaurantData.value?.reviews) return false
+  return restaurantData.value.reviews.length < reviewTotal.value
+})
+
+// 剩余评论数
+const remainingReviewsCount = computed(() => {
+  if (!restaurantData.value?.reviews) return 0
+  return Math.max(0, reviewTotal.value - restaurantData.value.reviews.length)
+})
+
   // ============================================
   // 图片预览功能
   // ============================================
@@ -614,26 +764,26 @@
     showGalleryModal.value = true
     document.body.style.overflow = 'hidden'
   }
-  
+
   const closeGallery = () => {
     showGalleryModal.value = false
     document.body.style.overflow = ''
   }
-  
+
   const prevImage = () => {
     if (!restaurantData.value?.images) return
     if (currentImageIndex.value > 0) {
       currentImageIndex.value--
     }
   }
-  
+
   const nextImage = () => {
     if (!restaurantData.value?.images) return
     if (currentImageIndex.value < restaurantData.value.images.length - 1) {
       currentImageIndex.value++
     }
   }
-  
+
   const handleKeydown = (e: KeyboardEvent) => {
     if (!showGalleryModal.value) return
     if (e.key === 'Escape') {
@@ -644,7 +794,7 @@
       nextImage()
     }
   }
-  
+
   // ============================================
   // 导航功能 - 高德地图导航
   // ============================================
@@ -654,11 +804,11 @@
       alert('暂无地址信息')
       return
     }
-    
+
     const name = encodeURIComponent(data.name)
     const address = encodeURIComponent(data.address)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-    
+
     try {
       if (isMobile) {
         let amapUri = ''
@@ -667,12 +817,12 @@
         } else {
           amapUri = `androidamap://navi?sourceApplication=${name}&poiname=${name}&dev=0&style=2`
         }
-        
+
         const iframe = document.createElement('iframe')
         iframe.style.display = 'none'
         iframe.src = amapUri
         document.body.appendChild(iframe)
-        
+
         setTimeout(() => {
           document.body.removeChild(iframe)
           let webUrl = `https://ditu.amap.com/dir?type=car&to=${address}&src=${name}`
@@ -696,20 +846,20 @@
       )
     }
   }
-  
+
   // ============================================
   // 其他导航功能
   // ============================================
   const goBack = () => {
     router.back()
   }
-  
+
   const callRestaurant = () => {
     if (restaurantData.value) {
       window.location.href = `tel:${restaurantData.value.phone}`
     }
   }
-  
+
   const shareRestaurant = () => {
     if (restaurantData.value) {
       if (navigator.share) {
@@ -724,14 +874,14 @@
       }
     }
   }
-  
+
   const bookTable = () => {
     if (restaurantData.value) {
       window.location.href = `tel:${restaurantData.value.phone}`
     }
   }
   </script>
-  
+
   <style scoped>
   /* ============================================
      全局布局
@@ -745,7 +895,7 @@
     flex-direction: column;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
-  
+
   /* ============================================
      顶部导航栏
      ============================================ */
@@ -761,7 +911,7 @@
     z-index: 100;
     backdrop-filter: blur(8px);
   }
-  
+
   .back-btn {
     display: flex;
     align-items: center;
@@ -775,33 +925,33 @@
     border-radius: 0.5rem;
     transition: all 0.2s;
   }
-  
+
   .back-btn:hover {
     background: #f1f5f9;
     color: #1e293b;
   }
-  
+
   .back-btn i {
     font-size: 1rem;
   }
-  
+
   .header-center {
     flex: 1;
     text-align: center;
   }
-  
+
   .header-title {
     font-size: 1.05rem;
     font-weight: 600;
     color: #0f172a;
     margin: 0;
   }
-  
+
   .header-actions {
     display: flex;
     gap: 0.3rem;
   }
-  
+
   .header-actions .action-btn {
     width: 2.4rem;
     height: 2.4rem;
@@ -816,15 +966,15 @@
     align-items: center;
     justify-content: center;
   }
-  
+
   .header-actions .action-btn:hover {
     background: #f1f5f9;
   }
-  
+
   .header-actions .action-btn.favorited {
     color: #ef4444;
   }
-  
+
   /* ============================================
      主内容
      ============================================ */
@@ -833,7 +983,7 @@
     overflow-y: auto;
     padding-bottom: 80px;
   }
-  
+
   /* ============================================
      加载状态
      ============================================ */
@@ -845,20 +995,20 @@
     padding: 4rem 2rem;
     color: #94a3b8;
   }
-  
+
   .loading-state i {
     font-size: 2.5rem;
     color: #3b82f6;
     margin-bottom: 1rem;
   }
-  
+
   /* ============================================
      图片区域
      ============================================ */
   .restaurant-gallery {
     position: relative;
   }
-  
+
   .gallery-main {
     position: relative;
     width: 100%;
@@ -866,13 +1016,13 @@
     overflow: hidden;
     cursor: pointer;
   }
-  
+
   .gallery-main img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-  
+
   .gallery-badge {
     position: absolute;
     bottom: 1rem;
@@ -887,7 +1037,7 @@
     gap: 0.3rem;
     backdrop-filter: blur(4px);
   }
-  
+
   .gallery-thumbs {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -895,24 +1045,24 @@
     padding: 2px;
     background: #f1f5f9;
   }
-  
+
   .thumb-item {
     height: 80px;
     overflow: hidden;
     cursor: pointer;
   }
-  
+
   .thumb-item img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     transition: transform 0.2s;
   }
-  
+
   .thumb-item img:hover {
     transform: scale(1.05);
   }
-  
+
   .thumb-more {
     height: 80px;
     background: #1e293b;
@@ -924,7 +1074,7 @@
     font-weight: 600;
     cursor: pointer;
   }
-  
+
   /* ============================================
      餐厅信息
      ============================================ */
@@ -932,39 +1082,39 @@
     padding: 1.2rem 1.2rem 1.5rem;
     background: white;
   }
-  
+
   .info-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 1rem;
   }
-  
+
   .name-wrapper {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     margin-bottom: 0.3rem;
   }
-  
+
   .restaurant-name {
     font-size: 1.5rem;
     font-weight: 700;
     color: #0f172a;
     margin: 0;
   }
-  
+
   .rating-emoji {
     font-size: 1.6rem;
     line-height: 1;
     cursor: default;
     transition: transform 0.2s;
   }
-  
+
   .rating-emoji:hover {
     transform: scale(1.15);
   }
-  
+
   .restaurant-meta {
     display: flex;
     flex-wrap: wrap;
@@ -973,7 +1123,7 @@
     font-size: 0.85rem;
     color: #64748b;
   }
-  
+
   .restaurant-rating {
     display: flex;
     align-items: center;
@@ -981,17 +1131,17 @@
     color: #f59e0b;
     font-weight: 600;
   }
-  
+
   .restaurant-rating .review-count {
     color: #94a3b8;
     font-weight: 400;
   }
-  
+
   .restaurant-price {
     color: #3b82f6;
     font-weight: 600;
   }
-  
+
   .restaurant-category {
     background: #f1f5f9;
     padding: 0.1rem 0.6rem;
@@ -999,7 +1149,7 @@
     font-size: 0.75rem;
     color: #475569;
   }
-  
+
   .restaurant-status {
     display: flex;
     align-items: center;
@@ -1011,23 +1161,23 @@
     background: #fef2f2;
     color: #dc2626;
   }
-  
+
   .restaurant-status.open {
     background: #f0fdf4;
     color: #22c55e;
   }
-  
+
   .restaurant-status .status-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: #dc2626;
   }
-  
+
   .restaurant-status.open .status-dot {
     background: #22c55e;
   }
-  
+
   /* ============================================
      信息网格
      ============================================ */
@@ -1040,36 +1190,36 @@
     border-bottom: 1px solid #f1f5f9;
     margin-bottom: 1rem;
   }
-  
+
   .info-item {
     display: flex;
     align-items: flex-start;
     gap: 0.6rem;
   }
-  
+
   .info-item i {
     color: #94a3b8;
     font-size: 0.9rem;
     margin-top: 0.1rem;
     width: 1rem;
   }
-  
+
   .info-item div {
     display: flex;
     flex-direction: column;
   }
-  
+
   .info-label {
     font-size: 0.7rem;
     color: #94a3b8;
   }
-  
+
   .info-value {
     font-size: 0.85rem;
     color: #334155;
     word-break: break-all;
   }
-  
+
   /* ============================================
      操作按钮
      ============================================ */
@@ -1078,7 +1228,7 @@
     gap: 0.6rem;
     margin-bottom: 1.2rem;
   }
-  
+
   .action-btn-primary {
     flex: 1;
     padding: 0.6rem;
@@ -1093,35 +1243,35 @@
     justify-content: center;
     gap: 0.4rem;
   }
-  
+
   .action-btn-primary.navigate {
     background: #3b82f6;
     color: white;
   }
-  
+
   .action-btn-primary.navigate:hover {
     background: #2563eb;
     transform: translateY(-1px);
   }
-  
+
   .action-btn-primary.call {
     background: #f1f5f9;
     color: #334155;
   }
-  
+
   .action-btn-primary.call:hover {
     background: #e2e8f0;
   }
-  
+
   .action-btn-primary.share {
     background: #f1f5f9;
     color: #334155;
   }
-  
+
   .action-btn-primary.share:hover {
     background: #e2e8f0;
   }
-  
+
   /* ============================================
      内容区块
      ============================================ */
@@ -1134,21 +1284,21 @@
     align-items: center;
     gap: 0.4rem;
   }
-  
+
   .section-title i {
     color: #3b82f6;
   }
-  
+
   .restaurant-tags-section {
     margin-bottom: 1.2rem;
   }
-  
+
   .restaurant-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
   }
-  
+
   .restaurant-tags .tag {
     background: #f1f5f9;
     padding: 0.3rem 0.8rem;
@@ -1156,11 +1306,11 @@
     font-size: 0.8rem;
     color: #475569;
   }
-  
+
   .restaurant-reason {
     margin-bottom: 1.2rem;
   }
-  
+
   .reason-content {
     display: flex;
     gap: 0.6rem;
@@ -1169,25 +1319,25 @@
     border-left: 3px solid;
     transition: all 0.3s ease;
   }
-  
+
   .reason-content i {
     font-size: 0.8rem;
     margin-top: 0.1rem;
     flex-shrink: 0;
     transition: color 0.3s ease;
   }
-  
+
   .reason-content p {
     margin: 0;
     font-size: 0.9rem;
     line-height: 1.6;
     transition: color 0.3s ease;
   }
-  
+
   .restaurant-summary-section {
     margin-bottom: 1.2rem;
   }
-  
+
   .summary-content {
     display: flex;
     gap: 0.6rem;
@@ -1196,13 +1346,13 @@
     border-radius: 0.8rem;
     border-left: 3px solid #3b82f6;
   }
-  
+
   .summary-content i {
     color: #3b82f6;
     font-size: 0.8rem;
     margin-top: 0.1rem;
   }
-  
+
   .summary-content p {
     margin: 0;
     font-size: 0.9rem;
@@ -1210,90 +1360,90 @@
     line-height: 1.6;
     font-style: italic;
   }
-  
+
   /* ============================================
      评价列表
      ============================================ */
   .reviews-section {
     margin-bottom: 1.2rem;
   }
-  
+
   .reviews-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.8rem;
   }
-  
+
   .review-total {
     font-size: 0.8rem;
     color: #94a3b8;
   }
-  
+
   .reviews-list {
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
   }
-  
+
   .review-item {
     background: #f8fafc;
     padding: 0.8rem 1rem;
     border-radius: 0.8rem;
   }
-  
+
   .review-user {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     margin-bottom: 0.4rem;
   }
-  
+
   .review-user img {
     width: 2rem;
     height: 2rem;
     border-radius: 50%;
     object-fit: cover;
   }
-  
+
   .review-user div {
     display: flex;
     flex-direction: column;
   }
-  
+
   .review-name {
     font-size: 0.85rem;
     font-weight: 500;
     color: #334155;
   }
-  
+
   .review-time {
     font-size: 0.7rem;
     color: #94a3b8;
   }
-  
+
   .review-rating {
     display: flex;
     gap: 0.1rem;
     margin-bottom: 0.3rem;
   }
-  
+
   .review-rating .fa-star {
     color: #e2e8f0;
     font-size: 0.7rem;
   }
-  
+
   .review-rating .fa-star.active {
     color: #f59e0b;
   }
-  
+
   .review-content {
     font-size: 0.85rem;
     color: #475569;
     line-height: 1.6;
     margin: 0;
   }
-  
+
   .load-more-wrapper {
     display: flex;
     justify-content: center;
@@ -1301,7 +1451,7 @@
     padding-top: 0.8rem;
     border-top: 1px solid #f1f5f9;
   }
-  
+
   .load-more-btn {
     padding: 0.5rem 1.5rem;
     background: #f1f5f9;
@@ -1312,21 +1462,21 @@
     cursor: pointer;
     transition: all 0.2s;
   }
-  
+
   .load-more-btn:hover:not(:disabled) {
     background: #e2e8f0;
     color: #1e293b;
   }
-  
+
   .load-more-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
-  
+
   .load-more-btn i {
     margin-right: 0.3rem;
   }
-  
+
   /* ============================================
      图片预览弹窗
      ============================================ */
@@ -1343,7 +1493,7 @@
     justify-content: center;
     animation: galleryFadeIn 0.3s ease;
   }
-  
+
   @keyframes galleryFadeIn {
     from {
       opacity: 0;
@@ -1352,7 +1502,7 @@
       opacity: 1;
     }
   }
-  
+
   .gallery-modal-content {
     position: relative;
     width: 100%;
@@ -1361,7 +1511,7 @@
     align-items: center;
     justify-content: center;
   }
-  
+
   .gallery-image-wrapper {
     width: 90%;
     height: 85%;
@@ -1369,14 +1519,14 @@
     align-items: center;
     justify-content: center;
   }
-  
+
   .gallery-image {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
     animation: galleryZoomIn 0.3s ease;
   }
-  
+
   @keyframes galleryZoomIn {
     from {
       transform: scale(0.95);
@@ -1387,7 +1537,7 @@
       opacity: 1;
     }
   }
-  
+
   .gallery-close {
     position: absolute;
     top: 1.5rem;
@@ -1406,12 +1556,12 @@
     justify-content: center;
     z-index: 10;
   }
-  
+
   .gallery-close:hover {
     background: rgba(255, 255, 255, 0.25);
     transform: rotate(90deg);
   }
-  
+
   .gallery-counter {
     position: absolute;
     bottom: 2rem;
@@ -1424,7 +1574,7 @@
     border-radius: 1.5rem;
     backdrop-filter: blur(4px);
   }
-  
+
   .gallery-nav {
     position: absolute;
     top: 50%;
@@ -1443,24 +1593,24 @@
     justify-content: center;
     z-index: 10;
   }
-  
+
   .gallery-nav:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.25);
   }
-  
+
   .gallery-nav:disabled {
     opacity: 0.3;
     cursor: not-allowed;
   }
-  
+
   .gallery-prev {
     left: 1.5rem;
   }
-  
+
   .gallery-next {
     right: 1.5rem;
   }
-  
+
   /* ============================================
      空状态
      ============================================ */
@@ -1472,13 +1622,13 @@
     padding: 4rem 2rem;
     color: #94a3b8;
   }
-  
+
   .empty-state i {
     font-size: 4rem;
     color: #cbd5e1;
     margin-bottom: 1rem;
   }
-  
+
   .empty-btn {
     margin-top: 1rem;
     padding: 0.6rem 2rem;
@@ -1489,11 +1639,11 @@
     cursor: pointer;
     transition: background 0.2s;
   }
-  
+
   .empty-btn:hover {
     background: #2563eb;
   }
-  
+
   /* ============================================
      底部导航
      ============================================ */
@@ -1508,7 +1658,7 @@
     padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
     z-index: 100;
   }
-  
+
   .bottom-nav-content {
     display: flex;
     align-items: center;
@@ -1516,19 +1666,19 @@
     max-width: 1100px;
     margin: 0 auto;
   }
-  
+
   .nav-info {
     display: flex;
     align-items: center;
     gap: 0.8rem;
   }
-  
+
   .nav-price {
     font-size: 1.1rem;
     font-weight: 700;
     color: #0f172a;
   }
-  
+
   .nav-rating {
     display: flex;
     align-items: center;
@@ -1537,12 +1687,12 @@
     color: #f59e0b;
     font-weight: 600;
   }
-  
+
   .nav-actions {
     display: flex;
     gap: 0.5rem;
   }
-  
+
   .nav-btn {
     padding: 0.4rem 1rem;
     border: none;
@@ -1555,59 +1705,59 @@
     gap: 0.3rem;
     transition: all 0.2s;
   }
-  
+
   .nav-btn.favorite {
     background: #f1f5f9;
     color: #475569;
   }
-  
+
   .nav-btn.favorite:hover {
     background: #e2e8f0;
   }
-  
+
   .nav-btn.favorite.active {
     background: #fef2f2;
     color: #ef4444;
   }
-  
+
   .nav-btn.favorite.active:hover {
     background: #fee2e2;
   }
-  
+
   .nav-btn.book {
     background: #3b82f6;
     color: white;
   }
-  
+
   .nav-btn.book:hover {
     background: #2563eb;
   }
-  
+
   .nav-btn.navigate {
     background: #22c55e;
     color: white;
   }
-  
+
   .nav-btn.navigate:hover {
     background: #16a34a;
   }
-  
+
   /* ============================================
      滚动条
      ============================================ */
   .restaurant-content::-webkit-scrollbar {
     width: 4px;
   }
-  
+
   .restaurant-content::-webkit-scrollbar-track {
     background: transparent;
   }
-  
+
   .restaurant-content::-webkit-scrollbar-thumb {
     background: #cbd5e1;
     border-radius: 4px;
   }
-  
+
   /* ============================================
      响应式
      ============================================ */
@@ -1615,76 +1765,76 @@
     .restaurant-header {
       padding: 0.6rem 0.8rem;
     }
-  
+
     .back-btn span {
       display: none;
     }
-  
+
     .gallery-main {
       height: 200px;
     }
-  
+
     .thumb-item,
     .thumb-more {
       height: 60px;
     }
-  
+
     .restaurant-info-section {
       padding: 1rem;
     }
-  
+
     .restaurant-name {
       font-size: 1.3rem;
     }
-  
+
     .rating-emoji {
       font-size: 1.3rem;
     }
-  
+
     .restaurant-info-grid {
       grid-template-columns: 1fr 1fr;
       gap: 0.6rem;
     }
-  
+
     .action-buttons {
       flex-wrap: wrap;
     }
-  
+
     .action-btn-primary {
       flex: 1;
       min-width: calc(33.33% - 0.4rem);
     }
-  
+
     .bottom-nav {
       padding: 0.4rem 0.8rem;
     }
-  
+
     .nav-info {
       display: none;
     }
-  
+
     .nav-actions {
       width: 100%;
       justify-content: space-around;
     }
-  
+
     .nav-btn {
       flex: 1;
       justify-content: center;
       padding: 0.5rem;
     }
-  
+
     .load-more-btn {
       width: 100%;
       padding: 0.6rem;
       font-size: 0.8rem;
     }
-  
+
     .gallery-image-wrapper {
       width: 95%;
       height: 75%;
     }
-    
+
     .gallery-close {
       top: 1rem;
       right: 1rem;
@@ -1692,70 +1842,70 @@
       width: 2.8rem;
       height: 2.8rem;
     }
-    
+
     .gallery-nav {
       width: 2.5rem;
       height: 2.5rem;
       font-size: 1.2rem;
     }
-    
+
     .gallery-prev {
       left: 0.5rem;
     }
-    
+
     .gallery-next {
       right: 0.5rem;
     }
-    
+
     .gallery-counter {
       bottom: 1.2rem;
       font-size: 0.8rem;
       padding: 0.3rem 0.8rem;
     }
   }
-  
+
   @media (max-width: 480px) {
     .gallery-main {
       height: 180px;
     }
-  
+
     .thumb-item,
     .thumb-more {
       height: 50px;
     }
-  
+
     .restaurant-meta {
       font-size: 0.75rem;
       gap: 0.4rem;
     }
-  
+
     .restaurant-info-grid {
       grid-template-columns: 1fr;
       gap: 0.4rem;
     }
-  
+
     .nav-btn {
       font-size: 0.75rem;
     }
-  
+
     .nav-btn span {
       display: none;
     }
-  
+
     .rating-emoji {
       font-size: 1.1rem;
     }
   }
-  
+
   @media (max-width: 400px) {
     .header-title {
       font-size: 0.9rem;
     }
-  
+
     .restaurant-name {
       font-size: 1.1rem;
     }
-  
+
     .action-btn-primary {
       font-size: 0.75rem;
       padding: 0.4rem;

@@ -6,7 +6,7 @@
           <i class="fas fa-arrow-left"></i>
           <span>返回首页</span>
         </button>
-  
+
         <!-- 注册卡片 -->
         <div class="register-card">
           <!-- Logo 区域 -->
@@ -21,7 +21,7 @@
             <h1 class="register-title">创建账号</h1>
             <p class="register-subtitle">加入探店助手，发现身边好店</p>
           </div>
-  
+
           <!-- 注册表单 -->
           <form class="register-form" @submit.prevent="handleRegister">
             <!-- 用户名 -->
@@ -43,26 +43,27 @@
               </div>
               <span v-if="usernameError" class="field-error">{{ usernameError }}</span>
             </div>
-  
-            <!-- 手机号 -->
-            <div class="form-group">
-              <label for="phone">
-                <i class="fas fa-phone"></i>
-                手机号
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-phone input-icon"></i>
-                <input
-                  id="phone"
-                  v-model="registerForm.phone"
-                  type="tel"
-                  placeholder="请输入手机号（选填）"
-                  autocomplete="tel"
-                />
-              </div>
-              <span v-if="phoneError" class="field-error">{{ phoneError }}</span>
-            </div>
-  
+
+<!-- 邮箱 -->
+<div class="form-group">
+  <label for="email">
+    <i class="fas fa-envelope"></i>
+    邮箱
+  </label>
+  <div class="input-wrapper">
+    <i class="fas fa-envelope input-icon"></i>
+    <input
+      id="email"
+      v-model="registerForm.email"
+      type="email"
+      placeholder="请输入邮箱地址"
+      autocomplete="email"
+      required
+    />
+  </div>
+  <span v-if="emailError" class="field-error">{{ emailError }}</span>
+</div>
+
             <!-- 密码 -->
             <div class="form-group">
               <label for="password">
@@ -99,7 +100,7 @@
                 </span>
               </div>
             </div>
-  
+
             <!-- 确认密码 -->
             <div class="form-group">
               <label for="confirmPassword">
@@ -126,7 +127,7 @@
               </div>
               <span v-if="confirmPasswordError" class="field-error">{{ confirmPasswordError }}</span>
             </div>
-  
+
             <!-- 用户协议 -->
             <div class="form-agreement">
               <label class="agreement-checkbox">
@@ -139,7 +140,7 @@
                 </span>
               </label>
             </div>
-  
+
             <!-- 注册按钮 -->
             <button
               type="submit"
@@ -149,21 +150,21 @@
               <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
               <span v-else>立即注册</span>
             </button>
-  
+
             <!-- 错误提示 -->
             <div v-if="errorMessage" class="error-message">
               <i class="fas fa-exclamation-circle"></i>
               {{ errorMessage }}
             </div>
           </form>
-  
+
           <!-- 登录入口 -->
           <div class="login-section">
             <span>已有账号？</span>
             <a href="#" @click.prevent="goToLogin">立即登录</a>
           </div>
         </div>
-  
+
         <!-- 底部版权 -->
         <div class="register-footer">
           <p>&copy; 2026 探店助手 · 让选择更简单</p>
@@ -171,36 +172,36 @@
       </div>
     </div>
   </template>
-  
+
   <script setup lang="ts">
   import { ref, reactive, computed, watch } from 'vue'
   import { useRouter } from 'vue-router'
-  
+
   const router = useRouter()
-  
+
   // ============================================
   // 表单数据
   // ============================================
   const registerForm = reactive({
     username: '',
-    phone: '',
+    email: '',
     password: '',
     confirmPassword: '',
     agreed: false,
   })
-  
+
   const showPassword = ref(false)
   const showConfirmPassword = ref(false)
   const isLoading = ref(false)
   const errorMessage = ref('')
-  
+
   // ============================================
   // 表单验证
   // ============================================
   const usernameError = ref('')
-  const phoneError = ref('')
+  const emailError = ref('')
   const confirmPasswordError = ref('')
-  
+
   // 密码强度计算
   const passwordStrength = computed(() => {
     const pwd = registerForm.password
@@ -212,7 +213,7 @@
     if (/[0-9]/.test(pwd) || /[^a-zA-Z0-9]/.test(pwd)) strength += 25
     return Math.min(strength, 100)
   })
-  
+
   const strengthText = computed(() => {
     const s = passwordStrength.value
     if (s === 0) return ''
@@ -221,7 +222,7 @@
     if (s <= 80) return '强'
     return '非常强'
   })
-  
+
   const strengthColor = computed(() => {
     const s = passwordStrength.value
     if (s === 0) return '#94a3b8'
@@ -230,7 +231,7 @@
     if (s <= 80) return '#3b82f6'
     return '#22c55e'
   })
-  
+
   // 实时验证
   watch(() => registerForm.username, (val) => {
     if (val && !/^[a-zA-Z0-9\u4e00-\u9fa5]{2,16}$/.test(val)) {
@@ -239,15 +240,15 @@
       usernameError.value = ''
     }
   })
-  
-  watch(() => registerForm.phone, (val) => {
-    if (val && !/^1[3-9]\d{9}$/.test(val)) {
-      phoneError.value = '请输入正确的手机号'
-    } else {
-      phoneError.value = ''
-    }
-  })
-  
+
+  watch(() => registerForm.email, (val) => {
+  if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+    emailError.value = '请输入正确的邮箱地址'
+  } else {
+    emailError.value = ''
+  }
+})
+
   watch(() => registerForm.confirmPassword, (val) => {
     if (val && val !== registerForm.password) {
       confirmPasswordError.value = '两次密码输入不一致'
@@ -255,7 +256,7 @@
       confirmPasswordError.value = ''
     }
   })
-  
+
   // ============================================
   // 工具函数：获取当前日期
   // ============================================
@@ -266,45 +267,45 @@
     const day = String(now.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
-  
+
   // ============================================
   // 注册逻辑
   // ============================================
   const handleRegister = async () => {
     errorMessage.value = ''
-  
+
     // 验证用户名（支持中文）
     if (!/^[a-zA-Z0-9\u4e00-\u9fa5]{2,16}$/.test(registerForm.username)) {
       errorMessage.value = '用户名需为2-16位字母、数字或中文'
       return
     }
-  
-    // 验证手机号（如果有填写）
-    if (registerForm.phone && !/^1[3-9]\d{9}$/.test(registerForm.phone)) {
-      errorMessage.value = '请输入正确的手机号'
-      return
-    }
-  
+
+// 验证邮箱
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerForm.email)) {
+  errorMessage.value = '请输入正确的邮箱地址'
+  return
+}
+
     // 验证密码
     if (registerForm.password.length < 8) {
       errorMessage.value = '密码长度至少为8位'
       return
     }
-  
+
     // 验证确认密码
     if (registerForm.password !== registerForm.confirmPassword) {
       errorMessage.value = '两次密码输入不一致'
       return
     }
-  
+
     // 验证协议
     if (!registerForm.agreed) {
       errorMessage.value = '请先同意用户协议和隐私政策'
       return
     }
-  
+
     isLoading.value = true
-  
+
     try {
       // 调用注册 API
       const response = await fetch('/api/auth/register', {
@@ -314,18 +315,18 @@
         },
         body: JSON.stringify({
           username: registerForm.username.trim(),
-          phone: registerForm.phone.trim() || '',
-          password: registerForm.password,
+  email: registerForm.email.trim(),
+  password: registerForm.password,
         }),
       })
-  
+
       if (response.ok) {
         const data = await response.json()
-        
+
         // ✅ 注册成功，跳转到登录页
         // 可以显示成功提示
         alert('注册成功！请登录')
-        
+
         // 跳转到登录页
         router.push('/login')
       } else {
@@ -339,27 +340,27 @@
       isLoading.value = false
     }
   }
-  
+
   // ============================================
   // 导航函数
   // ============================================
   const goHome = () => {
     router.push('/')
   }
-  
+
   const goToLogin = () => {
     router.push('/login')
   }
-  
+
   const showTerms = () => {
     alert('用户协议内容...')
   }
-  
+
   const showPrivacy = () => {
     alert('隐私政策内容...')
   }
   </script>
-  
+
   <style scoped>
   /* ============================================
      全局布局
@@ -380,13 +381,13 @@
       radial-gradient(circle at 80% 70%, #e2e8f0 1px, transparent 1px);
     background-size: 40px 40px, 50px 50px;
   }
-  
+
   .register-container {
     width: 100%;
     max-width: 460px;
     position: relative;
   }
-  
+
   /* ============================================
      返回按钮
      ============================================ */
@@ -408,7 +409,7 @@
     position: relative;
     z-index: 10;
   }
-  
+
   .back-btn:hover {
     background: white;
     border-color: #3b82f6;
@@ -416,11 +417,11 @@
     transform: translateX(-2px);
     box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
   }
-  
+
   .back-btn i {
     font-size: 0.9rem;
   }
-  
+
   /* ============================================
      注册卡片
      ============================================ */
@@ -435,16 +436,16 @@
     max-height: 90vh;
     overflow-y: auto;
   }
-  
+
   .register-card::-webkit-scrollbar {
     width: 3px;
   }
-  
+
   .register-card::-webkit-scrollbar-thumb {
     background: #cbd5e1;
     border-radius: 3px;
   }
-  
+
   /* 顶部装饰 */
   .register-card::before {
     content: '';
@@ -457,7 +458,7 @@
     border-radius: 50%;
     pointer-events: none;
   }
-  
+
   .register-card::after {
     content: '';
     position: absolute;
@@ -469,7 +470,7 @@
     border-radius: 50%;
     pointer-events: none;
   }
-  
+
   /* ============================================
      头部
      ============================================ */
@@ -479,30 +480,30 @@
     position: relative;
     z-index: 1;
   }
-  
+
   .logo-icon {
     display: flex;
     justify-content: center;
     margin-bottom: 0.6rem;
   }
-  
+
   .logo-icon img {
     filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.15));
   }
-  
+
   .register-title {
     font-size: 1.6rem;
     font-weight: 700;
     color: #0f172a;
     margin-bottom: 0.2rem;
   }
-  
+
   .register-subtitle {
     font-size: 0.85rem;
     color: #94a3b8;
     font-weight: 400;
   }
-  
+
   /* ============================================
      表单
      ============================================ */
@@ -510,11 +511,11 @@
     position: relative;
     z-index: 1;
   }
-  
+
   .form-group {
     margin-bottom: 1rem;
   }
-  
+
   .form-group label {
     display: flex;
     align-items: center;
@@ -524,12 +525,12 @@
     color: #334155;
     margin-bottom: 0.3rem;
   }
-  
+
   .form-group label i {
     color: #94a3b8;
     font-size: 0.8rem;
   }
-  
+
   .input-wrapper {
     display: flex;
     align-items: center;
@@ -539,23 +540,23 @@
     padding: 0 0.8rem;
     transition: all 0.2s ease;
   }
-  
+
   .input-wrapper:focus-within {
     border-color: #3b82f6;
     background: white;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
   }
-  
+
   .input-wrapper.error {
     border-color: #ef4444;
   }
-  
+
   .input-icon {
     color: #94a3b8;
     font-size: 0.9rem;
     flex-shrink: 0;
   }
-  
+
   .input-wrapper input {
     flex: 1;
     padding: 0.65rem 0.5rem;
@@ -566,11 +567,11 @@
     color: #1e293b;
     min-width: 0;
   }
-  
+
   .input-wrapper input::placeholder {
     color: #cbd5e1;
   }
-  
+
   .toggle-password {
     background: none;
     border: none;
@@ -581,11 +582,11 @@
     flex-shrink: 0;
     transition: color 0.2s;
   }
-  
+
   .toggle-password:hover {
     color: #64748b;
   }
-  
+
   /* 字段错误 */
   .field-error {
     display: block;
@@ -593,7 +594,7 @@
     color: #ef4444;
     margin-top: 0.2rem;
   }
-  
+
   /* ============================================
      密码强度
      ============================================ */
@@ -603,7 +604,7 @@
     gap: 0.8rem;
     margin-top: 0.4rem;
   }
-  
+
   .strength-bar {
     flex: 1;
     height: 4px;
@@ -611,27 +612,27 @@
     border-radius: 2px;
     overflow: hidden;
   }
-  
+
   .strength-fill {
     height: 100%;
     border-radius: 2px;
     transition: width 0.3s ease, background 0.3s ease;
   }
-  
+
   .strength-label {
     font-size: 0.7rem;
     font-weight: 500;
     min-width: 2.5rem;
     text-align: right;
   }
-  
+
   /* ============================================
      用户协议
      ============================================ */
   .form-agreement {
     margin: 1rem 0 1.2rem;
   }
-  
+
   .agreement-checkbox {
     display: flex;
     align-items: flex-start;
@@ -641,7 +642,7 @@
     cursor: pointer;
     line-height: 1.5;
   }
-  
+
   .agreement-checkbox input[type="checkbox"] {
     width: 1rem;
     height: 1rem;
@@ -650,16 +651,16 @@
     flex-shrink: 0;
     margin-top: 0.1rem;
   }
-  
+
   .agreement-checkbox a {
     color: #3b82f6;
     text-decoration: none;
   }
-  
+
   .agreement-checkbox a:hover {
     text-decoration: underline;
   }
-  
+
   /* ============================================
      注册按钮
      ============================================ */
@@ -681,7 +682,7 @@
     position: relative;
     overflow: hidden;
   }
-  
+
   .register-btn::before {
     content: '';
     position: absolute;
@@ -692,25 +693,25 @@
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
     transition: left 0.6s ease;
   }
-  
+
   .register-btn:hover:not(:disabled)::before {
     left: 100%;
   }
-  
+
   .register-btn:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 6px 24px rgba(59, 130, 246, 0.3);
   }
-  
+
   .register-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  
+
   .register-btn i {
     font-size: 1rem;
   }
-  
+
   /* ============================================
      错误提示
      ============================================ */
@@ -726,12 +727,12 @@
     color: #dc2626;
     font-size: 0.85rem;
   }
-  
+
   .error-message i {
     font-size: 0.9rem;
     flex-shrink: 0;
   }
-  
+
   /* ============================================
      登录入口
      ============================================ */
@@ -743,19 +744,19 @@
     position: relative;
     z-index: 1;
   }
-  
+
   .login-section a {
     color: #3b82f6;
     text-decoration: none;
     font-weight: 600;
     transition: color 0.2s;
   }
-  
+
   .login-section a:hover {
     color: #1d4ed8;
     text-decoration: underline;
   }
-  
+
   /* ============================================
      底部版权
      ============================================ */
@@ -767,7 +768,7 @@
     position: relative;
     z-index: 1;
   }
-  
+
   /* ============================================
      平板端 (768px - 1024px)
      ============================================ */
@@ -775,12 +776,12 @@
     .register-view {
       padding: 1.5rem;
     }
-  
+
     .register-card {
       padding: 2rem 1.8rem 1.8rem;
     }
   }
-  
+
   /* ============================================
      手机端 (最大768px)
      ============================================ */
@@ -790,73 +791,73 @@
       align-items: flex-start;
       padding-top: 2rem;
     }
-  
+
     .register-container {
       max-width: 100%;
     }
-  
+
     .back-btn {
       padding: 0.4rem 0.8rem;
       font-size: 0.8rem;
       margin-bottom: 1rem;
     }
-  
+
     .back-btn span {
       display: none;
     }
-  
+
     .register-card {
       padding: 1.8rem 1.2rem 1.5rem;
       border-radius: 1.2rem;
       max-height: 85vh;
     }
-  
+
     .register-title {
       font-size: 1.4rem;
     }
-  
+
     .register-subtitle {
       font-size: 0.8rem;
     }
-  
+
     .form-group {
       margin-bottom: 0.8rem;
     }
-  
+
     .input-wrapper {
       padding: 0 0.6rem;
       border-radius: 0.7rem;
     }
-  
+
     .input-wrapper input {
       padding: 0.55rem 0.4rem;
       font-size: 0.85rem;
     }
-  
+
     .register-btn {
       padding: 0.7rem;
       font-size: 0.95rem;
     }
-  
+
     .login-section {
       margin-top: 1.2rem;
       font-size: 0.85rem;
     }
-  
+
     .register-footer {
       margin-top: 1rem;
       font-size: 0.65rem;
     }
-  
+
     .form-agreement {
       margin: 0.8rem 0 1rem;
     }
-  
+
     .agreement-checkbox {
       font-size: 0.75rem;
     }
   }
-  
+
   /* ============================================
      小屏手机 (最大480px)
      ============================================ */
@@ -865,36 +866,36 @@
       padding: 0.8rem;
       padding-top: 1.5rem;
     }
-  
+
     .register-card {
       padding: 1.5rem 1rem 1.2rem;
       border-radius: 1rem;
       max-height: 80vh;
     }
-  
+
     .logo-icon img {
       width: 44px;
       height: 44px;
     }
-  
+
     .register-title {
       font-size: 1.2rem;
     }
-  
+
     .register-subtitle {
       font-size: 0.75rem;
     }
-  
+
     .input-wrapper input {
       font-size: 0.8rem;
     }
-  
+
     .register-btn {
       font-size: 0.9rem;
       padding: 0.6rem;
     }
   }
-  
+
   /* ============================================
      横屏手机优化
      ============================================ */
@@ -903,53 +904,53 @@
       padding: 0.8rem;
       align-items: center;
     }
-  
+
     .register-card {
       padding: 1rem 1.5rem;
       border-radius: 1rem;
       max-height: 90vh;
     }
-  
+
     .register-header {
       margin-bottom: 0.8rem;
     }
-  
+
     .logo-icon img {
       width: 32px;
       height: 32px;
     }
-  
+
     .register-title {
       font-size: 1.1rem;
       margin-bottom: 0;
     }
-  
+
     .register-subtitle {
       display: none;
     }
-  
+
     .form-group {
       margin-bottom: 0.4rem;
     }
-  
+
     .form-group label {
       font-size: 0.75rem;
       margin-bottom: 0.1rem;
     }
-  
+
     .input-wrapper input {
       padding: 0.35rem 0.3rem;
       font-size: 0.8rem;
     }
-  
+
     .password-strength {
       display: none;
     }
-  
+
     .form-agreement {
       margin: 0.4rem 0 0.6rem;
     }
-  
+
     .register-footer {
       display: none;
     }
