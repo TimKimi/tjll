@@ -5,7 +5,8 @@ from __future__ import annotations
 from backend.models.app_user import AppUser
 from backend.models.base import Base
 from backend.models.business import Business
+from backend.models.favorite import Favorite
 from backend.models.review import Review
 from backend.models.user import User
 
-__all__ = ["AppUser", "Base", "Business", "Review", "User"]
+__all__ = ["AppUser", "Base", "Business", "Favorite", "Review", "User"]
