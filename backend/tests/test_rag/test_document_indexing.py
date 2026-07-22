@@ -3,45 +3,12 @@
 from __future__ import annotations
 
 
-def test_make_document_id_is_business_id():
-    from backend.rag.document.indexing import make_document_id
-
-    assert make_document_id("biz-abc") == "biz-abc"
-    assert make_document_id("biz-abc") == make_document_id("biz-abc")
-
-
 def test_make_chunk_id_format_and_stable():
     from backend.rag.document.indexing import make_chunk_id
 
     assert make_chunk_id("B1", "positive", 0) == "B1_pos_0000"
     assert make_chunk_id("B1", "negative", 12) == "B1_neg_0012"
     assert make_chunk_id("B1", "positive", 0) == make_chunk_id("B1", "positive", 0)
-
-
-def test_build_chunk_docs_legacy_pdf_defaults():
-    from backend.rag.document.indexing import (
-        build_chunk_docs,
-        make_chunk_id,
-        make_document_id,
-    )
-
-    docs = build_chunk_docs(
-        "/data/report.pdf",
-        chunks=["c0", "c1"],
-        embeddings=[[0.1, 0.2], [0.3, 0.4]],
-    )
-    assert len(docs) == 2
-    assert docs[0]["source_file"] == "report.pdf"
-    assert docs[0]["chunk_index"] == 0
-    assert docs[0]["text"] == "c0"
-    assert docs[0]["embedding"] == [0.1, 0.2]
-    assert docs[0]["document_id"] == make_document_id("report")
-    assert docs[0]["polarity"] == "positive"
-    assert docs[0]["is_last_chunk"] is False
-    assert docs[1]["is_last_chunk"] is True
-    assert docs[0]["chunk_id"] == make_chunk_id("report", "positive", 0)
-    assert docs[1]["chunk_id"] == make_chunk_id("report", "positive", 1)
-    assert "created_at" in docs[0]
 
 
 def test_build_yelp_chunk_docs_polarity_and_last_flag():
@@ -71,7 +38,7 @@ def test_build_yelp_chunk_docs_polarity_and_last_flag():
     assert docs[0]["chunk_id"] == make_chunk_id("biz1", "negative", 0)
     assert docs[2]["is_last_chunk"] is True
     assert docs[0]["is_last_chunk"] is False
-    assert docs[0]["document_id"] == "biz1"
+    assert docs[0]["id"] == "biz1"
     assert docs[0]["name"] == "N"
 
 
@@ -134,61 +101,6 @@ def test_index_chunks_to_opensearch(monkeypatch):
     assert success == 1
     assert errors == []
     assert client.indices.refreshed == "test-idx"
-
-
-def test_index_file_to_opensearch_empty_text(monkeypatch):
-    import backend.rag.document.indexing as idx
-
-    monkeypatch.setattr(idx, "ensure_index", lambda name=None: "idx")
-    monkeypatch.setattr(idx, "load_document_as_text", lambda _p: "   ")
-    monkeypatch.setattr(idx, "clean_text", lambda t: "")
-
-    out = idx.index_file_to_opensearch("a.md", ensure=True)
-    assert out == {"chunks": 0, "success": 0, "errors": []}
-
-
-def test_index_file_to_opensearch_happy_path(monkeypatch):
-    import backend.rag.document.indexing as idx
-
-    monkeypatch.setattr(idx, "ensure_index", lambda name=None: "idx")
-    monkeypatch.setattr(idx, "load_document_as_text", lambda _p: "hello world")
-    monkeypatch.setattr(idx, "clean_text", lambda t: t)
-    monkeypatch.setattr(idx, "split_text_to_chunks", lambda t: ["hello", "world"])
-    monkeypatch.setattr(
-        idx,
-        "embed_chunks",
-        lambda chunks: [[0.1], [0.2]],
-    )
-    monkeypatch.setattr(
-        idx,
-        "index_chunks_to_opensearch",
-        lambda docs, index_name=None: (2, []),
-    )
-
-    out = idx.index_file_to_opensearch("report.md", ensure=True, index_name="idx")
-    assert out["chunks"] == 2
-    assert out["success"] == 2
-    assert out["dims"] == 1
-    assert out["errors"] == []
-    assert out["document_id"] == "report"
-
-
-def test_index_file_skips_ensure(monkeypatch):
-    import backend.rag.document.indexing as idx
-
-    called = {"ensure": False}
-
-    def boom(_name=None):
-        called["ensure"] = True
-        raise AssertionError("should not ensure")
-
-    monkeypatch.setattr(idx, "ensure_index", boom)
-    monkeypatch.setattr(idx, "load_document_as_text", lambda _p: "")
-    monkeypatch.setattr(idx, "clean_text", lambda t: "")
-
-    out = idx.index_file_to_opensearch("a.md", ensure=False)
-    assert out["chunks"] == 0
-    assert called["ensure"] is False
 
 
 def test_index_business_summaries_splits_polarities(monkeypatch):

@@ -67,7 +67,7 @@ def test_backfill_skips_already_and_marks_complete(monkeypatch, tmp_path: Path):
         indexed.append(bid)
         if bid == "b2":
             return {
-                "document_id": bid,
+                "id": bid,
                 "chunks": 2,
                 "success": 2,
                 "errors": [],
@@ -76,7 +76,7 @@ def test_backfill_skips_already_and_marks_complete(monkeypatch, tmp_path: Path):
                 "both_sides_complete": True,
             }
         return {
-            "document_id": bid,
+            "id": bid,
             "chunks": 0,
             "success": 0,
             "errors": [],
@@ -108,7 +108,7 @@ def test_backfill_does_not_mark_incomplete(monkeypatch, tmp_path: Path):
 
     def fake_index(raw, *, index_name=None, ensure=False):
         return {
-            "document_id": raw["id"],
+            "id": raw["id"],
             "chunks": 1,
             "success": 1,
             "errors": [],
@@ -153,7 +153,7 @@ def test_rewrite_clears_progress_and_reindexes_all(monkeypatch, tmp_path: Path):
     def fake_index(raw, *, index_name=None, ensure=False):
         indexed.append(raw["id"])
         return {
-            "document_id": raw["id"],
+            "id": raw["id"],
             "chunks": 2,
             "success": 2,
             "errors": [],
@@ -195,7 +195,7 @@ def test_main_rewrite_recreate_and_limit(monkeypatch, tmp_path: Path):
     def fake_index(raw, **k):
         indexed.append(raw["id"])
         return {
-            "document_id": raw["id"],
+            "id": raw["id"],
             "chunks": 2,
             "success": 2,
             "errors": [],
@@ -233,7 +233,7 @@ def test_run_index_returns_1_on_bulk_errors(monkeypatch, tmp_path: Path):
         script,
         "index_business_summaries_to_opensearch",
         lambda raw, **k: {
-            "document_id": "b1",
+            "id": "b1",
             "chunks": 2,
             "success": 1,
             "errors": [{"e": 1}],

@@ -8,10 +8,16 @@
 
 **不要**直接 `import backend.rag`。检索、重排、OpenSearch 细节已封装在 LangGraph ask 管线内部。
 
-推荐写法（**流式**）：
+推荐写法（**流式 ask** + **专用历史接口**）：
 
 ```python
-from backend.llm import ask, AskRequest, AskResponse, release_ask_session
+from backend.llm import (
+    ask,
+    get_ask_history,
+    AskRequest,
+    AskResponse,
+    release_ask_session,
+)
 
 # 方式一：dict（类似 JSON 包）
 stream = ask(
@@ -19,7 +25,7 @@ stream = ask(
         "query": "这家店适合约会吗？",
         "section_id": "user-42-session-1",
         "uuid": "req-550e8400",
-        # 可选：insight_create / insight_use（本阶段透传，业务暂不处理）
+        # 可选：insight_create / insight_use（本阶段透传；insight_create 会写入用户历史）
         # 附件字段可传，当前忽略：pdf / docx / doc / md / images
     }
 )
@@ -31,9 +37,12 @@ resp: AskResponse = stream.response  # 流结束后可读完整响应
 assert resp is not None
 print(resp.answer)            # 完整回复
 print(resp.sources)           # 本轮 RAG 片段（无 embedding）
-print(resp.history)           # 本轮写入前历史（含扩展字段）
 print(resp.query_filename)    # 本轮附带文件名（暂为空串）
 print(resp.query, resp.section_id, resp.uuid)
+
+# 需要会话历史时单独拉取（完整历史 + 扩展字段）
+hist = get_ask_history(uuid=resp.uuid, section_id=resp.section_id)
+print(hist.history)
 
 # 可选：释放会话槽（历史已在每轮结束写入 Redis；release 主要用于腾出 LRU 池）
 release_ask_session(resp.uuid, resp.section_id)
@@ -51,7 +60,7 @@ payload = stream.response.model_dump()
 | `query` | 是 | 用户问题（str） |
 | `uuid` | 是 | 用户/请求关联 ID；与 `section_id` **同时必填**，共同作为历史 Redis key（`{uuid}::{section_id}`） |
 | `section_id` | 是 | 会话/分区 ID |
-| `insight_create` / `insight_use` | 否 | 占位，默认 `false` |
+| `insight_create` / `insight_use` | 否 | 默认 `false`；均写入**用户轮**历史扩展字段 |
 | `docx` / `doc` / `md` / `pdf` / `images` | 否 | **占位**：可传，当前忽略 |
 
 ### 响应字段（`AskResponse` / `model_dump()`）
@@ -63,8 +72,9 @@ payload = stream.response.model_dump()
 | `uuid` | `str` | 入参回传（必填） |
 | `answer` | `str` | 本轮 LLM 回复全文 |
 | `sources` | `list[RagSnippet]` | 本轮检索/精排后的片段（无 embedding） |
-| `history` | `list[HistoryMessage]` | 本轮写入前已有的会话消息（含扩展，**不含** `search_query`） |
 | `query_filename` | `str` | 当前轮用户请求附带文件名；**暂固定为空串**，后续维护 |
+
+> 会话历史**不再**随 `AskResponse` 返回，请用下方 `get_ask_history`。
 
 `RagSnippet`：
 
@@ -73,18 +83,60 @@ payload = stream.response.model_dump()
 | `content` | `str` | 片段正文 |
 | `metadata` | `dict` | 索引全字段（除 `embedding`）+ `score` / `rerank_score` 等 |
 
-`HistoryMessage`（响应契约）：
+### 历史接口（`get_ask_history` / 删除）
+
+```python
+from backend.llm import (
+    get_ask_history,
+    delete_ask_history,
+    delete_ask_histories_by_uuid,
+    HistoryRequest,
+)
+
+hist = get_ask_history(uuid="req-550e8400", section_id="user-42-session-1")
+# 或
+hist = get_ask_history(HistoryRequest(uuid="...", section_id="..."))
+print(hist.model_dump())
+
+# 删除单个会话历史
+delete_ask_history(uuid="req-550e8400", section_id="user-42-session-1")
+
+# 删除该 uuid 下全部会话历史
+delete_ask_histories_by_uuid(uuid="req-550e8400")
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uuid` / `section_id` | `str` | 入参回传 |
+| `history` | `list[HistoryMessage]` | **完整**会话历史（含本轮已写入的消息） |
+| `insight_create` | `bool` | **末条 user 消息**的 `insight_create`；无 user 消息时为 `false` |
+| `insight_use` | `bool` | **末条 user 消息**的 `insight_use`；无 user 消息时为 `false` |
+
+删除接口返回 `DeleteHistoryResponse`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uuid` | `str` | 入参回传 |
+| `section_id` | `str \| null` | 单会话删除时回传；按 uuid 全删时为 `null` |
+| `deleted_sessions` | `int` | 实际清理的会话数 |
+| `section_ids` | `list[str]` | 被清理的 `section_id` 列表 |
+
+说明：删除会同时清理内存会话池中的对应槽位，并调用 Redis 历史 `clear()`；按 uuid 全删时通过扫描 `chat:{uuid}::*` 找到全部会话。
+
+`HistoryMessage`：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `role` | `"user" \| "assistant" \| "system"` | 角色 |
 | `content` | `str` | 消息正文 |
 | `filename` | `str \| null` | **用户轮**关联文件名，可为空 |
+| `insight_create` | `bool \| null` | **用户轮**该次是否要求创建洞察；助手/系统为 `null` |
+| `insight_use` | `bool \| null` | **用户轮**该次是否使用洞察；助手/系统为 `null` |
 | `sources` | `list[RagSnippet] \| null` | **助手轮**该次回复用到的参考资料 |
 
-说明：内部 Redis 仍会持久化用户轮的 `search_query`（改写后的检索句），但**不出现在** `AskResponse.history` 中。
+说明：内部 Redis 仍会持久化用户轮的 `search_query`（改写后的检索句），但**不出现在**对外 `history` 中。顶层 `HistoryResponse.insight_*` 不是独立「会话设置」写接口，只是末条 user 轮快照。
 
-示例（`resp.model_dump()`）：
+示例（`AskResponse.model_dump()`）：
 
 ```json
 {
@@ -98,27 +150,41 @@ payload = stream.response.model_dump()
       "content": "服务很好，食物新鲜……",
       "metadata": {
         "chunk_id": "biz_pos_0000",
-        "document_id": "biz",
+        "id": "biz",
         "chunk_index": 0,
         "score": 1.23,
         "rerank_score": 0.91,
         "polarity": "positive",
-        "id": "biz",
         "name": "Acme Oyster House"
       }
     }
-  ],
+  ]
+}
+```
+
+示例（`get_ask_history(...).model_dump()`）：
+
+```json
+{
+  "uuid": "req-550e8400",
+  "section_id": "user-42-session-1",
+  "insight_create": false,
+  "insight_use": true,
   "history": [
     {
       "role": "user",
       "content": "推荐一家性价比高的餐厅",
       "filename": "",
+      "insight_create": false,
+      "insight_use": true,
       "sources": null
     },
     {
       "role": "assistant",
       "content": "推荐 Acme Oyster House……",
       "filename": null,
+      "insight_create": null,
+      "insight_use": null,
       "sources": [
         { "content": "……", "metadata": { "name": "Acme Oyster House" } }
       ]
@@ -129,8 +195,85 @@ payload = stream.response.model_dump()
 
 说明：
 
-- `history` **不含**本轮的 `query` / `answer`（二者已在响应顶层）；首次提问时 `history` 为 `[]`。
-- 历史按 `uuid` + `section_id` **同时必填**隔离；缺任一则拒绝创建会话/读写历史。内存会话池最多 5 个；**每轮 ask 结束后立即刷 Redis**（release / LRU / 进程退出仍会再 flush 空 pending）。
+- 历史按 `uuid` + `section_id` **同时必填**隔离；缺任一则拒绝。
+- 内存会话池最多 5 个；**每轮 ask 结束后立即刷 Redis**（release / LRU / 进程退出仍会再 flush 空 pending）。
+- `get_ask_history`：若会话仍在池内则读内存副本，否则从 Redis 加载（不额外驱逐其它会话）。
+
+### 会话池释放 / 登出
+
+```python
+from backend.llm import (
+    release_ask_session,
+    release_ask_sessions_by_uuid,
+    on_user_logout,
+    UuidRequest,
+)
+
+# 释放单个会话槽
+release_ask_session(uuid="req-550e8400", section_id="user-42-session-1")
+
+# 按 uuid 释放该用户池内全部槽位（不删 Redis 历史）
+release_ask_sessions_by_uuid(UuidRequest(uuid="req-550e8400"))
+# 登出钩子：当前与上一接口同契约
+on_user_logout(uuid="req-550e8400")
+```
+
+`ReleaseSessionsResponse`：`{ uuid, released_sessions: int, section_ids: list[str] }`
+
+### 洞察查询 / 删除 / 属性写入（多数为占位）
+
+| 函数 | 请求 | 响应 | 状态 |
+|------|------|------|------|
+| `get_user_insight` | `UuidRequest` | `UserInsightResponse` `{uuid, attrs}` | 占位 `attrs={}` |
+| `get_section_insight` | `HistoryRequest` | `SectionInsightResponse` `{uuid, section_id, attrs, filenames}` | 占位空 |
+| `update_user_insight_attrs` | `{uuid, attrs}` | `UserInsightResponse` | 占位回传 |
+| `update_section_insight_attrs` | `{uuid, section_id, attrs}` | `SectionInsightResponse` | 占位回传 |
+| `delete_user_insight` | `UuidRequest` | `DeleteInsightResponse` | 占位 `deleted=true, scope=user` |
+| `delete_section_insight` | `HistoryRequest` | `DeleteInsightResponse` | 占位 `scope=section` |
+| `delete_all_insights` | `UuidRequest` | `DeleteInsightResponse` | 占位 `scope=all` |
+| `get_section_facts` / `update_section_facts` | 见 schemas | `SectionFactsResponse` | 占位 |
+| `get_section_review` / `set_section_review` | 见 schemas | `SectionReviewResponse` | 占位 |
+
+`DeleteInsightResponse`：`{ uuid, section_id?, deleted: bool, scope: "user"|"section"|"all" }`
+
+`update_section_facts` 入参：`{ uuid, section_id, items: list[str], start?: int }`（`start` 为 1-based 截断起点，语义对齐 `SectionInsight.add_facts`）。
+
+### 文档处理（占位）
+
+```python
+from backend.llm import load_section_document, LoadSectionDocumentRequest
+
+load_section_document(
+    LoadSectionDocumentRequest(
+        uuid="req-550e8400",
+        section_id="user-42-session-1",
+        file_path="data/uploads/note.md",  # 相对 tjll 根
+    )
+)
+# -> { uuid, section_id, source_file, chunks: 0, filenames: [] }
+```
+
+### Ask interrupt 澄清问答（占位，供后续 interrupt）
+
+```python
+from backend.llm import create_ask_interrupt, submit_ask_interrupt
+
+q = create_ask_interrupt(
+    {"uuid": "...", "section_id": "...", "query": "想吃什么"}
+)
+# -> { uuid, section_id, interrupt_id: "", questions: [] }
+# 正式实现时 questions[].options 最后一项为「其他」；提交答案用文本而非序号
+
+submit_ask_interrupt(
+    {
+        "uuid": "...",
+        "section_id": "...",
+        "interrupt_id": "...",
+        "answers": [{"question_id": "q1", "answer": "火锅"}],
+    }
+)
+# -> { uuid, section_id, interrupt_id, accepted: false }
+```
 
 ### 本阶段处理路径
 
@@ -138,10 +281,11 @@ payload = stream.response.model_dump()
 按 uuid+section_id 取/建会话（内存历史）
   → LangGraph：prepare →（有历史则 rewrite）→ retrieve_rerank
   → 流式 LLM 生成
-  → 本轮写入内存历史并立即刷 Redis（含 search_query/filename/sources 扩展）
+  → 本轮写入内存历史并立即刷 Redis
+    （含 search_query / filename / insight_create / insight_use / sources）
 ```
 
-契约定义见：`backend/llm/schemas.py`；实现见：`backend/llm/graph/`。
+契约定义见：`backend/llm/schemas.py`；实现见：`backend/llm/graph/service.py`。
 
 ### 进阶（一般不需要）
 

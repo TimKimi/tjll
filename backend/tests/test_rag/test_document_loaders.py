@@ -94,46 +94,56 @@ def test_load_docx(tmp_path, monkeypatch):
     assert load_document_as_text(str(path)) == "段1\n\n段2"
 
 
-def test_load_excel_openpyxl_fallback(tmp_path, monkeypatch):
+def test_file_to_chunks_pipeline(tmp_path, monkeypatch):
     import backend.rag.document.loaders as loaders_mod
 
-    path = tmp_path / "a.xlsx"
-    path.write_bytes(b"PK")
+    path = tmp_path / "note.md"
+    path.write_text("hello\n\nworld", encoding="utf-8")
 
-    class BadExcelLoader:
-        def __init__(self, *_a, **_k):
-            raise RuntimeError("unstructured unavailable")
+    monkeypatch.setattr(loaders_mod, "clean_text", lambda t: t.strip())
+    monkeypatch.setattr(
+        loaders_mod,
+        "split_text_to_chunks",
+        lambda text, chunk_size=None, chunk_overlap=None: ["hello", "world"],
+    )
+
+    assert loaders_mod.file_to_chunks(str(path)) == ["hello", "world"]
+
+
+def test_file_to_chunks_empty_after_clean(tmp_path, monkeypatch):
+    import backend.rag.document.loaders as loaders_mod
+
+    path = tmp_path / "empty.md"
+    path.write_text("   ", encoding="utf-8")
+    monkeypatch.setattr(loaders_mod, "clean_text", lambda _t: "")
+
+    assert loaders_mod.file_to_chunks(str(path)) == []
+
+
+def test_load_image_uses_mineru(tmp_path, monkeypatch):
+    import backend.rag.document.loaders as loaders_mod
+
+    img = tmp_path / "shot.png"
+    img.write_bytes(b"\x89PNG")
+    md = tmp_path / "out.md"
+    md.write_text("image md", encoding="utf-8")
 
     monkeypatch.setattr(
-        "langchain_community.document_loaders.UnstructuredExcelLoader",
-        BadExcelLoader,
+        "backend.rag.document.image.parse_image_with_mineru",
+        lambda _p, output_dir=None: str(md),
     )
+    monkeypatch.setattr(loaders_mod, "resolve_repo_path", lambda p: img)
+    assert loaders_mod.load_document_as_text(str(img)) == "image md"
 
-    class FakeSheet:
-        title = "Sheet1"
 
-        def iter_rows(self, values_only=True):
-            yield ("A", "B")
-            yield (None, None)
-            yield ("1", "2")
+def test_image_to_single_page_pdf(tmp_path):
+    from PIL import Image
 
-    class FakeWb:
-        worksheets = [FakeSheet()]
+    from backend.rag.document.image import image_to_single_page_pdf
 
-        def close(self):
-            pass
-
-    import types
-
-    fake_openpyxl = types.ModuleType("openpyxl")
-    setattr(fake_openpyxl, "load_workbook", lambda *a, **k: FakeWb())
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "openpyxl",
-        fake_openpyxl,
-    )
-
-    text = loaders_mod._load_excel_as_text(Path(path))
-    assert "Sheet: Sheet1" in text
-    assert "A\tB" in text
-    assert "1\t2" in text
+    img = tmp_path / "a.png"
+    Image.new("RGB", (8, 8), color=(255, 0, 0)).save(img)
+    pdf = tmp_path / "a.pdf"
+    out = image_to_single_page_pdf(str(img), str(pdf))
+    assert Path(out).is_file()
+    assert Path(out).stat().st_size > 0

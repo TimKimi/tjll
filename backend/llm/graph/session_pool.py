@@ -61,6 +61,8 @@ class AskSession:
         *,
         search_query: str,
         filename: str | None = None,
+        insight_create: bool = False,
+        insight_use: bool = False,
         sources: list[dict[str, Any]] | None = None,
     ) -> None:
         """本轮问答写入内存，并立即刷入 Redis。"""
@@ -69,6 +71,8 @@ class AskSession:
             additional_kwargs={
                 "search_query": search_query,
                 "filename": filename or "",
+                "insight_create": bool(insight_create),
+                "insight_use": bool(insight_use),
             },
         )
         ai = AIMessage(
@@ -160,6 +164,38 @@ class AskSessionPool:
                 len(history),
             )
             return session
+
+    def peek_history_messages(self, uuid: str, section_id: str) -> list[BaseMessage]:
+        """取完整历史：池内用内存副本，否则从 Redis 加载（不占/不驱逐池槽）。"""
+        uuid = _require_id("uuid", uuid)
+        section_id = _require_id("section_id", section_id)
+        key = make_session_key(uuid, section_id)
+        with self._lock:
+            session = self._sessions.get(key)
+            if session is not None:
+                return list(session.history)
+        return list(get_history(uuid, section_id).messages)
+
+    def discard_session(self, uuid: str, section_id: str) -> bool:
+        """从池中丢弃会话（不刷 Redis；用于删历史）。"""
+        key = make_session_key(uuid, section_id)
+        with self._lock:
+            removed = self._sessions.pop(key, None) is not None
+        if removed:
+            logger.info("session discard key=%s", key)
+        return removed
+
+    def discard_sessions_for_uuid(self, uuid: str) -> list[str]:
+        """丢弃该 uuid 下所有内存会话；返回被丢弃的 session key。"""
+        uuid = _require_id("uuid", uuid)
+        prefix = f"{uuid}::"
+        with self._lock:
+            keys = [k for k in self._sessions if k.startswith(prefix)]
+            for key in keys:
+                self._sessions.pop(key, None)
+        if keys:
+            logger.info("session discard uuid=%s count=%d", uuid, len(keys))
+        return keys
 
     def release(self, uuid: str, section_id: str) -> None:
         """显式释放并刷 Redis。"""

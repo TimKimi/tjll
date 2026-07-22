@@ -21,7 +21,7 @@ class _FakeRetriever:
         self.docs = docs or [
             Document(
                 page_content="资料内容",
-                metadata={"source_file": "a.pdf", "chunk_index": 0},
+                metadata={"name": "a.pdf", "chunk_index": 0},
             )
         ]
 
@@ -35,7 +35,7 @@ def test_format_docs():
     docs = [
         Document(
             page_content="hello",
-            metadata={"source_file": "x.pdf", "chunk_index": 1},
+            metadata={"name": "x.pdf", "chunk_index": 1},
         )
     ]
     text = format_docs(docs)

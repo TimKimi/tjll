@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
@@ -175,3 +175,210 @@ def hits_to_documents(hits: list[dict]) -> list[Document]:
             meta["score"] = h["_score"]
         docs.append(Document(page_content=text, metadata=meta))
     return docs
+
+
+def search_insight_text(
+    query: str,
+    *,
+    uuid: str | None = None,
+    index_name: str | None = None,
+    recall_k: int | None = None,
+) -> str:
+    """洞察索引：混合检索 + 精排，只返回一条 chunk 的 text；无结果返回空串。
+
+    若传入 ``uuid``，在 BM25 / knn 两侧加 document_id 过滤。
+    """
+    from backend.rag.retrieve.rerank import rerank_docs
+
+    query = (query or "").strip()
+    if not query:
+        return ""
+    client = get_opensearch_client()
+    index_name = index_name or settings.opensearch_insight_index
+    if not client.indices.exists(index=index_name):
+        return ""
+
+    k = recall_k or settings.retrieval_top_k
+    pipeline = settings.hybrid_pipeline_name
+    ensure_search_pipeline(pipeline)
+    query_vec = embed_query(query)
+    doc_filter = {"term": {"document_id": uuid}} if uuid else None
+
+    bm25_q: dict[str, Any]
+    knn_q: dict[str, Any]
+    if doc_filter is not None:
+        bm25_q = {
+            "bool": {
+                "must": {"match": {"text": {"query": query}}},
+                "filter": [doc_filter],
+            }
+        }
+        knn_q = {
+            "knn": {
+                "embedding": {
+                    "vector": query_vec,
+                    "k": max(k * 4, k),
+                    "filter": doc_filter,
+                }
+            }
+        }
+    else:
+        bm25_q = {"match": {"text": {"query": query}}}
+        knn_q = {
+            "knn": {
+                "embedding": {
+                    "vector": query_vec,
+                    "k": max(k * 4, k),
+                }
+            }
+        }
+
+    body = {
+        "size": k,
+        "query": {"hybrid": {"queries": [bm25_q, knn_q]}},
+        "_source": _SOURCE_EXCLUDES,
+    }
+    try:
+        resp = client.search(
+            index=index_name,
+            body=body,
+            params={"search_pipeline": pipeline},
+        )
+    except Exception:
+        logger.exception("search_insight failed index=%s uuid=%s", index_name, uuid)
+        raise
+
+    hits = _format_hits(resp)
+    docs = rerank_docs(query, hits_to_documents(hits), top_n=1)
+    if not docs:
+        return ""
+    return str(docs[0].page_content or "")
+
+
+def _hybrid_filtered_hits(
+    query: str,
+    *,
+    index_name: str,
+    filters: list[dict[str, Any]],
+    recall_k: int,
+) -> list[dict]:
+    """带 filter 的 hybrid 检索，返回 hits（未精排）。"""
+    client = get_opensearch_client()
+    if not client.indices.exists(index=index_name):
+        return []
+    pipeline = settings.hybrid_pipeline_name
+    ensure_search_pipeline(pipeline)
+    query_vec = embed_query(query)
+    bm25_q: dict[str, Any] = {
+        "bool": {
+            "must": {"match": {"text": {"query": query}}},
+            "filter": filters,
+        }
+    }
+    knn_q: dict[str, Any] = {
+        "knn": {
+            "embedding": {
+                "vector": query_vec,
+                "k": max(recall_k * 4, recall_k),
+                "filter": {"bool": {"filter": filters}},
+            }
+        }
+    }
+    body = {
+        "size": recall_k,
+        "query": {"hybrid": {"queries": [bm25_q, knn_q]}},
+        "_source": _SOURCE_EXCLUDES,
+    }
+    resp = client.search(
+        index=index_name,
+        body=body,
+        params={"search_pipeline": pipeline},
+    )
+    return _format_hits(resp)
+
+
+def search_section_insight_text(
+    query: str,
+    *,
+    uuid: str,
+    section_id: str,
+    index_name: str | None = None,
+    recall_k: int | None = None,
+) -> str:
+    """会话属性索引：混合检索 + 精排，返回最优一条 text。"""
+    from backend.rag.retrieve.rerank import rerank_docs
+
+    query = (query or "").strip()
+    uuid = (uuid or "").strip()
+    section_id = (section_id or "").strip()
+    if not query or not uuid or not section_id:
+        return ""
+    index_name = index_name or settings.opensearch_section_insight_index
+    k = recall_k or settings.retrieval_top_k
+    filters = [
+        {"term": {"document_id": uuid}},
+        {"term": {"section_id": section_id}},
+    ]
+    try:
+        hits = _hybrid_filtered_hits(
+            query, index_name=index_name, filters=filters, recall_k=k
+        )
+    except Exception:
+        logger.exception(
+            "search_section_insight failed index=%s uuid=%s section_id=%s",
+            index_name,
+            uuid,
+            section_id,
+        )
+        raise
+    docs = rerank_docs(query, hits_to_documents(hits), top_n=1)
+    if not docs:
+        return ""
+    return str(docs[0].page_content or "")
+
+
+def search_section_document_texts(
+    query: str,
+    *,
+    uuid: str,
+    section_id: str,
+    filename: str | None = None,
+    top_n: int | None = None,
+    index_name: str | None = None,
+    recall_k: int | None = None,
+) -> list[str]:
+    """会话文档索引：混合检索 + 精排，返回至多 top_n 条 chunk text。"""
+    from backend.rag.retrieve.rerank import rerank_docs
+
+    query = (query or "").strip()
+    uuid = (uuid or "").strip()
+    section_id = (section_id or "").strip()
+    if not query or not uuid or not section_id:
+        return []
+    index_name = index_name or settings.opensearch_section_document_index
+    n = settings.section_document_top_n if top_n is None else int(top_n)
+    if n < 1:
+        return []
+    k = recall_k or settings.retrieval_top_k
+    filters: list[dict[str, Any]] = [
+        {"term": {"document_id": uuid}},
+        {"term": {"section_id": section_id}},
+    ]
+    if filename:
+        filters.append({"term": {"source_file": filename.strip()}})
+    try:
+        hits = _hybrid_filtered_hits(
+            query, index_name=index_name, filters=filters, recall_k=k
+        )
+    except Exception:
+        logger.exception(
+            "search_section_document failed index=%s uuid=%s section_id=%s",
+            index_name,
+            uuid,
+            section_id,
+        )
+        raise
+    docs = rerank_docs(query, hits_to_documents(hits), top_n=n)
+    return [
+        str(d.page_content or "") for d in docs if str(d.page_content or "").strip()
+    ]

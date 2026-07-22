@@ -1,10 +1,10 @@
-"""索引入库：Yelp cleaned chunks / 通用文件 → Embedding → OpenSearch bulk。"""
+"""索引入库：Yelp cleaned chunks / 用户洞察 → Embedding → OpenSearch bulk。"""
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Literal
 
 from opensearchpy.helpers import bulk
@@ -13,9 +13,13 @@ from backend.config import settings
 from backend.rag.document.chunking import split_text_to_chunks
 from backend.rag.document.clean import clean_text, normalize_jsonish
 from backend.rag.document.embed import embed_chunks
-from backend.rag.document.loaders import load_document_as_text
 from backend.rag.opensearch.client import get_opensearch_client
-from backend.rag.opensearch.schema import ensure_index
+from backend.rag.opensearch.schema import (
+    ensure_index,
+    ensure_insight_index,
+    ensure_section_document_index,
+    ensure_section_insight_index,
+)
 
 logger = logging.getLogger("backend.rag.document.indexing")
 
@@ -36,11 +40,6 @@ _BUSINESS_KEYWORD_FIELDS = (
     "photos",
     "yelp_menu_url",
 )
-
-
-def make_document_id(business_id: str) -> str:
-    """商家 document_id：直接使用 business id（确定性）。"""
-    return business_id
 
 
 def make_chunk_id(business_id: str, polarity: Polarity, chunk_index: int) -> str:
@@ -88,7 +87,6 @@ def build_yelp_chunk_docs(
     if not chunks:
         return []
     business_id = str(business["id"])
-    document_id = make_document_id(business_id)
     now = datetime.now(timezone.utc).isoformat()
     last_idx = len(chunks) - 1
     docs: list[dict[str, Any]] = []
@@ -96,7 +94,6 @@ def build_yelp_chunk_docs(
         doc: dict[str, Any] = {
             **business,
             "chunk_id": make_chunk_id(business_id, polarity, idx),
-            "document_id": document_id,
             "polarity": polarity,
             "chunk_index": idx,
             "is_last_chunk": idx == last_idx,
@@ -105,38 +102,6 @@ def build_yelp_chunk_docs(
             "created_at": now,
         }
         docs.append(doc)
-    return docs
-
-
-def build_chunk_docs(
-    file_path: str,
-    chunks: list[str],
-    embeddings: list[list[float]],
-) -> list[dict]:
-    """通用文件入库文档（遗留 PDF/MD 路径）；补齐 mapping 必填默认。"""
-    path = Path(file_path)
-    document_id = make_document_id(path.stem)
-    source_file = path.name
-    now = datetime.now(timezone.utc).isoformat()
-    last_idx = len(chunks) - 1
-    docs: list[dict] = []
-    for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
-        docs.append(
-            {
-                "id": document_id,
-                "alias": "",
-                "name": source_file,
-                "document_id": document_id,
-                "source_file": source_file,
-                "chunk_id": make_chunk_id(document_id, "positive", idx),
-                "polarity": "positive",
-                "chunk_index": idx,
-                "is_last_chunk": idx == last_idx,
-                "text": chunk,
-                "embedding": embedding,
-                "created_at": now,
-            }
-        )
     return docs
 
 
@@ -203,7 +168,7 @@ def index_business_summaries_to_opensearch(
 
     if not pos_docs and not neg_docs:
         return {
-            "document_id": business_id,
+            "id": business_id,
             "chunks": 0,
             "success": 0,
             "errors": [],
@@ -223,7 +188,7 @@ def index_business_summaries_to_opensearch(
         if errors:
             all_errors.extend(errors if isinstance(errors, list) else [errors])
             return {
-                "document_id": business_id,
+                "id": business_id,
                 "chunks": len(pos_docs) + len(neg_docs),
                 "dims": len(pos_docs[0]["embedding"]),
                 "success": total_success,
@@ -240,7 +205,7 @@ def index_business_summaries_to_opensearch(
         if errors:
             all_errors.extend(errors if isinstance(errors, list) else [errors])
             return {
-                "document_id": business_id,
+                "id": business_id,
                 "chunks": len(pos_docs) + len(neg_docs),
                 "dims": dims or len(neg_docs[0]["embedding"]),
                 "success": total_success,
@@ -253,7 +218,7 @@ def index_business_summaries_to_opensearch(
 
     both = len(pos_docs) > 0 and len(neg_docs) > 0 and not all_errors
     return {
-        "document_id": business_id,
+        "id": business_id,
         "chunks": len(pos_docs) + len(neg_docs),
         "dims": dims,
         "success": total_success,
@@ -264,28 +229,294 @@ def index_business_summaries_to_opensearch(
     }
 
 
-def index_file_to_opensearch(
-    file_path: str,
+def make_insight_chunk_id(uuid: str, chunk_index: int) -> str:
+    """洞察 chunk_id：``{uuid}_{index}``。"""
+    return f"{uuid}_{chunk_index}"
+
+
+def build_insight_chunk_docs(
+    uuid: str,
+    chunks: list[str],
+    embeddings: list[list[float]],
+) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc).isoformat()
+    docs: list[dict[str, Any]] = []
+    for i, (text, emb) in enumerate(zip(chunks, embeddings, strict=True)):
+        docs.append(
+            {
+                "chunk_id": make_insight_chunk_id(uuid, i),
+                "document_id": uuid,
+                "chunk_index": i,
+                "text": text,
+                "embedding": emb,
+                "created_at": now,
+            }
+        )
+    return docs
+
+
+def index_insight_chunks(
+    uuid: str,
+    chunks: list[str],
     *,
     index_name: str | None = None,
     ensure: bool = True,
-) -> dict:
-    """端到端：读完整路径文件 → 清洗 → 切分 → 向量化 → 写入 OpenSearch。"""
+) -> tuple[int, list]:
+    """Embed + bulk 写入用户洞察索引。"""
+    if not chunks:
+        return 0, []
+    index_name = index_name or settings.opensearch_insight_index
     if ensure:
-        ensure_index(index_name)
-
-    text = clean_text(load_document_as_text(file_path))
-    if not text:
-        return {"chunks": 0, "success": 0, "errors": []}
-
-    chunks = split_text_to_chunks(text)
+        ensure_insight_index(index_name)
     embeddings = embed_chunks(chunks)
-    docs = build_chunk_docs(file_path, chunks, embeddings)
+    docs = build_insight_chunk_docs(uuid, chunks, embeddings)
     success, errors = index_chunks_to_opensearch(docs, index_name=index_name)
-    return {
-        "document_id": make_document_id(Path(file_path).stem),
-        "chunks": len(chunks),
-        "dims": len(embeddings[0]) if embeddings else 0,
-        "success": success,
-        "errors": errors,
-    }
+    logger.info(
+        "index_insight_chunks uuid=%s chunks=%d success=%s",
+        uuid,
+        len(chunks),
+        success,
+    )
+    return success, errors
+
+
+def delete_insight_from_opensearch(
+    uuid: str,
+    *,
+    index_name: str | None = None,
+) -> int:
+    """按 uuid（document_id）删除洞察索引中的全部 chunk；返回删除条数。"""
+    uuid = (uuid or "").strip()
+    if not uuid:
+        raise ValueError("uuid is required")
+    client = get_opensearch_client()
+    index_name = index_name or settings.opensearch_insight_index
+    if not client.indices.exists(index=index_name):
+        logger.info("delete_insight skip missing index=%s uuid=%s", index_name, uuid)
+        return 0
+    resp = client.delete_by_query(
+        index=index_name,
+        body={"query": {"term": {"document_id": uuid}}},
+        refresh=True,
+        conflicts="proceed",
+    )
+    deleted = int(resp.get("deleted") or 0)
+    logger.info(
+        "delete_insight_from_opensearch uuid=%s deleted=%d",
+        uuid,
+        deleted,
+    )
+    return deleted
+
+
+def make_section_insight_chunk_id(uuid: str, section_id: str, chunk_index: int) -> str:
+    """会话属性 chunk_id：``{uuid}_{section_id}_{index}``。"""
+    return f"{uuid}_{section_id}_{chunk_index}"
+
+
+def make_section_document_chunk_id(
+    uuid: str,
+    section_id: str,
+    source_file: str,
+    chunk_index: int,
+) -> str:
+    """文档 chunk_id：``{sha1(uuid|section_id|source_file)[:16]}_{chunk_index:04d}``。"""
+    digest = hashlib.sha1(
+        f"{uuid}|{section_id}|{source_file}".encode("utf-8")
+    ).hexdigest()[:16]
+    return f"{digest}_{chunk_index:04d}"
+
+
+def build_section_insight_chunk_docs(
+    uuid: str,
+    section_id: str,
+    chunks: list[str],
+    embeddings: list[list[float]],
+) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc).isoformat()
+    docs: list[dict[str, Any]] = []
+    for i, (text, emb) in enumerate(zip(chunks, embeddings, strict=True)):
+        docs.append(
+            {
+                "chunk_id": make_section_insight_chunk_id(uuid, section_id, i),
+                "document_id": uuid,
+                "section_id": section_id,
+                "chunk_index": i,
+                "text": text,
+                "embedding": emb,
+                "created_at": now,
+            }
+        )
+    return docs
+
+
+def build_section_document_chunk_docs(
+    uuid: str,
+    section_id: str,
+    source_file: str,
+    chunks: list[str],
+    embeddings: list[list[float]],
+) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc).isoformat()
+    docs: list[dict[str, Any]] = []
+    for i, (text, emb) in enumerate(zip(chunks, embeddings, strict=True)):
+        docs.append(
+            {
+                "chunk_id": make_section_document_chunk_id(
+                    uuid, section_id, source_file, i
+                ),
+                "document_id": uuid,
+                "section_id": section_id,
+                "source_file": source_file,
+                "chunk_index": i,
+                "text": text,
+                "embedding": emb,
+                "created_at": now,
+            }
+        )
+    return docs
+
+
+def index_section_insight_chunks(
+    uuid: str,
+    section_id: str,
+    chunks: list[str],
+    *,
+    index_name: str | None = None,
+    ensure: bool = True,
+) -> tuple[int, list]:
+    """Embed + bulk 写入会话洞察属性索引。"""
+    if not chunks:
+        return 0, []
+    index_name = index_name or settings.opensearch_section_insight_index
+    if ensure:
+        ensure_section_insight_index(index_name)
+    embeddings = embed_chunks(chunks)
+    docs = build_section_insight_chunk_docs(uuid, section_id, chunks, embeddings)
+    success, errors = index_chunks_to_opensearch(docs, index_name=index_name)
+    logger.info(
+        "index_section_insight_chunks uuid=%s section_id=%s chunks=%d success=%s",
+        uuid,
+        section_id,
+        len(chunks),
+        success,
+    )
+    return success, errors
+
+
+def delete_section_insight_from_opensearch(
+    uuid: str,
+    section_id: str,
+    *,
+    index_name: str | None = None,
+) -> int:
+    """按 uuid + section_id 删除会话属性切块。"""
+    uuid = (uuid or "").strip()
+    section_id = (section_id or "").strip()
+    if not uuid or not section_id:
+        raise ValueError("uuid and section_id are required")
+    client = get_opensearch_client()
+    index_name = index_name or settings.opensearch_section_insight_index
+    if not client.indices.exists(index=index_name):
+        return 0
+    resp = client.delete_by_query(
+        index=index_name,
+        body={
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"document_id": uuid}},
+                        {"term": {"section_id": section_id}},
+                    ]
+                }
+            }
+        },
+        refresh=True,
+        conflicts="proceed",
+    )
+    deleted = int(resp.get("deleted") or 0)
+    logger.info(
+        "delete_section_insight uuid=%s section_id=%s deleted=%d",
+        uuid,
+        section_id,
+        deleted,
+    )
+    return deleted
+
+
+def index_section_document_chunks(
+    uuid: str,
+    section_id: str,
+    source_file: str,
+    chunks: list[str],
+    *,
+    index_name: str | None = None,
+    ensure: bool = True,
+) -> tuple[int, list]:
+    """覆盖写入单个上传文件的切块（先删同 source_file 再 bulk）。"""
+    source_file = (source_file or "").strip()
+    if not source_file:
+        raise ValueError("source_file is required")
+    index_name = index_name or settings.opensearch_section_document_index
+    if ensure:
+        ensure_section_document_index(index_name)
+    delete_section_document_from_opensearch(
+        uuid,
+        section_id,
+        source_file=source_file,
+        index_name=index_name,
+    )
+    if not chunks:
+        return 0, []
+    embeddings = embed_chunks(chunks)
+    docs = build_section_document_chunk_docs(
+        uuid, section_id, source_file, chunks, embeddings
+    )
+    success, errors = index_chunks_to_opensearch(docs, index_name=index_name)
+    logger.info(
+        "index_section_document_chunks uuid=%s section_id=%s file=%s chunks=%d",
+        uuid,
+        section_id,
+        source_file,
+        len(chunks),
+    )
+    return success, errors
+
+
+def delete_section_document_from_opensearch(
+    uuid: str,
+    section_id: str,
+    *,
+    source_file: str | None = None,
+    index_name: str | None = None,
+) -> int:
+    """按 uuid+section_id（可选 source_file）删除文档切块。"""
+    uuid = (uuid or "").strip()
+    section_id = (section_id or "").strip()
+    if not uuid or not section_id:
+        raise ValueError("uuid and section_id are required")
+    client = get_opensearch_client()
+    index_name = index_name or settings.opensearch_section_document_index
+    if not client.indices.exists(index=index_name):
+        return 0
+    filters: list[dict[str, Any]] = [
+        {"term": {"document_id": uuid}},
+        {"term": {"section_id": section_id}},
+    ]
+    if source_file:
+        filters.append({"term": {"source_file": source_file.strip()}})
+    resp = client.delete_by_query(
+        index=index_name,
+        body={"query": {"bool": {"filter": filters}}},
+        refresh=True,
+        conflicts="proceed",
+    )
+    deleted = int(resp.get("deleted") or 0)
+    logger.info(
+        "delete_section_document uuid=%s section_id=%s file=%s deleted=%d",
+        uuid,
+        section_id,
+        source_file,
+        deleted,
+    )
+    return deleted
