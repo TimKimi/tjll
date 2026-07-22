@@ -11,6 +11,7 @@ from typing import Any
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableConfig
 
 from backend.llm.client.llm import get_llm
 from backend.llm.pipeline.chains import build_full_rag_chain
@@ -32,9 +33,8 @@ class RagAnswer:
     history: list[dict] = field(default_factory=list)
 
 
-def _session_config(uuid: str, section_id: str) -> dict:
-    """构造 LangChain session_id 配置。"""
-    return {"configurable": {"session_id": make_history_session_id(uuid, section_id)}}
+def _session_config(uuid: str, section_id: str) -> RunnableConfig:
+    return {"configurable": {"session_id": make_history_session_id(uuid, section_id)}}  # type: ignore[return-value]
 
 
 def _sources_from_docs(docs: list[Document]) -> list[dict]:
