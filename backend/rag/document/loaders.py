@@ -6,12 +6,25 @@ from pathlib import Path
 
 from backend.rag.document.chunking import split_text_to_chunks
 from backend.rag.document.clean import clean_text
+from backend.rag.document.paths import (
+    SUPPORTED_EXTS,
+    resolve_repo_path,
+)
 from backend.rag.document.pdf import parse_pdf_with_mineru
+
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
+
+__all__ = [
+    "SUPPORTED_EXTS",
+    "file_to_chunks",
+    "load_document_as_text",
+    "resolve_repo_path",
+]
 
 
 def load_document_as_text(file_path: str) -> str:
-    """根据后缀选择 Loader，返回纯文本（PDF 经 MinerU 转为 Markdown）。"""
-    path = Path(file_path)
+    """根据后缀选择 Loader，返回纯文本（PDF/图片经 MinerU 转为 Markdown）。"""
+    path = resolve_repo_path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"文件不存在: {path}")
 
@@ -19,6 +32,12 @@ def load_document_as_text(file_path: str) -> str:
 
     if ext == ".pdf":
         md_path = parse_pdf_with_mineru(str(path))
+        return Path(md_path).read_text(encoding="utf-8")
+
+    if ext in _IMAGE_EXTS:
+        from backend.rag.document.image import parse_image_with_mineru
+
+        md_path = parse_image_with_mineru(str(path))
         return Path(md_path).read_text(encoding="utf-8")
 
     if ext == ".md":
@@ -37,11 +56,8 @@ def load_document_as_text(file_path: str) -> str:
         docs = UnstructuredWordDocumentLoader(str(path)).load()
         return "\n\n".join(doc.page_content for doc in docs)
 
-    if ext in (".xls", ".xlsx"):
-        return _load_excel_as_text(path)
-
     raise ValueError(
-        f"不支持的文件类型: {ext}。支持: .pdf .md .txt .doc .docx .xls .xlsx"
+        f"不支持的文件类型: {ext}。支持: " + " ".join(sorted(SUPPORTED_EXTS))
     )
 
 
@@ -60,32 +76,3 @@ def file_to_chunks(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
-
-
-def _load_excel_as_text(path: Path) -> str:
-    """将 Excel 各 sheet 拼成文本。优先 Unstructured，回退 openpyxl。"""
-    try:
-        from langchain_community.document_loaders import UnstructuredExcelLoader
-
-        docs = UnstructuredExcelLoader(str(path)).load()
-        return "\n\n".join(doc.page_content for doc in docs)
-    except Exception:
-        pass
-
-    try:
-        from openpyxl import load_workbook
-    except ImportError as exc:
-        raise ImportError(
-            "读取 Excel 需要 unstructured 或 openpyxl，请先安装依赖。"
-        ) from exc
-
-    wb = load_workbook(path, read_only=True, data_only=True)
-    parts: list[str] = []
-    for sheet in wb.worksheets:
-        parts.append(f"# Sheet: {sheet.title}")
-        for row in sheet.iter_rows(values_only=True):
-            cells = ["" if c is None else str(c) for c in row]
-            if any(cells):
-                parts.append("\t".join(cells))
-    wb.close()
-    return "\n".join(parts)
