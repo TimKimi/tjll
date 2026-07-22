@@ -16,11 +16,12 @@
 解压后应至少看到：
 
 ```text
-llama-cli.exe
-llama-server.exe   # 评论清洗脚本会用到
+llama-server.exe   # 评论清洗脚本会用到（必需）
 ggml-cuda.dll 等
 cudart64_*.dll 等（来自 cudart 包）
 ```
+
+只需保留 `llama-server.exe` 及其依赖 DLL；其它 CLI（`llama-cli` / bench / quantize 等）可不装。
 
 清洗旁路配置里的 `llama_server` 默认指向本目录的 `llama-server.exe`。
 

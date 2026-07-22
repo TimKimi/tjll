@@ -33,7 +33,7 @@ def _docs_payload(docs: list[Document]) -> list[dict[str, Any]]:
 def format_docs(docs: list[Document]) -> str:
     parts: list[str] = []
     for i, doc in enumerate(docs, 1):
-        source = doc.metadata.get("source_file", "未知")
+        source = doc.metadata.get("name") or doc.metadata.get("id") or "未知"
         chunk_idx = doc.metadata.get("chunk_index", "-")
         parts.append(
             f"[片段 {i}] （来源：{source}，chunk#{chunk_idx}）\n{doc.page_content}"

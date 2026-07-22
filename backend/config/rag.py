@@ -20,6 +20,12 @@ class RAGMixin:
     opensearch_verify_certs: bool = False
     # 索引名称（不同实验建议用不同索引隔离）
     opensearch_index: str = "yelp_biz_v1"
+    # 用户洞察专用索引
+    opensearch_insight_index: str = "user_insight_v1"
+    # 会话洞察属性切块索引
+    opensearch_section_insight_index: str = "section_insight_v1"
+    # 会话上传文档切块索引
+    opensearch_section_document_index: str = "section_document_v1"
 
     # ── 向量模型（相对 backend/；权重文件不入 git）──
     # bge-base-zh-v1.5 中文 Embedding 模型路径
@@ -38,12 +44,16 @@ class RAGMixin:
     chunk_size: int = 500
     # 文本块重叠（字符数）
     chunk_overlap: int = 50
+    # 用户洞察拼接/切分目标长度（字符数）
+    insight_chunk_size: int = 800
 
     # ── 检索参数 ─────────────────────────────────────────────
     # 初筛返回条数
     retrieval_top_k: int = 10
     # 精排后返回条数
     rerank_top_n: int = 3
+    # 会话文档检索默认返回 chunk 数
+    section_document_top_n: int = 1
     # 混合检索管道名称
     hybrid_pipeline_name: str = "rag_hybrid_pipeline"
     # BM25 权重

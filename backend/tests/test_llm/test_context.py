@@ -8,9 +8,7 @@ from langchain_core.documents import Document
 class _FakeRetriever:
     def __init__(self, docs=None):
         self.docs = docs or [
-            Document(
-                page_content="资料", metadata={"source_file": "a.pdf", "chunk_index": 0}
-            )
+            Document(page_content="资料", metadata={"name": "a.pdf", "chunk_index": 0})
         ]
         self.last_query = None
 
@@ -46,7 +44,7 @@ def test_retrieve_rerank_context(monkeypatch):
         [
             Document(
                 page_content="正文",
-                metadata={"source_file": "b.pdf", "chunk_index": 2},
+                metadata={"name": "b.pdf", "chunk_index": 2},
             )
         ]
     )

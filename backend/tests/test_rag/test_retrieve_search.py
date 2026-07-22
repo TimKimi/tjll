@@ -13,8 +13,8 @@ def _fake_hits_resp():
                     "_score": 1.5,
                     "_source": {
                         "chunk_id": "c1",
-                        "document_id": "d1",
-                        "source_file": "a.pdf",
+                        "id": "d1",
+                        "name": "a.pdf",
                         "chunk_index": 0,
                         "text": "内容A",
                         "embedding": [0.1, 0.2, 0.3],
@@ -37,7 +37,7 @@ def test_format_hits_and_hits_to_documents():
     assert isinstance(docs[0], Document)
     assert docs[0].page_content == "内容A"
     assert docs[0].metadata["chunk_id"] == "c1"
-    assert docs[0].metadata["source_file"] == "a.pdf"
+    assert docs[0].metadata["name"] == "a.pdf"
     assert docs[0].metadata["score"] == 1.5
     assert "embedding" not in docs[0].metadata
     assert "text" not in docs[0].metadata
@@ -51,7 +51,6 @@ def test_hits_to_documents_includes_yelp_meta():
             {
                 "text": "好评片段",
                 "chunk_id": "b_pos_0000",
-                "document_id": "b",
                 "chunk_index": 0,
                 "_score": 2.0,
                 "polarity": "positive",
@@ -69,6 +68,7 @@ def test_hits_to_documents_includes_yelp_meta():
     assert meta["id"] == "b"
     assert meta["is_last_chunk"] is True
     assert "source_file" not in meta
+    assert "document_id" not in meta
     assert "embedding" not in meta
 
 
@@ -83,7 +83,7 @@ def test_retriever_tolerates_missing_source_file(monkeypatch):
             {
                 "text": "好吃",
                 "chunk_id": "b_pos_0000",
-                "document_id": "b",
+                "id": "b",
                 "chunk_index": 0,
                 "_score": 1.2,
                 "polarity": "positive",
@@ -135,7 +135,7 @@ def test_vector_bm25_hybrid_search(monkeypatch):
     assert client.last["body"]["_source"] == {"excludes": ["embedding"]}
 
     h = search_mod.hybrid_search("q")
-    assert h[0]["document_id"] == "d1"
+    assert h[0]["id"] == "d1"
     assert client.last["params"]["search_pipeline"] == "pipe"
     assert "hybrid" in client.last["body"]["query"]
     assert client.last["body"]["_source"] == {"excludes": ["embedding"]}
@@ -151,8 +151,8 @@ def test_get_retriever_and_modes(monkeypatch):
             {
                 "text": "v",
                 "chunk_id": "1",
-                "document_id": "d",
-                "source_file": "f",
+                "id": "d",
+                "name": "f",
                 "chunk_index": 0,
                 "_score": 1.0,
             }
@@ -165,8 +165,8 @@ def test_get_retriever_and_modes(monkeypatch):
             {
                 "text": "b",
                 "chunk_id": "2",
-                "document_id": "d",
-                "source_file": "f",
+                "id": "d",
+                "name": "f",
                 "chunk_index": 1,
                 "_score": 2.0,
             }
@@ -179,8 +179,8 @@ def test_get_retriever_and_modes(monkeypatch):
             {
                 "text": "h",
                 "chunk_id": "3",
-                "document_id": "d",
-                "source_file": "f",
+                "id": "d",
+                "name": "f",
                 "chunk_index": 2,
                 "_score": 3.0,
             }
