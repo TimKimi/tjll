@@ -1,105 +1,123 @@
 <template>
-    <div class="admin-login-view">
-      <div class="login-container">
-        <!-- 返回按钮（与普通登录页一致） -->
-        <button class="back-btn" @click="goHome">
-          <i class="fas fa-arrow-left"></i>
-          <span>返回首页</span>
-        </button>
+  <div class="admin-login-view">
+    <div class="login-container">
+      <!-- 返回按钮（与普通登录页一致） -->
+      <button
+        class="back-btn"
+        @click="goHome"
+      >
+        <i class="fas fa-arrow-left" />
+        <span>返回首页</span>
+      </button>
 
-        <!-- 登录卡片 -->
-        <div class="login-card">
-          <!-- 头部 -->
-          <div class="login-header">
-            <div class="logo-icon">
-              <img
-                src="/images/2.png"
-                alt="探店助手"
-                style="width: 56px; height: 56px; object-fit: contain;"
-              />
-            </div>
-            <h1 class="login-title">管理后台登录</h1>
-            <p class="login-subtitle">请输入管理员账号密码</p>
-          </div>
-
-          <!-- 登录表单 -->
-          <form class="login-form" @submit.prevent="handleLogin">
-            <!-- 账号输入 -->
-            <div class="form-group">
-              <label for="username">
-                <i class="fas fa-user"></i>
-                用户名
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-user input-icon"></i>
-                <input
-                  id="username"
-                  v-model="form.username"
-                  type="text"
-                  placeholder="请输入管理员用户名"
-                  autocomplete="username"
-                  required
-                />
-              </div>
-            </div>
-
-            <!-- 密码输入 -->
-            <div class="form-group">
-              <label for="password">
-                <i class="fas fa-lock"></i>
-                密码
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-lock input-icon"></i>
-                <input
-                  id="password"
-                  v-model="form.password"
-                  :type="showPassword ? 'text' : 'password'"
-                  placeholder="请输入密码"
-                  autocomplete="current-password"
-                  required
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  @click="showPassword = !showPassword"
-                >
-                  <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-              </div>
-            </div>
-
-            <!-- 登录按钮 -->
-            <button
-              type="submit"
-              class="login-btn"
-              :disabled="loading"
+      <!-- 登录卡片 -->
+      <div class="login-card">
+        <!-- 头部 -->
+        <div class="login-header">
+          <div class="logo-icon">
+            <img
+              src="/images/2.png"
+              alt="探店助手"
+              style="width: 56px; height: 56px; object-fit: contain;"
             >
-              <i v-if="loading" class="fas fa-spinner fa-spin"></i>
-              <span v-else>登录</span>
-            </button>
+          </div>
+          <h1 class="login-title">
+            管理后台登录
+          </h1>
+          <p class="login-subtitle">
+            请输入管理员账号密码
+          </p>
+        </div>
 
-            <!-- 错误提示 -->
-            <div v-if="errorMessage" class="error-message">
-              <i class="fas fa-exclamation-circle"></i>
-              {{ errorMessage }}
+        <!-- 登录表单 -->
+        <form
+          class="login-form"
+          @submit.prevent="handleLogin"
+        >
+          <!-- 账号输入 -->
+          <div class="form-group">
+            <label for="username">
+              <i class="fas fa-user" />
+              用户名
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-user input-icon" />
+              <input
+                id="username"
+                v-model="form.username"
+                type="text"
+                placeholder="请输入管理员用户名"
+                autocomplete="username"
+                required
+              >
             </div>
-          </form>
-
-          <!-- 普通用户登录入口 -->
-          <div class="register-section">
-            <span>普通用户？</span>
-            <router-link to="/login">点击这里登录</router-link>
           </div>
 
-          <!-- 底部版权 -->
-          <div class="login-footer">
-            <p>&copy; 2026 探店助手 · 让选择更简单</p>
+          <!-- 密码输入 -->
+          <div class="form-group">
+            <label for="password">
+              <i class="fas fa-lock" />
+              密码
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-lock input-icon" />
+              <input
+                id="password"
+                v-model="form.password"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="请输入密码"
+                autocomplete="current-password"
+                required
+              >
+              <button
+                type="button"
+                class="toggle-password"
+                @click="showPassword = !showPassword"
+              >
+                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" />
+              </button>
+            </div>
           </div>
+
+          <!-- 登录按钮 -->
+          <button
+            type="submit"
+            class="login-btn"
+            :disabled="loading"
+          >
+            <i
+              v-if="loading"
+              class="fas fa-spinner fa-spin"
+            />
+            <span v-else>登录</span>
+          </button>
+
+          <!-- 错误提示 -->
+          <div
+            v-if="errorMessage"
+            class="error-message"
+          >
+            <i class="fas fa-exclamation-circle" />
+            {{ errorMessage }}
+          </div>
+        </form>
+
+        <!-- 普通用户登录入口 -->
+        <div class="register-section">
+          <span>普通用户？</span>
+          <router-link to="/login">
+            点击这里登录
+          </router-link>
+        </div>
+
+        <!-- 底部版权 -->
+        <div class="login-footer">
+          <p>&copy; 2026 探店助手 · 让选择更简单</p>
         </div>
       </div>
     </div>
-  </template>
+  </div>
+</template>
 
   <script setup lang="ts">
   import { ref, reactive } from 'vue'

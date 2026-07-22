@@ -3,12 +3,15 @@
     <!-- 顶部导航栏 -->
     <header class="home-header">
       <div class="header-left">
-        <div class="brand" @click="goHome">
+        <div
+          class="brand"
+          @click="goHome"
+        >
           <img
             src="/images/2.png"
             alt="探店助手"
             class="brand-logo"
-          />
+          >
           <span class="brand-name">探店助手</span>
         </div>
       </div>
@@ -16,30 +19,41 @@
       <div class="header-right">
         <!-- 搜索框 (桌面端) -->
         <div class="header-search desktop-only">
-          <i class="fas fa-search"></i>
+          <i class="fas fa-search" />
           <input
             ref="searchInput"
             type="text"
             placeholder="搜索餐厅、美食..."
             @keyup.enter="handleSearch"
-          />
+          >
         </div>
 
         <!-- 用户操作 -->
         <div class="user-actions">
-          <button class="login-btn-header" @click="goToLogin" v-if="!isLoggedIn">
-            <i class="fas fa-user"></i>
+          <button
+            v-if="!isLoggedIn"
+            class="login-btn-header"
+            @click="goToLogin"
+          >
+            <i class="fas fa-user" />
             <span>登录</span>
           </button>
-          <div class="user-profile" v-else @click="goToProfile">
+          <div
+            v-else
+            class="user-profile"
+            @click="goToProfile"
+          >
             <img
-  v-if="userInfo.avatar"
-  :src="getFullAvatarUrl(userInfo.avatar)"
-  alt="用户头像"
-  class="header-avatar"
-  @error="userInfo.avatar = ''"
-/>
-            <i v-else class="fas fa-user-circle"></i>
+              v-if="userInfo.avatar"
+              :src="getFullAvatarUrl(userInfo.avatar)"
+              alt="用户头像"
+              class="header-avatar"
+              @error="userInfo.avatar = ''"
+            >
+            <i
+              v-else
+              class="fas fa-user-circle"
+            />
             <span class="user-name-display">{{ userInfo.name || '用户' }}</span>
           </div>
         </div>
@@ -49,8 +63,11 @@
     <div class="home-container">
       <!-- 移动端搜索 -->
       <div class="mobile-search mobile-only">
-        <div class="mobile-search-input" @click="goToChat">
-          <i class="fas fa-search"></i>
+        <div
+          class="mobile-search-input"
+          @click="goToChat"
+        >
+          <i class="fas fa-search" />
           <span>搜索餐厅、美食...</span>
         </div>
       </div>
@@ -71,7 +88,7 @@
       <div class="chat-entry-card">
         <div class="card-header">
           <div class="card-header-left">
-            <i class="fas fa-mug-hot"></i>
+            <i class="fas fa-mug-hot" />
             <span>今天想探索什么？</span>
           </div>
           <span class="card-badge">AI 智能</span>
@@ -80,56 +97,81 @@
         <!-- 输入框区域 - 支持直接输入 -->
         <div class="input-wrapper">
           <div class="search-input">
-            <i class="fas fa-search search-icon"></i>
+            <i class="fas fa-search search-icon" />
             <input
+              ref="queryInput"
               v-model="inputQuery"
               type="text"
               class="chat-input-field"
               placeholder="例如：附近哪家咖啡馆适合写作业，比较安静？"
               @keyup.enter="sendQuery"
-              ref="queryInput"
-            />
+            >
           </div>
-          <button class="send-btn" @click="sendQuery" :disabled="!inputQuery.trim()">
-            <i class="fas fa-arrow-right"></i>
+          <button
+            class="send-btn"
+            :disabled="!inputQuery.trim()"
+            @click="sendQuery"
+          >
+            <i class="fas fa-arrow-right" />
           </button>
         </div>
       </div>
 
       <!-- 快捷入口 -->
       <div class="quick-actions">
-        <div class="quick-action-item" @click="goToRestaurants('附近餐厅推荐')">
-          <i class="fas fa-utensils"></i>
+        <div
+          class="quick-action-item"
+          @click="goToRestaurants('附近餐厅推荐')"
+        >
+          <i class="fas fa-utensils" />
           <span>找餐厅</span>
         </div>
-        <div class="quick-action-item" @click="goToChatWithQuery('适合约会的餐厅')">
-          <i class="fas fa-heart"></i>
+        <div
+          class="quick-action-item"
+          @click="goToChatWithQuery('适合约会的餐厅')"
+        >
+          <i class="fas fa-heart" />
           <span>约会推荐</span>
         </div>
-        <div class="quick-action-item" @click="goToChatWithQuery('人均50以内的餐厅')">
-          <i class="fas fa-coins"></i>
+        <div
+          class="quick-action-item"
+          @click="goToChatWithQuery('人均50以内的餐厅')"
+        >
+          <i class="fas fa-coins" />
           <span>平价美食</span>
         </div>
-        <div class="quick-action-item" @click="goToChatWithQuery('安静的咖啡馆')">
-          <i class="fas fa-mug-saucer"></i>
+        <div
+          class="quick-action-item"
+          @click="goToChatWithQuery('安静的咖啡馆')"
+        >
+          <i class="fas fa-mug-saucer" />
           <span>咖啡馆</span>
         </div>
-        <div class="quick-action-item" @click="goToChatWithQuery('附近火锅店')">
-          <i class="fas fa-fire"></i>
+        <div
+          class="quick-action-item"
+          @click="goToChatWithQuery('附近火锅店')"
+        >
+          <i class="fas fa-fire" />
           <span>火锅</span>
         </div>
-        <div class="quick-action-item" @click="goToChatWithQuery('深夜食堂')">
-          <i class="fas fa-moon"></i>
+        <div
+          class="quick-action-item"
+          @click="goToChatWithQuery('深夜食堂')"
+        >
+          <i class="fas fa-moon" />
           <span>深夜食堂</span>
         </div>
       </div>
 
       <!-- 跳转按钮 -->
       <div class="navigate-section">
-        <button class="navigate-btn" @click="goToChat">
-          <i class="fas fa-comments"></i>
+        <button
+          class="navigate-btn"
+          @click="goToChat"
+        >
+          <i class="fas fa-comments" />
           进入完整对话
-          <i class="fas fa-chevron-right"></i>
+          <i class="fas fa-chevron-right" />
         </button>
       </div>
     </div>

@@ -3,15 +3,21 @@
     <!-- 顶部导航栏 -->
     <header class="shop-header">
       <div class="header-left">
-        <button class="back-btn" @click="goHome">
-          <i class="fas fa-arrow-left"></i>
+        <button
+          class="back-btn"
+          @click="goHome"
+        >
+          <i class="fas fa-arrow-left" />
           <span>返回</span>
         </button>
         <span class="header-title">发现餐厅</span>
       </div>
       <div class="header-right">
-        <button class="filter-toggle-btn" @click="showFilters = !showFilters">
-          <i class="fas fa-sliders-h"></i>
+        <button
+          class="filter-toggle-btn"
+          @click="showFilters = !showFilters"
+        >
+          <i class="fas fa-sliders-h" />
         </button>
       </div>
     </header>
@@ -19,132 +25,241 @@
     <!-- 搜索与筛选栏 -->
     <div class="search-bar">
       <div class="search-input-wrapper">
-        <i class="fas fa-search"></i>
+        <i class="fas fa-search" />
         <input
           v-model="searchKeyword"
           type="text"
           placeholder="搜索餐厅、美食..."
           @input="onSearchInput"
           @keyup.enter="fetchShops(1)"
-        />
-        <button v-if="searchKeyword" class="clear-btn" @click="clearSearch">
-          <i class="fas fa-times"></i>
+        >
+        <button
+          v-if="searchKeyword"
+          class="clear-btn"
+          @click="clearSearch"
+        >
+          <i class="fas fa-times" />
         </button>
       </div>
     </div>
 
     <!-- 筛选面板 -->
     <transition name="slide-down">
-      <div v-if="showFilters" class="filter-panel">
+      <div
+        v-if="showFilters"
+        class="filter-panel"
+      >
         <div class="filter-row">
           <div class="filter-group">
             <label>分类</label>
-            <select v-model="filters.category" @change="applyFilters">
-              <option value="">全部分类</option>
-              <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+            <select
+              v-model="filters.category"
+              @change="applyFilters"
+            >
+              <option value="">
+                全部分类
+              </option>
+              <option
+                v-for="cat in categories"
+                :key="cat"
+                :value="cat"
+              >
+                {{ cat }}
+              </option>
             </select>
           </div>
           <div class="filter-group">
             <label>排序</label>
-            <select v-model="filters.sort_by" @change="applyFilters">
-              <option value="rating">评分最高</option>
-              <option value="review_count">评价最多</option>
+            <select
+              v-model="filters.sort_by"
+              @change="applyFilters"
+            >
+              <option value="rating">
+                评分最高
+              </option>
+              <option value="review_count">
+                评价最多
+              </option>
             </select>
           </div>
           <div class="filter-group">
             <label>价格</label>
-            <select v-model="filters.price" @change="applyFilters">
-              <option value="">全部</option>
-              <option value="1">¥ 50 以下</option>
-              <option value="2">¥ 50 - 100</option>
-              <option value="3">¥ 100 - 200</option>
-              <option value="4">¥ 200 以上</option>
+            <select
+              v-model="filters.price"
+              @change="applyFilters"
+            >
+              <option value="">
+                全部
+              </option>
+              <option value="1">
+                ¥ 50 以下
+              </option>
+              <option value="2">
+                ¥ 50 - 100
+              </option>
+              <option value="3">
+                ¥ 100 - 200
+              </option>
+              <option value="4">
+                ¥ 200 以上
+              </option>
             </select>
           </div>
         </div>
         <div class="filter-actions">
-          <button class="filter-reset-btn" @click="resetFilters">重置</button>
+          <button
+            class="filter-reset-btn"
+            @click="resetFilters"
+          >
+            重置
+          </button>
         </div>
       </div>
     </transition>
 
     <!-- 位置 & 数据源切换 -->
-<div class="filter-options-bar">
-  <div class="option-group">
-  <label for="location-select">城市</label>
-  <select
-    id="location-select"
-    v-model="filters.location"
-    @change="applyFilters"
-    :disabled="sourceType === 'db'"
-  >
-    <option value="">全部城市</option>
-    <option value="New York">New York</option>
-    <option value="Los Angeles">Los Angeles</option>
-    <option value="Chicago">Chicago</option>
-    <option value="Houston">Houston</option>
-    <option value="Phoenix">Phoenix</option>
-    <option value="Philadelphia">Philadelphia</option>
-    <option value="San Antonio">San Antonio</option>
-    <option value="San Diego">San Diego</option>
-    <option value="Dallas">Dallas</option>
-    <option value="San Jose">San Jose</option>
-    <option value="Austin">Austin</option>
-    <option value="Jacksonville">Jacksonville</option>
-    <option value="Fort Worth">Fort Worth</option>
-    <option value="Columbus">Columbus</option>
-    <option value="Charlotte">Charlotte</option>
-    <option value="San Francisco">San Francisco</option>
-    <option value="Indianapolis">Indianapolis</option>
-    <option value="Seattle">Seattle</option>
-    <option value="Denver">Denver</option>
-    <option value="Washington">Washington</option>
-  </select>
-  <span v-if="sourceType === 'db'" class="hint-text">（DB 无需城市）</span>
-  <span v-else class="hint-text" style="color:#eab308;">（必选）</span>
-</div>
+    <div class="filter-options-bar">
+      <div class="option-group">
+        <label for="location-select">城市</label>
+        <select
+          id="location-select"
+          v-model="filters.location"
+          :disabled="sourceType === 'db'"
+          @change="applyFilters"
+        >
+          <option value="">
+            全部城市
+          </option>
+          <option value="New York">
+            New York
+          </option>
+          <option value="Los Angeles">
+            Los Angeles
+          </option>
+          <option value="Chicago">
+            Chicago
+          </option>
+          <option value="Houston">
+            Houston
+          </option>
+          <option value="Phoenix">
+            Phoenix
+          </option>
+          <option value="Philadelphia">
+            Philadelphia
+          </option>
+          <option value="San Antonio">
+            San Antonio
+          </option>
+          <option value="San Diego">
+            San Diego
+          </option>
+          <option value="Dallas">
+            Dallas
+          </option>
+          <option value="San Jose">
+            San Jose
+          </option>
+          <option value="Austin">
+            Austin
+          </option>
+          <option value="Jacksonville">
+            Jacksonville
+          </option>
+          <option value="Fort Worth">
+            Fort Worth
+          </option>
+          <option value="Columbus">
+            Columbus
+          </option>
+          <option value="Charlotte">
+            Charlotte
+          </option>
+          <option value="San Francisco">
+            San Francisco
+          </option>
+          <option value="Indianapolis">
+            Indianapolis
+          </option>
+          <option value="Seattle">
+            Seattle
+          </option>
+          <option value="Denver">
+            Denver
+          </option>
+          <option value="Washington">
+            Washington
+          </option>
+        </select>
+        <span
+          v-if="sourceType === 'db'"
+          class="hint-text"
+        >（DB 无需城市）</span>
+        <span
+          v-else
+          class="hint-text"
+          style="color:#eab308;"
+        >（必选）</span>
+      </div>
 
-  <div class="option-group">
-    <label>数据源</label>
-    <div class="source-toggle">
-      <button
-        class="source-btn"
-        :class="{ active: sourceType === 'db' }"
-        @click="switchSource('db')"
-      >
-        DB
-      </button>
-      <button
-        class="source-btn"
-        :class="{ active: sourceType === 'yelp' }"
-        @click="switchSource('yelp')"
-      >
-        Yelp
-      </button>
+      <div class="option-group">
+        <label>数据源</label>
+        <div class="source-toggle">
+          <button
+            class="source-btn"
+            :class="{ active: sourceType === 'db' }"
+            @click="switchSource('db')"
+          >
+            DB
+          </button>
+          <button
+            class="source-btn"
+            :class="{ active: sourceType === 'yelp' }"
+            @click="switchSource('yelp')"
+          >
+            Yelp
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
-</div>
 
     <!-- 结果统计 -->
-    <div class="result-info" v-if="total > 0">
+    <div
+      v-if="total > 0"
+      class="result-info"
+    >
       <span>共 {{ total }} 家餐厅</span>
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="loading" class="loading-state">
-      <i class="fas fa-spinner fa-spin"></i>
+    <div
+      v-if="loading"
+      class="loading-state"
+    >
+      <i class="fas fa-spinner fa-spin" />
       <p>加载餐厅中...</p>
     </div>
 
     <!-- 空状态 -->
-    <div v-else-if="shops.length === 0" class="empty-state">
-      <i class="fas fa-utensils"></i>
+    <div
+      v-else-if="shops.length === 0"
+      class="empty-state"
+    >
+      <i class="fas fa-utensils" />
       <p>没有找到符合条件的餐厅</p>
-      <button class="empty-btn" @click="resetFilters">重新搜索</button>
+      <button
+        class="empty-btn"
+        @click="resetFilters"
+      >
+        重新搜索
+      </button>
     </div>
 
     <!-- 餐厅卡片网格 -->
-    <div v-else class="shop-grid">
+    <div
+      v-else
+      class="shop-grid"
+    >
       <div
         v-for="shop in shops"
         :key="shop.id"
@@ -152,23 +267,32 @@
         @click="goToShop(shop.id)"
       >
         <div class="shop-image">
-          <img :src="shop.image || defaultImage" :alt="shop.name" loading="lazy" />
+          <img
+            :src="shop.image || defaultImage"
+            :alt="shop.name"
+            loading="lazy"
+          >
         </div>
         <div class="shop-info">
-          <h3 class="shop-name">{{ shop.name }}</h3>
+          <h3 class="shop-name">
+            {{ shop.name }}
+          </h3>
           <div class="shop-meta">
             <span class="shop-rating">
-              <i class="fas fa-star"></i>
+              <i class="fas fa-star" />
               {{ shop.rating || '暂无' }}
             </span>
             <!-- 仅保留一个高亮特色标签，删除了分类标签 -->
-            <span v-if="shop.tags && shop.tags.length" class="shop-feature-tag">
+            <span
+              v-if="shop.tags && shop.tags.length"
+              class="shop-feature-tag"
+            >
               {{ shop.tags[0] }}
             </span>
             <!-- 分类标签（灰色背景）已移除 -->
           </div>
           <div class="shop-address">
-            <i class="fas fa-map-pin"></i>
+            <i class="fas fa-map-pin" />
             <span>{{ shop.address || '地址待完善' }}</span>
           </div>
         </div>
@@ -176,13 +300,16 @@
     </div>
 
     <!-- 分页 -->
-    <div class="pagination" v-if="total > pageSize">
+    <div
+      v-if="total > pageSize"
+      class="pagination"
+    >
       <button
         class="page-btn"
         :disabled="currentPage === 1"
         @click="changePage(currentPage - 1)"
       >
-        <i class="fas fa-chevron-left"></i>
+        <i class="fas fa-chevron-left" />
       </button>
       <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
       <button
@@ -190,7 +317,7 @@
         :disabled="currentPage === totalPages"
         @click="changePage(currentPage + 1)"
       >
-        <i class="fas fa-chevron-right"></i>
+        <i class="fas fa-chevron-right" />
       </button>
     </div>
   </div>
@@ -314,7 +441,7 @@ if (sourceType.value === 'yelp' && filters.location) {
     shops.value = items.map((item: any) => ({
       id: item.id,
       name: item.name,
-      image: item.image_url || item.photos?.[0] || defaultImage,
+      image: item.image_url || item.photos?.[0] || `https://picsum.photos/seed/${item.id}/400/300`,
       rating: item.rating || 0,
       reviewCount: item.review_count || 0,
       price: typeof item.price === 'string' ? parseFloat(item.price) || 0 : (item.price || 0),

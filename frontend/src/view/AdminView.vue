@@ -3,46 +3,59 @@
     <!-- 顶部导航栏 -->
     <header class="admin-header">
       <div class="header-left">
-        <div class="brand" @click="goHome">
+        <div
+          class="brand"
+          @click="goHome"
+        >
           <img
             src="/images/2.png"
             alt="探店助手"
             class="brand-logo"
-          />
+          >
           <span class="brand-name">探店助手 · 管理后台</span>
         </div>
       </div>
 
       <div class="header-right">
         <div class="admin-info">
-  <!-- 头像可点击 -->
-  <div class="avatar-wrapper" @click="triggerAdminAvatarUpload" title="更换头像">
-    <img
-      v-if="adminInfo.avatar"
-      :src="getFullAvatarUrl(adminInfo.avatar)"
-      alt="管理员头像"
-      class="admin-avatar"
-      @error="adminInfo.avatar = ''"
-    />
-    <i v-else class="fas fa-user-circle admin-avatar-icon"></i>
-    <!-- 小相机提示（可选） -->
-    <span class="avatar-hover-tip">
-      <i class="fas fa-camera"></i>
-    </span>
-  </div>
-  <span class="admin-name">{{ adminInfo.name || '管理员' }}</span>
-</div>
+          <!-- 头像可点击 -->
+          <div
+            class="avatar-wrapper"
+            title="更换头像"
+            @click="triggerAdminAvatarUpload"
+          >
+            <img
+              v-if="adminInfo.avatar"
+              :src="getFullAvatarUrl(adminInfo.avatar)"
+              alt="管理员头像"
+              class="admin-avatar"
+              @error="adminInfo.avatar = ''"
+            >
+            <i
+              v-else
+              class="fas fa-user-circle admin-avatar-icon"
+            />
+            <!-- 小相机提示（可选） -->
+            <span class="avatar-hover-tip">
+              <i class="fas fa-camera" />
+            </span>
+          </div>
+          <span class="admin-name">{{ adminInfo.name || '管理员' }}</span>
+        </div>
 
-<!-- 隐藏的文件选择器 -->
-<input
-  ref="adminAvatarInput"
-  type="file"
-  accept="image/*"
-  style="display: none"
-  @change="handleAdminAvatarUpload"
-/>
-        <button class="logout-btn" @click="handleLogout">
-          <i class="fas fa-sign-out-alt"></i>
+        <!-- 隐藏的文件选择器 -->
+        <input
+          ref="adminAvatarInput"
+          type="file"
+          accept="image/*"
+          style="display: none"
+          @change="handleAdminAvatarUpload"
+        >
+        <button
+          class="logout-btn"
+          @click="handleLogout"
+        >
+          <i class="fas fa-sign-out-alt" />
           <span>退出</span>
         </button>
       </div>
@@ -54,128 +67,200 @@
         <div class="table-header">
           <div class="table-header-left">
             <h2 class="table-title">
-              <i class="fas fa-list"></i>
+              <i class="fas fa-list" />
               用户列表
             </h2>
             <span class="table-count">共 {{ totalUsers }} 位用户</span>
           </div>
           <div class="table-header-right">
             <div class="search-box">
-              <i class="fas fa-search"></i>
+              <i class="fas fa-search" />
               <input
                 v-model="searchKeyword"
                 type="text"
                 placeholder="搜索用户名"
                 @input="handleSearch"
-              />
+              >
             </div>
-            <button class="refresh-btn" @click="loadUsers" :disabled="isLoading">
-              <i :class="isLoading ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"></i>
+            <button
+              class="refresh-btn"
+              :disabled="isLoading"
+              @click="loadUsers"
+            >
+              <i :class="isLoading ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'" />
               <span>{{ isLoading ? '刷新中...' : '刷新' }}</span>
             </button>
           </div>
         </div>
 
         <!-- 角色修改模态框 -->
-<div v-if="showRoleModal" class="modal-overlay" @click.self="closeRoleModal">
-  <div class="modal-content">
-    <h3>修改用户角色</h3>
-    <p>用户：<strong>{{ selectedUser?.username }}</strong></p>
-    <div class="form-group">
-      <label>新角色：</label>
-      <select v-model="newRole">
-        <option value="user">普通用户</option>
-        <option value="admin">管理员</option>
-      </select>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" @click="closeRoleModal">取消</button>
-      <button class="btn btn-primary" @click="updateRole" :disabled="isSubmitting">
-        {{ isSubmitting ? '提交中...' : '确认修改' }}
-      </button>
-    </div>
-  </div>
-</div>
+        <div
+          v-if="showRoleModal"
+          class="modal-overlay"
+          @click.self="closeRoleModal"
+        >
+          <div class="modal-content">
+            <h3>修改用户角色</h3>
+            <p>用户：<strong>{{ selectedUser?.username }}</strong></p>
+            <div class="form-group">
+              <label>新角色：</label>
+              <select v-model="newRole">
+                <option value="user">
+                  普通用户
+                </option>
+                <option value="admin">
+                  管理员
+                </option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button
+                class="btn btn-secondary"
+                @click="closeRoleModal"
+              >
+                取消
+              </button>
+              <button
+                class="btn btn-primary"
+                :disabled="isSubmitting"
+                @click="updateRole"
+              >
+                {{ isSubmitting ? '提交中...' : '确认修改' }}
+              </button>
+            </div>
+          </div>
+        </div>
 
         <!-- 加载状态 -->
-        <div v-if="isLoading" class="loading-state">
-          <i class="fas fa-spinner fa-spin"></i>
+        <div
+          v-if="isLoading"
+          class="loading-state"
+        >
+          <i class="fas fa-spinner fa-spin" />
           <p>加载用户数据...</p>
         </div>
 
         <!-- 空状态 -->
-        <div v-else-if="filteredUsers.length === 0" class="empty-state">
-          <i class="fas fa-users-slash"></i>
+        <div
+          v-else-if="filteredUsers.length === 0"
+          class="empty-state"
+        >
+          <i class="fas fa-users-slash" />
           <p>{{ searchKeyword ? '未找到匹配的用户' : '暂无注册用户' }}</p>
         </div>
 
         <!-- 用户表格 -->
-        <div v-else class="table-responsive">
+        <div
+          v-else
+          class="table-responsive"
+        >
           <table class="user-table">
             <thead>
-  <tr>
-    <th class="col-id">ID</th>
-    <th class="col-name">用户名</th>
-    <th class="col-email">邮箱</th>
-    <th class="col-bio">个性签名</th>
-    <th class="col-status">状态</th>
-    <th class="col-role">角色</th>
-    <th class="col-actions">操作</th>
-    <th class="col-time">注册时间</th>
-  </tr>
-</thead>
+              <tr>
+                <th class="col-id">
+                  ID
+                </th>
+                <th class="col-name">
+                  用户名
+                </th>
+                <th class="col-email">
+                  邮箱
+                </th>
+                <th class="col-bio">
+                  个性签名
+                </th>
+                <th class="col-status">
+                  状态
+                </th>
+                <th class="col-role">
+                  角色
+                </th>
+                <th class="col-actions">
+                  操作
+                </th>
+                <th class="col-time">
+                  注册时间
+                </th>
+              </tr>
+            </thead>
             <tbody>
-  <tr
-    v-for="user in paginatedUsers"
-    :key="user.id"
-    :class="{ 'row-active': user.is_online }"
-  >
-    <td class="col-id">#{{ user.id }}</td>
-    <td class="col-name">
-      <div class="user-info-cell">
-        <img
-          v-if="user.avatar"
-          :src="getFullAvatarUrl(user.avatar)"
-          alt="头像"
-          class="user-avatar-small"
-          @error="user.avatar = ''"
-        />
-        <i v-else class="fas fa-user-circle user-avatar-small-icon"></i>
-        <span>{{ user.username }}</span>
-      </div>
-    </td>
-    <td class="col-email">{{ user.email || '无' }}</td>
-    <td class="col-bio">{{ user.bio || '无' }}</td>
-    <!-- 状态列 -->
-    <td class="col-status">
-      <span class="status-badge" :class="{ online: user.is_online }">
-        <span class="status-dot-small"></span>
-        {{ user.is_online ? '在线' : '离线' }}
-      </span>
-    </td>
-    <!-- 角色列 -->
-    <td class="col-role">
-      <span class="role-badge" :class="user.role">
-        {{ user.role === 'admin' ? '管理员' : '普通用户' }}
-      </span>
-    </td>
-    <!-- 操作列 -->
-    <td class="col-actions">
-      <button class="action-btn edit-role" @click="openRoleModal(user)">
-        <i class="fas fa-user-cog"></i> 改角色
-      </button>
-      <button class="action-btn delete-user" @click="confirmDelete(user)">
-        <i class="fas fa-trash-alt"></i> 删除
-      </button>
-    </td>
-    <td class="col-time">{{ formatTime(user.register_time) }}</td>
-  </tr>
-</tbody>
+              <tr
+                v-for="user in paginatedUsers"
+                :key="user.id"
+                :class="{ 'row-active': user.is_online }"
+              >
+                <td class="col-id">
+                  #{{ user.id }}
+                </td>
+                <td class="col-name">
+                  <div class="user-info-cell">
+                    <img
+                      v-if="user.avatar"
+                      :src="getFullAvatarUrl(user.avatar)"
+                      alt="头像"
+                      class="user-avatar-small"
+                      @error="user.avatar = ''"
+                    >
+                    <i
+                      v-else
+                      class="fas fa-user-circle user-avatar-small-icon"
+                    />
+                    <span>{{ user.username }}</span>
+                  </div>
+                </td>
+                <td class="col-email">
+                  {{ user.email || '无' }}
+                </td>
+                <td class="col-bio">
+                  {{ user.bio || '无' }}
+                </td>
+                <!-- 状态列 -->
+                <td class="col-status">
+                  <span
+                    class="status-badge"
+                    :class="{ online: user.is_online }"
+                  >
+                    <span class="status-dot-small" />
+                    {{ user.is_online ? '在线' : '离线' }}
+                  </span>
+                </td>
+                <!-- 角色列 -->
+                <td class="col-role">
+                  <span
+                    class="role-badge"
+                    :class="user.role"
+                  >
+                    {{ user.role === 'admin' ? '管理员' : '普通用户' }}
+                  </span>
+                </td>
+                <!-- 操作列 -->
+                <td class="col-actions">
+                  <button
+                    class="action-btn edit-role"
+                    @click="openRoleModal(user)"
+                  >
+                    <i class="fas fa-user-cog" /> 改角色
+                  </button>
+                  <button
+                    class="action-btn delete-user"
+                    @click="confirmDelete(user)"
+                  >
+                    <i class="fas fa-trash-alt" /> 删除
+                  </button>
+                </td>
+                <td class="col-time">
+                  {{ formatTime(user.register_time) }}
+                </td>
+              </tr>
+            </tbody>
           </table>
         </div>
 
         <!-- 分页 -->
-        <div v-if="filteredUsers.length > 0" class="pagination-wrapper">
+        <div
+          v-if="filteredUsers.length > 0"
+          class="pagination-wrapper"
+        >
           <div class="pagination-info">
             显示 {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, filteredUsers.length) }} 条，共 {{ filteredUsers.length }} 条
           </div>
@@ -185,7 +270,7 @@
               :disabled="currentPage === 1"
               @click="currentPage--"
             >
-              <i class="fas fa-chevron-left"></i>
+              <i class="fas fa-chevron-left" />
             </button>
             <span class="page-current">{{ currentPage }} / {{ totalPages }}</span>
             <button
@@ -193,7 +278,7 @@
               :disabled="currentPage === totalPages"
               @click="currentPage++"
             >
-              <i class="fas fa-chevron-right"></i>
+              <i class="fas fa-chevron-right" />
             </button>
           </div>
         </div>

@@ -1,135 +1,169 @@
 <template>
-    <div class="login-view">
-      <div class="login-container">
-        <!-- 返回按钮 -->
-        <button class="back-btn" @click="goHome">
-          <i class="fas fa-arrow-left"></i>
-          <span>返回首页</span>
-        </button>
+  <div class="login-view">
+    <div class="login-container">
+      <!-- 返回按钮 -->
+      <button
+        class="back-btn"
+        @click="goHome"
+      >
+        <i class="fas fa-arrow-left" />
+        <span>返回首页</span>
+      </button>
 
-        <!-- 登录卡片 -->
-        <div class="login-card">
-          <!-- Logo 区域 -->
-<div class="login-header">
-  <div class="logo-icon">
-    <img
-      src="/images/2.png"
-      alt="探店助手"
-      style="width: 56px; height: 56px; object-fit: contain;"
-    />
-  </div>
-  <h1 class="login-title">欢迎回来</h1>
-  <p class="login-subtitle">登录你的探店助手账号，开启智能探店之旅</p>
-
-</div>
-
-          <!-- 登录表单 -->
-          <form class="login-form" @submit.prevent="handleLogin">
-            <!-- 账号输入 -->
-            <div class="form-group">
-              <label for="username">
-                <i class="fas fa-user"></i>
-                用户名
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-user input-icon"></i>
-                <input
-                  id="username"
-                  v-model="loginForm.username"
-                  type="text"
-                  placeholder="请输入用户名"
-                  autocomplete="username"
-                  required
-                />
-              </div>
-            </div>
-
-            <!-- 密码输入 -->
-            <div class="form-group">
-              <label for="password">
-                <i class="fas fa-lock"></i>
-                密码
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-lock input-icon"></i>
-                <input
-                  id="password"
-                  v-model="loginForm.password"
-                  :type="showPassword ? 'text' : 'password'"
-                  placeholder="请输入密码"
-                  autocomplete="current-password"
-                  required
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  @click="showPassword = !showPassword"
-                >
-                  <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-              </div>
-            </div>
-
-            <!-- 选项 -->
-            <div class="form-options">
-              <label class="remember-me">
-                <input type="checkbox" v-model="loginForm.remember" />
-                <span>记住我</span>
-              </label>
-              <a href="#" class="forgot-link" @click.prevent="handleForgotPassword">
-                忘记密码？
-              </a>
-            </div>
-
-            <!-- 登录按钮 -->
-            <button
-              type="submit"
-              class="login-btn"
-              :disabled="isLoading"
+      <!-- 登录卡片 -->
+      <div class="login-card">
+        <!-- Logo 区域 -->
+        <div class="login-header">
+          <div class="logo-icon">
+            <img
+              src="/images/2.png"
+              alt="探店助手"
+              style="width: 56px; height: 56px; object-fit: contain;"
             >
-              <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
-              <span v-else>登录</span>
-            </button>
-
-            <!-- 错误提示 -->
-            <div v-if="errorMessage" class="error-message">
-              <i class="fas fa-exclamation-circle"></i>
-              {{ errorMessage }}
-            </div>
-          </form>
-
-          <!-- 注册入口 -->
-          <div class="register-section">
-            <span>还没有账号？</span>
-            <a href="#" @click.prevent="goToRegister">立即注册</a>
           </div>
-
-          <!-- 社交登录 -->
-          <div class="social-login">
-            <div class="divider">
-              <span>其他登录方式</span>
-            </div>
-            <div class="social-buttons">
-              <button class="social-btn wechat" @click="handleSocialLogin('wechat')">
-                <i class="fab fa-weixin"></i>
-              </button>
-              <button class="social-btn qq" @click="handleSocialLogin('qq')">
-                <i class="fab fa-qq"></i>
-              </button>
-              <button class="social-btn weibo" @click="handleSocialLogin('weibo')">
-                <i class="fab fa-weibo"></i>
-              </button>
-            </div>
-          </div>
+          <h1 class="login-title">
+            欢迎回来
+          </h1>
+          <p class="login-subtitle">
+            登录你的探店助手账号，开启智能探店之旅
+          </p>
         </div>
 
-        <!-- 底部版权 -->
-        <div class="login-footer">
-          <p>&copy; 2026 探店助手 · 让选择更简单</p>
+        <!-- 登录表单 -->
+        <form
+          class="login-form"
+          @submit.prevent="handleLogin"
+        >
+          <!-- 账号输入 -->
+          <div class="form-group">
+            <label for="username">
+              <i class="fas fa-user" />
+              用户名
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-user input-icon" />
+              <input
+                id="username"
+                v-model="loginForm.username"
+                type="text"
+                placeholder="请输入用户名"
+                autocomplete="username"
+                required
+              >
+            </div>
+          </div>
+
+          <!-- 密码输入 -->
+          <div class="form-group">
+            <label for="password">
+              <i class="fas fa-lock" />
+              密码
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-lock input-icon" />
+              <input
+                id="password"
+                v-model="loginForm.password"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="请输入密码"
+                autocomplete="current-password"
+                required
+              >
+              <button
+                type="button"
+                class="toggle-password"
+                @click="showPassword = !showPassword"
+              >
+                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" />
+              </button>
+            </div>
+          </div>
+
+          <!-- 选项 -->
+          <div class="form-options">
+            <label class="remember-me">
+              <input
+                v-model="loginForm.remember"
+                type="checkbox"
+              >
+              <span>记住我</span>
+            </label>
+            <a
+              href="#"
+              class="forgot-link"
+              @click.prevent="handleForgotPassword"
+            >
+              忘记密码？
+            </a>
+          </div>
+
+          <!-- 登录按钮 -->
+          <button
+            type="submit"
+            class="login-btn"
+            :disabled="isLoading"
+          >
+            <i
+              v-if="isLoading"
+              class="fas fa-spinner fa-spin"
+            />
+            <span v-else>登录</span>
+          </button>
+
+          <!-- 错误提示 -->
+          <div
+            v-if="errorMessage"
+            class="error-message"
+          >
+            <i class="fas fa-exclamation-circle" />
+            {{ errorMessage }}
+          </div>
+        </form>
+
+        <!-- 注册入口 -->
+        <div class="register-section">
+          <span>还没有账号？</span>
+          <a
+            href="#"
+            @click.prevent="goToRegister"
+          >立即注册</a>
+        </div>
+
+        <!-- 社交登录 -->
+        <div class="social-login">
+          <div class="divider">
+            <span>其他登录方式</span>
+          </div>
+          <div class="social-buttons">
+            <button
+              class="social-btn wechat"
+              @click="handleSocialLogin('wechat')"
+            >
+              <i class="fab fa-weixin" />
+            </button>
+            <button
+              class="social-btn qq"
+              @click="handleSocialLogin('qq')"
+            >
+              <i class="fab fa-qq" />
+            </button>
+            <button
+              class="social-btn weibo"
+              @click="handleSocialLogin('weibo')"
+            >
+              <i class="fab fa-weibo" />
+            </button>
+          </div>
         </div>
       </div>
+
+      <!-- 底部版权 -->
+      <div class="login-footer">
+        <p>&copy; 2026 探店助手 · 让选择更简单</p>
+      </div>
     </div>
-  </template>
+  </div>
+</template>
 
   <script setup lang="ts">
   import { ref, reactive } from 'vue'

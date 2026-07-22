@@ -1,285 +1,407 @@
 <template>
-    <div class="profile-view">
-      <div class="profile-container">
-        <!-- ============================================
+  <div class="profile-view">
+    <div class="profile-container">
+      <!-- ============================================
              侧边栏 (与 ChatView 风格一致)
              ============================================ -->
-        <aside class="profile-sidebar">
-          <!-- 侧边栏头部 -->
-          <div class="sidebar-header">
-            <button class="sidebar-back-btn" @click="goHome">
-              <i class="fas fa-arrow-left"></i>
-              <span class="btn-label">返回</span>
-            </button>
-            <span class="sidebar-title">个人中心</span>
-          </div>
+      <aside class="profile-sidebar">
+        <!-- 侧边栏头部 -->
+        <div class="sidebar-header">
+          <button
+            class="sidebar-back-btn"
+            @click="goHome"
+          >
+            <i class="fas fa-arrow-left" />
+            <span class="btn-label">返回</span>
+          </button>
+          <span class="sidebar-title">个人中心</span>
+        </div>
 
-          <!-- 用户信息卡片 -->
-          <div class="profile-user-card">
-            <div class="profile-avatar-wrapper">
-              <img
-  v-if="userInfo.avatar"
-  :src="getFullAvatarUrl(userInfo.avatar)"
-  alt="用户头像"
-  class="profile-avatar"
-  @error="userInfo.avatar = ''"
-/>
-              <i v-else class="fas fa-user-circle profile-avatar-icon"></i>
-              <button class="avatar-upload-btn" @click="triggerAvatarUpload">
-                <i class="fas fa-camera"></i>
-              </button>
-            </div>
-            <h3 class="profile-username">{{ userInfo.name || '用户' }}</h3>
-            <span class="profile-user-status" :class="{ online: userInfo.isOnline }">
-              <span class="status-dot-small"></span>
-              {{ userInfo.isOnline ? '在线' : '离线' }}
-            </span>
-          </div>
-
-          <!-- 菜单列表 -->
-          <nav class="profile-menu">
-            <div
-              v-for="item in menuItems"
-              :key="item.key"
-              :class="['menu-item', { active: activeMenu === item.key }]"
-              @click="activeMenu = item.key"
+        <!-- 用户信息卡片 -->
+        <div class="profile-user-card">
+          <div class="profile-avatar-wrapper">
+            <img
+              v-if="userInfo.avatar"
+              :src="getFullAvatarUrl(userInfo.avatar)"
+              alt="用户头像"
+              class="profile-avatar"
+              @error="userInfo.avatar = ''"
             >
-              <i :class="item.icon"></i>
-              <span>{{ item.label }}</span>
-              <i v-if="item.badge" class="fas fa-chevron-right menu-arrow"></i>
-            </div>
-          </nav>
-
-          <!-- 退出登录 -->
-          <div class="sidebar-footer">
-            <button class="logout-btn" @click="handleLogout">
-              <i class="fas fa-sign-out-alt"></i>
-              <span>退出登录</span>
+            <i
+              v-else
+              class="fas fa-user-circle profile-avatar-icon"
+            />
+            <button
+              class="avatar-upload-btn"
+              @click="triggerAvatarUpload"
+            >
+              <i class="fas fa-camera" />
             </button>
           </div>
-        </aside>
+          <h3 class="profile-username">
+            {{ userInfo.name || '用户' }}
+          </h3>
+          <span
+            class="profile-user-status"
+            :class="{ online: userInfo.isOnline }"
+          >
+            <span class="status-dot-small" />
+            {{ userInfo.isOnline ? '在线' : '离线' }}
+          </span>
+        </div>
 
-        <!-- ============================================
+        <!-- 菜单列表 -->
+        <nav class="profile-menu">
+          <div
+            v-for="item in menuItems"
+            :key="item.key"
+            :class="['menu-item', { active: activeMenu === item.key }]"
+            @click="activeMenu = item.key"
+          >
+            <i :class="item.icon" />
+            <span>{{ item.label }}</span>
+            <i
+              v-if="item.badge"
+              class="fas fa-chevron-right menu-arrow"
+            />
+          </div>
+        </nav>
+
+        <!-- 退出登录 -->
+        <div class="sidebar-footer">
+          <button
+            class="logout-btn"
+            @click="handleLogout"
+          >
+            <i class="fas fa-sign-out-alt" />
+            <span>退出登录</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- ============================================
              主内容区域
              ============================================ -->
-        <main class="profile-main">
-          <!-- 头部 -->
-          <header class="profile-header">
-            <div class="header-info">
-              <i class="fas fa-user-circle"></i>
-              <h2 class="header-title">{{ getMenuTitle }}</h2>
-            </div>
-          </header>
+      <main class="profile-main">
+        <!-- 头部 -->
+        <header class="profile-header">
+          <div class="header-info">
+            <i class="fas fa-user-circle" />
+            <h2 class="header-title">
+              {{ getMenuTitle }}
+            </h2>
+          </div>
+        </header>
 
-          <!-- 内容区 -->
-          <div class="profile-content">
-            <!-- 个人信息 -->
-            <div v-if="activeMenu === 'profile'" class="content-panel">
-              <div class="panel-header">
-                <h3>基本信息</h3>
-                <button class="edit-btn" @click="toggleEdit">
-                  <i :class="isEditing ? 'fas fa-save' : 'fas fa-pen'"></i>
-                  {{ isEditing ? '保存' : '编辑' }}
+        <!-- 内容区 -->
+        <div class="profile-content">
+          <!-- 个人信息 -->
+          <div
+            v-if="activeMenu === 'profile'"
+            class="content-panel"
+          >
+            <div class="panel-header">
+              <h3>基本信息</h3>
+              <button
+                class="edit-btn"
+                @click="toggleEdit"
+              >
+                <i :class="isEditing ? 'fas fa-save' : 'fas fa-pen'" />
+                {{ isEditing ? '保存' : '编辑' }}
+              </button>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-item">
+                <label>用户名</label>
+                <div class="info-value">
+                  <input
+                    v-if="isEditing"
+                    v-model="editForm.username"
+                    type="text"
+                    placeholder="请输入用户名"
+                  >
+                  <span v-else>{{ userInfo.name || '未设置' }}</span>
+                </div>
+              </div>
+
+              <div class="info-item">
+                <label>邮箱</label>
+                <div class="info-value">
+                  <input
+                    v-if="isEditing"
+                    v-model="editForm.email"
+                    type="email"
+                    placeholder="请输入邮箱"
+                  >
+                  <span v-else>{{ userInfo.email || '未绑定' }}</span>
+                </div>
+              </div>
+
+              <div class="info-item">
+                <label>个性签名</label>
+                <div class="info-value">
+                  <input
+                    v-if="isEditing"
+                    v-model="editForm.bio"
+                    type="text"
+                    placeholder="写一句话介绍自己"
+                    maxlength="50"
+                  >
+                  <span v-else>{{ userInfo.bio || '这个人很懒，什么都没写~' }}</span>
+                </div>
+              </div>
+
+              <div class="info-item full-width">
+                <label>注册时间</label>
+                <div class="info-value">
+                  <span class="info-meta">{{ userInfo.registerTime || '2026-01-01' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 对话历史 -->
+          <div
+            v-if="activeMenu === 'history'"
+            class="content-panel"
+          >
+            <div class="panel-header">
+              <h3>对话历史</h3>
+              <span class="panel-count">
+                {{ conversationList.length }} 条记录
+                <span
+                  v-if="isLoadingConversations"
+                  class="loading-text"
+                >加载中...</span>
+              </span>
+            </div>
+
+            <!-- 加载状态 -->
+            <div
+              v-if="isLoadingConversations"
+              class="loading-state"
+            >
+              <i class="fas fa-spinner fa-spin" />
+              <p>加载对话记录...</p>
+            </div>
+
+            <!-- 空状态 -->
+            <div
+              v-else-if="conversationList.length === 0"
+              class="empty-state"
+            >
+              <i class="fas fa-comment-slash" />
+              <p>暂无对话历史</p>
+              <span class="empty-hint">去探索发现好店吧！</span>
+            </div>
+
+            <!-- 对话列表 -->
+            <div
+              v-else
+              class="history-list"
+            >
+              <div
+                v-for="conv in conversationList"
+                :key="conv.id"
+                class="history-item"
+                @click="goToChat(conv.id)"
+              >
+                <div class="history-info">
+                  <span class="history-title">{{ conv.title }}</span>
+                  <span class="history-time">{{ conv.time }}</span>
+                </div>
+                <div class="history-actions">
+                  <button
+                    class="delete-history-btn"
+                    @click.stop="deleteConversation(conv.id)"
+                  >
+                    <i class="fas fa-times" />
+                  </button>
+                  <i class="fas fa-chevron-right" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 我的收藏 -->
+          <div
+            v-if="activeMenu === 'favorites'"
+            class="content-panel"
+          >
+            <div class="panel-header">
+              <h3>我的收藏</h3>
+              <span class="panel-count">
+                {{ favoritesList.length }} 家店铺
+                <span
+                  v-if="isLoadingFavorites"
+                  class="loading-text"
+                >加载中...</span>
+              </span>
+            </div>
+
+            <!-- 加载状态 -->
+            <div
+              v-if="isLoadingFavorites"
+              class="loading-state"
+            >
+              <i class="fas fa-spinner fa-spin" />
+              <p>加载收藏列表...</p>
+            </div>
+
+            <!-- 空状态 -->
+            <div
+              v-else-if="favoritesList.length === 0"
+              class="empty-state"
+            >
+              <i
+                class="fas fa-heart"
+                style="color: #cbd5e1;"
+              />
+              <p>还没有收藏的店铺</p>
+              <span class="empty-hint">去探索发现好店吧！</span>
+            </div>
+
+            <!-- 收藏列表 -->
+            <div
+              v-else
+              class="favorites-grid"
+            >
+              <div
+                v-for="shop in favoritesList"
+                :key="shop.id"
+                class="favorite-card"
+                @click="goToRestaurant(shop.shopId)"
+              >
+                <div class="favorite-img">
+                  <img
+                    :src="shop.image"
+                    :alt="shop.name"
+                  >
+                  <button
+                    class="favorite-remove"
+                    @click.stop="removeFavorite(shop.shopId)"
+                  >
+                    <i class="fas fa-times" />
+                  </button>
+                </div>
+                <div class="favorite-info">
+                  <h4>{{ shop.name }}</h4>
+                  <div class="favorite-meta">
+                    <span class="shop-rating">
+                      <i
+                        class="fas fa-star"
+                        style="color: #f59e0b;"
+                      />
+                      {{ shop.rating }}
+                    </span>
+                    <span class="shop-price">¥{{ shop.price }}/人</span>
+                    <span
+                      v-if="shop.category"
+                      class="shop-category-tag"
+                    >{{ shop.category }}</span>
+                    <span
+                      v-if="shop.source"
+                      class="shop-source-tag"
+                    >{{ shop.source }}</span>
+                  </div>
+                  <div class="shop-address">
+                    <i class="fas fa-map-pin" />
+                    <span>{{ shop.address }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 设置 -->
+          <div
+            v-if="activeMenu === 'settings'"
+            class="content-panel"
+          >
+            <div class="panel-header">
+              <h3>设置</h3>
+            </div>
+
+            <div class="settings-list">
+              <!-- 隐私设置 -->
+              <div class="setting-item">
+                <div class="setting-info">
+                  <i class="fas fa-lock" />
+                  <span>隐私设置</span>
+                </div>
+                <button
+                  class="setting-action-btn"
+                  @click="showPrivacySettings"
+                >
+                  <span>管理</span>
+                  <i class="fas fa-chevron-right" />
                 </button>
               </div>
 
-              <div class="info-grid">
-                <div class="info-item">
-                  <label>用户名</label>
-                  <div class="info-value">
-                    <input
-                      v-if="isEditing"
-                      v-model="editForm.username"
-                      type="text"
-                      placeholder="请输入用户名"
-                    />
-                    <span v-else>{{ userInfo.name || '未设置' }}</span>
-                  </div>
+              <!-- 关于探店助手 -->
+              <div class="setting-item">
+                <div class="setting-info">
+                  <i class="fas fa-info-circle" />
+                  <span>关于探店助手</span>
                 </div>
-
-                <div class="info-item">
-                  <label>邮箱</label>
-                  <div class="info-value">
-                    <input
-                      v-if="isEditing"
-                      v-model="editForm.email"
-                      type="email"
-                      placeholder="请输入邮箱"
-                    />
-                    <span v-else>{{ userInfo.email || '未绑定' }}</span>
-                  </div>
-                </div>
-
-                <div class="info-item">
-                  <label>个性签名</label>
-                  <div class="info-value">
-                    <input
-                      v-if="isEditing"
-                      v-model="editForm.bio"
-                      type="text"
-                      placeholder="写一句话介绍自己"
-                      maxlength="50"
-                    />
-                    <span v-else>{{ userInfo.bio || '这个人很懒，什么都没写~' }}</span>
-                  </div>
-                </div>
-
-                <div class="info-item full-width">
-                  <label>注册时间</label>
-                  <div class="info-value">
-                    <span class="info-meta">{{ userInfo.registerTime || '2026-01-01' }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 对话历史 -->
-            <div v-if="activeMenu === 'history'" class="content-panel">
-              <div class="panel-header">
-                <h3>对话历史</h3>
-                <span class="panel-count">
-                  {{ conversationList.length }} 条记录
-                  <span v-if="isLoadingConversations" class="loading-text">加载中...</span>
-                </span>
-              </div>
-
-              <!-- 加载状态 -->
-              <div v-if="isLoadingConversations" class="loading-state">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>加载对话记录...</p>
-              </div>
-
-              <!-- 空状态 -->
-              <div v-else-if="conversationList.length === 0" class="empty-state">
-                <i class="fas fa-comment-slash"></i>
-                <p>暂无对话历史</p>
-                <span class="empty-hint">去探索发现好店吧！</span>
-              </div>
-
-              <!-- 对话列表 -->
-              <div v-else class="history-list">
-                <div
-                  v-for="conv in conversationList"
-                  :key="conv.id"
-                  class="history-item"
-                  @click="goToChat(conv.id)"
+                <button
+                  class="setting-action-btn"
+                  @click="showAbout"
                 >
-                  <div class="history-info">
-                    <span class="history-title">{{ conv.title }}</span>
-                    <span class="history-time">{{ conv.time }}</span>
-                  </div>
-                  <div class="history-actions">
-                    <button class="delete-history-btn" @click.stop="deleteConversation(conv.id)">
-                      <i class="fas fa-times"></i>
-                    </button>
-                    <i class="fas fa-chevron-right"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 我的收藏 -->
-<div v-if="activeMenu === 'favorites'" class="content-panel">
-  <div class="panel-header">
-    <h3>我的收藏</h3>
-    <span class="panel-count">
-      {{ favoritesList.length }} 家店铺
-      <span v-if="isLoadingFavorites" class="loading-text">加载中...</span>
-    </span>
-  </div>
-
-  <!-- 加载状态 -->
-  <div v-if="isLoadingFavorites" class="loading-state">
-    <i class="fas fa-spinner fa-spin"></i>
-    <p>加载收藏列表...</p>
-  </div>
-
-  <!-- 空状态 -->
-  <div v-else-if="favoritesList.length === 0" class="empty-state">
-    <i class="fas fa-heart" style="color: #cbd5e1;"></i>
-    <p>还没有收藏的店铺</p>
-    <span class="empty-hint">去探索发现好店吧！</span>
-  </div>
-
-  <!-- 收藏列表 -->
-  <div v-else class="favorites-grid">
-    <div
-  v-for="shop in favoritesList"
-  :key="shop.id"
-  class="favorite-card"
-  @click="goToRestaurant(shop.shopId)"
->
-      <div class="favorite-img">
-        <img :src="shop.image" :alt="shop.name" />
-        <button class="favorite-remove" @click.stop="removeFavorite(shop.shopId)">
-  <i class="fas fa-times"></i>
-</button>
-      </div>
-      <div class="favorite-info">
-        <h4>{{ shop.name }}</h4>
-        <div class="favorite-meta">
-          <span class="shop-rating">
-            <i class="fas fa-star" style="color: #f59e0b;"></i>
-            {{ shop.rating }}
-          </span>
-          <span class="shop-price">¥{{ shop.price }}/人</span>
-          <span v-if="shop.category" class="shop-category-tag">{{ shop.category }}</span>
-          <span v-if="shop.source" class="shop-source-tag">{{ shop.source }}</span>
-        </div>
-        <div class="shop-address">
-          <i class="fas fa-map-pin"></i>
-          <span>{{ shop.address }}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-            <!-- 设置 -->
-            <div v-if="activeMenu === 'settings'" class="content-panel">
-              <div class="panel-header">
-                <h3>设置</h3>
+                  <span>v1.0.0</span>
+                  <i class="fas fa-chevron-right" />
+                </button>
               </div>
 
-              <div class="settings-list">
-                <!-- 隐私设置 -->
-                <div class="setting-item">
-                  <div class="setting-info">
-                    <i class="fas fa-lock"></i>
-                    <span>隐私设置</span>
-                  </div>
-                  <button class="setting-action-btn" @click="showPrivacySettings">
-                    <span>管理</span>
-                    <i class="fas fa-chevron-right"></i>
-                  </button>
+              <!-- ✅ 新增：创建洞察 -->
+              <div class="setting-item toggle-item">
+                <div class="setting-info">
+                  <i class="fas fa-lightbulb" />
+                  <span>创建洞察</span>
                 </div>
+                <div
+                  class="toggle-switch"
+                  @click="toggleCreateInsight"
+                >
+                  <span
+                    class="toggle-slider"
+                    :class="{ active: createInsightEnabled }"
+                  />
+                </div>
+              </div>
 
-                <!-- 关于探店助手 -->
-                <div class="setting-item">
-                  <div class="setting-info">
-                    <i class="fas fa-info-circle"></i>
-                    <span>关于探店助手</span>
-                  </div>
-                  <button class="setting-action-btn" @click="showAbout">
-                    <span>v1.0.0</span>
-                    <i class="fas fa-chevron-right"></i>
-                  </button>
+              <!-- ✅ 新增：使用洞察 -->
+              <div class="setting-item toggle-item">
+                <div class="setting-info">
+                  <i class="fas fa-robot" />
+                  <span>使用洞察</span>
+                </div>
+                <div
+                  class="toggle-switch"
+                  @click="toggleUseInsight"
+                >
+                  <span
+                    class="toggle-slider"
+                    :class="{ active: useInsightEnabled }"
+                  />
                 </div>
               </div>
             </div>
           </div>
-        </main>
-      </div>
-
-      <!-- 隐藏的文件上传 -->
-      <input
-        ref="avatarInput"
-        type="file"
-        accept="image/*"
-        style="display: none"
-        @change="handleAvatarUpload"
-      />
+        </div>
+      </main>
     </div>
-  </template>
+
+    <!-- 隐藏的文件上传 -->
+    <input
+      ref="avatarInput"
+      type="file"
+      accept="image/*"
+      style="display: none"
+      @change="handleAvatarUpload"
+    >
+  </div>
+</template>
 
   <script setup lang="ts">
   import { ref, reactive, computed, onMounted } from 'vue'
@@ -331,6 +453,8 @@ interface FavoriteShop {
   const isEditing = ref(false)
   const avatarInput = ref<HTMLInputElement | null>(null)
   const isLoadingConversations = ref(false)
+  const createInsightEnabled = ref(false)
+  const useInsightEnabled = ref(false)
 
   // 用户信息
   const userInfo = ref<UserInfo>({
@@ -819,6 +943,24 @@ const removeFavorite = async (shopId: string | number): Promise<void> => {
 // 跳转到餐厅详情页
 const goToRestaurant = (shopId: string | number ): void => {
   router.push(`/restaurant/${shopId}`)
+}
+
+// ============================================
+// 洞察功能（预留）
+// ============================================
+
+const toggleCreateInsight = () => {
+  createInsightEnabled.value = !createInsightEnabled.value
+  // TODO: 调用后端接口开启/关闭创建洞察
+  console.log('创建洞察状态:', createInsightEnabled.value)
+  toast.info(`创建洞察已${createInsightEnabled.value ? '开启' : '关闭'}`)
+}
+
+const toggleUseInsight = () => {
+  useInsightEnabled.value = !useInsightEnabled.value
+  // TODO: 调用后端接口开启/关闭使用洞察
+  console.log('使用洞察状态:', useInsightEnabled.value)
+  toast.info(`使用洞察已${useInsightEnabled.value ? '开启' : '关闭'}`)
 }
   </script>
 
@@ -1687,5 +1829,50 @@ const goToRestaurant = (shopId: string | number ): void => {
   border-radius: 1rem;
   font-size: 0.7rem;
   color: #4338ca;
+}
+
+/* 滑动开关样式 */
+.setting-item.toggle-item {
+  padding: 0.5rem 0.8rem;
+}
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  width: 44px;
+  height: 24px;
+  background: #cbd5e1;
+  border-radius: 12px;
+  transition: background 0.25s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.toggle-switch .toggle-slider {
+  display: block;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.25s ease, background 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.toggle-switch .toggle-slider.active {
+  transform: translateX(20px);
+  background: #3b82f6;
+}
+
+.toggle-switch.active {
+  background: #3b82f6;
+}
+
+/* 如果希望开关背景也变化，可以加类，但这里用父级控制 */
+.toggle-switch .toggle-slider.active {
+  background: #3b82f6;
 }
   </style>

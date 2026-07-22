@@ -1,82 +1,102 @@
 <template>
-    <div class="forgot-view">
-      <div class="forgot-container">
-        <!-- 返回按钮 -->
-        <button class="back-btn" @click="goLogin">
-          <i class="fas fa-arrow-left"></i>
-          <span>返回登录</span>
-        </button>
+  <div class="forgot-view">
+    <div class="forgot-container">
+      <!-- 返回按钮 -->
+      <button
+        class="back-btn"
+        @click="goLogin"
+      >
+        <i class="fas fa-arrow-left" />
+        <span>返回登录</span>
+      </button>
 
-        <!-- 卡片 -->
-        <div class="forgot-card">
-          <div class="forgot-header">
-            <div class="logo-icon">
-              <img
-                src="/images/2.png"
-                alt="探店助手"
-                style="width: 56px; height: 56px; object-fit: contain;"
-              />
-            </div>
-            <h1 class="forgot-title">找回密码</h1>
-            <p class="forgot-subtitle">
-              输入注册邮箱，我们将发送重置密钥
-            </p>
-          </div>
-
-          <!-- 表单 -->
-          <form class="forgot-form" @submit.prevent="handleForgot">
-            <div class="form-group">
-              <label for="email">
-                <i class="fas fa-envelope"></i>
-                邮箱
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-envelope input-icon"></i>
-                <input
-                  id="email"
-                  v-model="email"
-                  type="email"
-                  placeholder="请输入注册邮箱"
-                  autocomplete="email"
-                  required
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              class="forgot-btn"
-              :disabled="isLoading"
+      <!-- 卡片 -->
+      <div class="forgot-card">
+        <div class="forgot-header">
+          <div class="logo-icon">
+            <img
+              src="/images/2.png"
+              alt="探店助手"
+              style="width: 56px; height: 56px; object-fit: contain;"
             >
-              <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
-              <span v-else>发送重置邮件</span>
-            </button>
-
-            <!-- 成功消息 -->
-            <div v-if="successMessage" class="success-message">
-              <i class="fas fa-check-circle"></i>
-              {{ successMessage }}
-            </div>
-
-            <!-- 错误消息 -->
-            <div v-if="errorMessage" class="error-message">
-              <i class="fas fa-exclamation-circle"></i>
-              {{ errorMessage }}
-            </div>
-          </form>
-
-          <!-- 底部链接 -->
-          <div class="footer-links">
-            <a href="#" @click.prevent="goLogin">返回登录</a>
           </div>
+          <h1 class="forgot-title">
+            找回密码
+          </h1>
+          <p class="forgot-subtitle">
+            输入注册邮箱，我们将发送重置密钥
+          </p>
         </div>
 
-        <div class="forgot-footer">
-          <p>&copy; 2026 探店助手 · 让选择更简单</p>
+        <!-- 表单 -->
+        <form
+          class="forgot-form"
+          @submit.prevent="handleForgot"
+        >
+          <div class="form-group">
+            <label for="email">
+              <i class="fas fa-envelope" />
+              邮箱
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-envelope input-icon" />
+              <input
+                id="email"
+                v-model="email"
+                type="email"
+                placeholder="请输入注册邮箱"
+                autocomplete="email"
+                required
+              >
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            class="forgot-btn"
+            :disabled="isLoading"
+          >
+            <i
+              v-if="isLoading"
+              class="fas fa-spinner fa-spin"
+            />
+            <span v-else>发送重置邮件</span>
+          </button>
+
+          <!-- 成功消息 -->
+          <div
+            v-if="successMessage"
+            class="success-message"
+          >
+            <i class="fas fa-check-circle" />
+            {{ successMessage }}
+          </div>
+
+          <!-- 错误消息 -->
+          <div
+            v-if="errorMessage"
+            class="error-message"
+          >
+            <i class="fas fa-exclamation-circle" />
+            {{ errorMessage }}
+          </div>
+        </form>
+
+        <!-- 底部链接 -->
+        <div class="footer-links">
+          <a
+            href="#"
+            @click.prevent="goLogin"
+          >返回登录</a>
         </div>
       </div>
+
+      <div class="forgot-footer">
+        <p>&copy; 2026 探店助手 · 让选择更简单</p>
+      </div>
     </div>
-  </template>
+  </div>
+</template>
 
   <script setup lang="ts">
   import { ref } from 'vue'

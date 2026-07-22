@@ -1,177 +1,221 @@
 <template>
-    <div class="register-view">
-      <div class="register-container">
-        <!-- 返回按钮 -->
-        <button class="back-btn" @click="goHome">
-          <i class="fas fa-arrow-left"></i>
-          <span>返回首页</span>
-        </button>
+  <div class="register-view">
+    <div class="register-container">
+      <!-- 返回按钮 -->
+      <button
+        class="back-btn"
+        @click="goHome"
+      >
+        <i class="fas fa-arrow-left" />
+        <span>返回首页</span>
+      </button>
 
-        <!-- 注册卡片 -->
-        <div class="register-card">
-          <!-- Logo 区域 -->
-          <div class="register-header">
-            <div class="logo-icon">
-              <img
-                src="/images/2.png"
-                alt="探店助手"
-                style="width: 56px; height: 56px; object-fit: contain;"
-              />
-            </div>
-            <h1 class="register-title">创建账号</h1>
-            <p class="register-subtitle">加入探店助手，发现身边好店</p>
-          </div>
-
-          <!-- 注册表单 -->
-          <form class="register-form" @submit.prevent="handleRegister">
-            <!-- 用户名 -->
-            <div class="form-group">
-              <label for="username">
-                <i class="fas fa-user"></i>
-                用户名
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-user input-icon"></i>
-                <input
-                  id="username"
-                  v-model="registerForm.username"
-                  type="text"
-                  placeholder="请设置用户名（2-16位字母、数字或中文）"
-                  autocomplete="username"
-                  required
-                />
-              </div>
-              <span v-if="usernameError" class="field-error">{{ usernameError }}</span>
-            </div>
-
-<!-- 邮箱 -->
-<div class="form-group">
-  <label for="email">
-    <i class="fas fa-envelope"></i>
-    邮箱
-  </label>
-  <div class="input-wrapper">
-    <i class="fas fa-envelope input-icon"></i>
-    <input
-      id="email"
-      v-model="registerForm.email"
-      type="email"
-      placeholder="请输入邮箱地址"
-      autocomplete="email"
-      required
-    />
-  </div>
-  <span v-if="emailError" class="field-error">{{ emailError }}</span>
-</div>
-
-            <!-- 密码 -->
-            <div class="form-group">
-              <label for="password">
-                <i class="fas fa-lock"></i>
-                密码
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-lock input-icon"></i>
-                <input
-                  id="password"
-                  v-model="registerForm.password"
-                  :type="showPassword ? 'text' : 'password'"
-                  placeholder="请设置密码（至少8位）"
-                  autocomplete="new-password"
-                  required
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  @click="showPassword = !showPassword"
-                >
-                  <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-              </div>
-              <div class="password-strength" v-if="registerForm.password">
-                <div class="strength-bar">
-                  <div
-                    class="strength-fill"
-                    :style="{ width: passwordStrength + '%', background: strengthColor }"
-                  ></div>
-                </div>
-                <span class="strength-label" :style="{ color: strengthColor }">
-                  {{ strengthText }}
-                </span>
-              </div>
-            </div>
-
-            <!-- 确认密码 -->
-            <div class="form-group">
-              <label for="confirmPassword">
-                <i class="fas fa-check-circle"></i>
-                确认密码
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-check-circle input-icon"></i>
-                <input
-                  id="confirmPassword"
-                  v-model="registerForm.confirmPassword"
-                  :type="showConfirmPassword ? 'text' : 'password'"
-                  placeholder="请再次输入密码"
-                  autocomplete="new-password"
-                  required
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  @click="showConfirmPassword = !showConfirmPassword"
-                >
-                  <i :class="showConfirmPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-              </div>
-              <span v-if="confirmPasswordError" class="field-error">{{ confirmPasswordError }}</span>
-            </div>
-
-            <!-- 用户协议 -->
-            <div class="form-agreement">
-              <label class="agreement-checkbox">
-                <input type="checkbox" v-model="registerForm.agreed" required />
-                <span>
-                  我已阅读并同意
-                  <a href="#" @click.prevent="showTerms">《用户协议》</a>
-                  和
-                  <a href="#" @click.prevent="showPrivacy">《隐私政策》</a>
-                </span>
-              </label>
-            </div>
-
-            <!-- 注册按钮 -->
-            <button
-              type="submit"
-              class="register-btn"
-              :disabled="isLoading || !registerForm.agreed"
+      <!-- 注册卡片 -->
+      <div class="register-card">
+        <!-- Logo 区域 -->
+        <div class="register-header">
+          <div class="logo-icon">
+            <img
+              src="/images/2.png"
+              alt="探店助手"
+              style="width: 56px; height: 56px; object-fit: contain;"
             >
-              <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
-              <span v-else>立即注册</span>
-            </button>
-
-            <!-- 错误提示 -->
-            <div v-if="errorMessage" class="error-message">
-              <i class="fas fa-exclamation-circle"></i>
-              {{ errorMessage }}
-            </div>
-          </form>
-
-          <!-- 登录入口 -->
-          <div class="login-section">
-            <span>已有账号？</span>
-            <a href="#" @click.prevent="goToLogin">立即登录</a>
           </div>
+          <h1 class="register-title">
+            创建账号
+          </h1>
+          <p class="register-subtitle">
+            加入探店助手，发现身边好店
+          </p>
         </div>
 
-        <!-- 底部版权 -->
-        <div class="register-footer">
-          <p>&copy; 2026 探店助手 · 让选择更简单</p>
+        <!-- 注册表单 -->
+        <form
+          class="register-form"
+          @submit.prevent="handleRegister"
+        >
+          <!-- 用户名 -->
+          <div class="form-group">
+            <label for="username">
+              <i class="fas fa-user" />
+              用户名
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-user input-icon" />
+              <input
+                id="username"
+                v-model="registerForm.username"
+                type="text"
+                placeholder="请设置用户名（2-16位字母、数字或中文）"
+                autocomplete="username"
+                required
+              >
+            </div>
+            <span
+              v-if="usernameError"
+              class="field-error"
+            >{{ usernameError }}</span>
+          </div>
+
+          <!-- 邮箱 -->
+          <div class="form-group">
+            <label for="email">
+              <i class="fas fa-envelope" />
+              邮箱
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-envelope input-icon" />
+              <input
+                id="email"
+                v-model="registerForm.email"
+                type="email"
+                placeholder="请输入邮箱地址"
+                autocomplete="email"
+                required
+              >
+            </div>
+            <span
+              v-if="emailError"
+              class="field-error"
+            >{{ emailError }}</span>
+          </div>
+
+          <!-- 密码 -->
+          <div class="form-group">
+            <label for="password">
+              <i class="fas fa-lock" />
+              密码
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-lock input-icon" />
+              <input
+                id="password"
+                v-model="registerForm.password"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="请设置密码（至少8位）"
+                autocomplete="new-password"
+                required
+              >
+              <button
+                type="button"
+                class="toggle-password"
+                @click="showPassword = !showPassword"
+              >
+                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" />
+              </button>
+            </div>
+            <div
+              v-if="registerForm.password"
+              class="password-strength"
+            >
+              <div class="strength-bar">
+                <div
+                  class="strength-fill"
+                  :style="{ width: passwordStrength + '%', background: strengthColor }"
+                />
+              </div>
+              <span
+                class="strength-label"
+                :style="{ color: strengthColor }"
+              >
+                {{ strengthText }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 确认密码 -->
+          <div class="form-group">
+            <label for="confirmPassword">
+              <i class="fas fa-check-circle" />
+              确认密码
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-check-circle input-icon" />
+              <input
+                id="confirmPassword"
+                v-model="registerForm.confirmPassword"
+                :type="showConfirmPassword ? 'text' : 'password'"
+                placeholder="请再次输入密码"
+                autocomplete="new-password"
+                required
+              >
+              <button
+                type="button"
+                class="toggle-password"
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
+                <i :class="showConfirmPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" />
+              </button>
+            </div>
+            <span
+              v-if="confirmPasswordError"
+              class="field-error"
+            >{{ confirmPasswordError }}</span>
+          </div>
+
+          <!-- 用户协议 -->
+          <div class="form-agreement">
+            <label class="agreement-checkbox">
+              <input
+                v-model="registerForm.agreed"
+                type="checkbox"
+                required
+              >
+              <span>
+                我已阅读并同意
+                <a
+                  href="#"
+                  @click.prevent="showTerms"
+                >《用户协议》</a>
+                和
+                <a
+                  href="#"
+                  @click.prevent="showPrivacy"
+                >《隐私政策》</a>
+              </span>
+            </label>
+          </div>
+
+          <!-- 注册按钮 -->
+          <button
+            type="submit"
+            class="register-btn"
+            :disabled="isLoading || !registerForm.agreed"
+          >
+            <i
+              v-if="isLoading"
+              class="fas fa-spinner fa-spin"
+            />
+            <span v-else>立即注册</span>
+          </button>
+
+          <!-- 错误提示 -->
+          <div
+            v-if="errorMessage"
+            class="error-message"
+          >
+            <i class="fas fa-exclamation-circle" />
+            {{ errorMessage }}
+          </div>
+        </form>
+
+        <!-- 登录入口 -->
+        <div class="login-section">
+          <span>已有账号？</span>
+          <a
+            href="#"
+            @click.prevent="goToLogin"
+          >立即登录</a>
         </div>
       </div>
+
+      <!-- 底部版权 -->
+      <div class="register-footer">
+        <p>&copy; 2026 探店助手 · 让选择更简单</p>
+      </div>
     </div>
-  </template>
+  </div>
+</template>
 
   <script setup lang="ts">
   import { ref, reactive, computed, watch } from 'vue'

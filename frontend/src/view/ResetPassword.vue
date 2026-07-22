@@ -1,123 +1,145 @@
 <template>
-    <div class="reset-view">
-      <div class="reset-container">
-        <!-- 返回按钮 -->
-        <button class="back-btn" @click="goLogin">
-          <i class="fas fa-arrow-left"></i>
-          <span>返回登录</span>
-        </button>
+  <div class="reset-view">
+    <div class="reset-container">
+      <!-- 返回按钮 -->
+      <button
+        class="back-btn"
+        @click="goLogin"
+      >
+        <i class="fas fa-arrow-left" />
+        <span>返回登录</span>
+      </button>
 
-        <!-- 卡片 -->
-        <div class="reset-card">
-          <div class="reset-header">
-            <div class="logo-icon">
-              <img
-                src="/images/2.png"
-                alt="探店助手"
-                style="width: 56px; height: 56px; object-fit: contain;"
-              />
-            </div>
-            <h1 class="reset-title">重置密码</h1>
-            <p class="reset-subtitle">输入收到的密钥和新密码</p>
-          </div>
-
-          <!-- 表单 -->
-          <form class="reset-form" @submit.prevent="handleReset">
-            <div class="form-group">
-              <label for="token">
-                <i class="fas fa-key"></i>
-                密钥
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-key input-icon"></i>
-                <input
-                  id="token"
-                  v-model="token"
-                  type="text"
-                  placeholder="请输入邮件中的密钥"
-                  autocomplete="off"
-                  required
-                />
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="newPassword">
-                <i class="fas fa-lock"></i>
-                新密码
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-lock input-icon"></i>
-                <input
-                  id="newPassword"
-                  v-model="newPassword"
-                  :type="showPassword ? 'text' : 'password'"
-                  placeholder="请输入新密码（至少6位）"
-                  autocomplete="new-password"
-                  required
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  @click="showPassword = !showPassword"
-                >
-                  <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="confirmPassword">
-                <i class="fas fa-check-circle"></i>
-                确认密码
-              </label>
-              <div class="input-wrapper">
-                <i class="fas fa-check-circle input-icon"></i>
-                <input
-                  id="confirmPassword"
-                  v-model="confirmPassword"
-                  :type="showPassword ? 'text' : 'password'"
-                  placeholder="请再次输入新密码"
-                  autocomplete="new-password"
-                  required
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              class="reset-btn"
-              :disabled="isLoading"
+      <!-- 卡片 -->
+      <div class="reset-card">
+        <div class="reset-header">
+          <div class="logo-icon">
+            <img
+              src="/images/2.png"
+              alt="探店助手"
+              style="width: 56px; height: 56px; object-fit: contain;"
             >
-              <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
-              <span v-else>重置密码</span>
-            </button>
-
-            <!-- 成功消息 -->
-            <div v-if="successMessage" class="success-message">
-              <i class="fas fa-check-circle"></i>
-              {{ successMessage }}
-            </div>
-
-            <!-- 错误消息 -->
-            <div v-if="errorMessage" class="error-message">
-              <i class="fas fa-exclamation-circle"></i>
-              {{ errorMessage }}
-            </div>
-          </form>
-
-          <!-- 底部链接 -->
-          <div class="footer-links">
-            <a href="#" @click.prevent="goLogin">返回登录</a>
           </div>
+          <h1 class="reset-title">
+            重置密码
+          </h1>
+          <p class="reset-subtitle">
+            输入收到的密钥和新密码
+          </p>
         </div>
 
-        <div class="reset-footer">
-          <p>&copy; 2026 探店助手 · 让选择更简单</p>
+        <!-- 表单 -->
+        <form
+          class="reset-form"
+          @submit.prevent="handleReset"
+        >
+          <div class="form-group">
+            <label for="token">
+              <i class="fas fa-key" />
+              密钥
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-key input-icon" />
+              <input
+                id="token"
+                v-model="token"
+                type="text"
+                placeholder="请输入邮件中的密钥"
+                autocomplete="off"
+                required
+              >
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="newPassword">
+              <i class="fas fa-lock" />
+              新密码
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-lock input-icon" />
+              <input
+                id="newPassword"
+                v-model="newPassword"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="请输入新密码（至少6位）"
+                autocomplete="new-password"
+                required
+              >
+              <button
+                type="button"
+                class="toggle-password"
+                @click="showPassword = !showPassword"
+              >
+                <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'" />
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="confirmPassword">
+              <i class="fas fa-check-circle" />
+              确认密码
+            </label>
+            <div class="input-wrapper">
+              <i class="fas fa-check-circle input-icon" />
+              <input
+                id="confirmPassword"
+                v-model="confirmPassword"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="请再次输入新密码"
+                autocomplete="new-password"
+                required
+              >
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            class="reset-btn"
+            :disabled="isLoading"
+          >
+            <i
+              v-if="isLoading"
+              class="fas fa-spinner fa-spin"
+            />
+            <span v-else>重置密码</span>
+          </button>
+
+          <!-- 成功消息 -->
+          <div
+            v-if="successMessage"
+            class="success-message"
+          >
+            <i class="fas fa-check-circle" />
+            {{ successMessage }}
+          </div>
+
+          <!-- 错误消息 -->
+          <div
+            v-if="errorMessage"
+            class="error-message"
+          >
+            <i class="fas fa-exclamation-circle" />
+            {{ errorMessage }}
+          </div>
+        </form>
+
+        <!-- 底部链接 -->
+        <div class="footer-links">
+          <a
+            href="#"
+            @click.prevent="goLogin"
+          >返回登录</a>
         </div>
       </div>
+
+      <div class="reset-footer">
+        <p>&copy; 2026 探店助手 · 让选择更简单</p>
+      </div>
     </div>
-  </template>
+  </div>
+</template>
 
   <script setup lang="ts">
   import { ref, onMounted } from 'vue'
