@@ -11,13 +11,13 @@ from typing import Any
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableConfig
 
 from backend.llm.client.llm import get_llm
 from backend.llm.pipeline.chains import build_full_rag_chain
 from backend.llm.pipeline.context import format_docs, retrieve_rerank_docs
 from backend.llm.prompts.rag import RAG_PROMPT_WITH_HISTORY
 from backend.llm.session.history import get_history, make_history_session_id
-from backend.logging_setup import setup_app_logging
 
 logger = logging.getLogger("backend.llm.pipeline.rag_pipeline")
 
@@ -33,9 +33,8 @@ class RagAnswer:
     history: list[dict] = field(default_factory=list)
 
 
-def _session_config(uuid: str, section_id: str) -> dict:
-    """构造 LangChain session_id 配置。"""
-    return {"configurable": {"session_id": make_history_session_id(uuid, section_id)}}
+def _session_config(uuid: str, section_id: str) -> RunnableConfig:
+    return {"configurable": {"session_id": make_history_session_id(uuid, section_id)}}  # type: ignore[return-value]
 
 
 def _sources_from_docs(docs: list[Document]) -> list[dict]:
@@ -73,7 +72,6 @@ def _json_log(payload: Any) -> str:
 
 def answer_query(query: str, section_id: str, uuid: str) -> str:
     """非流式回答。"""
-    setup_app_logging()
     logger.info(
         "answer_query uuid=%s section_id=%s query_len=%d",
         uuid,
@@ -90,7 +88,6 @@ def answer_query(query: str, section_id: str, uuid: str) -> str:
 
 def stream_answer_query(query: str, section_id: str, uuid: str) -> Iterator[str]:
     """流式回答。"""
-    setup_app_logging()
     logger.info(
         "stream_answer_query uuid=%s section_id=%s query_len=%d",
         uuid,
@@ -111,7 +108,6 @@ def stream_answer_query(query: str, section_id: str, uuid: str) -> Iterator[str]
 
 def answer_query_with_sources(query: str, section_id: str, uuid: str) -> RagAnswer:
     """非流式回答，附带 sources 与写入前 history。"""
-    setup_app_logging()
     logger.info(
         "answer_query_with_sources start uuid=%s section_id=%s query=%r",
         uuid,

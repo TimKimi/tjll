@@ -529,7 +529,6 @@ def ask(req: AskRequest | dict[str, Any]) -> AskStream:
     - 会话历史请用 ``get_ask_history``；本响应不含 history
     - ``query_filename`` 表示本轮附件文件名，暂固定为空串
     """
-    setup_app_logging()
     request = req if isinstance(req, AskRequest) else AskRequest.model_validate(req)
     logger.info(
         "graph ask start section_id=%s uuid=%s query_len=%d "

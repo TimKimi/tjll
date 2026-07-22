@@ -8,5 +8,14 @@ from backend.models.business import Business
 from backend.models.favorite import Favorite
 from backend.models.review import Review
 from backend.models.user import User
+from backend.models.user_setting import UserSetting
 
-__all__ = ["AppUser", "Base", "Business", "Favorite", "Review", "User"]
+__all__ = [
+    "AppUser",
+    "Base",
+    "Business",
+    "Favorite",
+    "Review",
+    "User",
+    "UserSetting",
+]
