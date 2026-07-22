@@ -3,8 +3,11 @@
     <aside class="chat-sidebar">
       <!-- 侧边栏头部 -->
       <div class="sidebar-header">
-        <button class="sidebar-back-btn" @click="goHome">
-          <i class="fas fa-arrow-left"></i>
+        <button
+          class="sidebar-back-btn"
+          @click="goHome"
+        >
+          <i class="fas fa-arrow-left" />
           <span class="btn-label">返回</span>
         </button>
         <span class="sidebar-title">对话记录</span>
@@ -13,11 +16,17 @@
       <!-- 对话列表 -->
       <div class="conversation-list">
         <!-- 加载状态 -->
-        <div v-if="isLoadingConversations" class="loading-state">
+        <div
+          v-if="isLoadingConversations"
+          class="loading-state"
+        >
           <span>加载中...</span>
         </div>
         <!-- 空状态 -->
-        <div v-else-if="conversationList.length === 0" class="empty-state-list">
+        <div
+          v-else-if="conversationList.length === 0"
+          class="empty-state-list"
+        >
           <span>暂无对话记录</span>
         </div>
         <!-- 对话列表 -->
@@ -28,29 +37,39 @@
           :class="['conv-item', { active: conv.active }]"
           @click="selectConversation(index)"
         >
-          <i :class="conv.icon"></i>
+          <i :class="conv.icon" />
           <div class="conv-info">
             <span class="conv-title">{{ conv.title }}</span>
             <span class="conv-time">{{ conv.time }}</span>
           </div>
           <!-- 删除单个对话按钮 -->
-          <button class="delete-conv-btn" @click.stop="deleteConversation(index)" title="删除此对话">
-            <i class="fas fa-times"></i>
+          <button
+            class="delete-conv-btn"
+            title="删除此对话"
+            @click.stop="deleteConversation(index)"
+          >
+            <i class="fas fa-times" />
           </button>
         </div>
       </div>
 
-<!-- 清空历史记录 + 新建对话 -->
-<div class="clear-history-wrapper">
-  <div class="action-buttons">
-    <button class="new-conversation-btn" @click="handleNewConversation">
-      <span>新建对话</span>
-    </button>
-    <button class="clear-history-btn" @click="clearAllHistory">
-      <span>清空历史</span>
-    </button>
-  </div>
-</div>
+      <!-- 清空历史记录 + 新建对话 -->
+      <div class="clear-history-wrapper">
+        <div class="action-buttons">
+          <button
+            class="new-conversation-btn"
+            @click="handleNewConversation"
+          >
+            <span>新建对话</span>
+          </button>
+          <button
+            class="clear-history-btn"
+            @click="clearAllHistory"
+          >
+            <span>清空历史</span>
+          </button>
+        </div>
+      </div>
 
       <!-- 侧边栏底部用户信息 - 修改为使用用户头像 -->
       <div class="sidebar-footer">
@@ -61,14 +80,20 @@
             :src="userInfo.avatar"
             alt="用户头像"
             class="user-avatar-img"
+          >
+          <i
+            v-else
+            class="fas fa-user-circle"
           />
-          <i v-else class="fas fa-user-circle"></i>
           <div class="user-detail">
             <span class="user-name">{{ userInfo.name || '用户' }}</span>
-            <span class="user-status" :class="{ online: userInfo.isOnline }">
-                <span class="status-dot-small"></span>
-            {{ userInfo.isOnline ? '在线' : '离线' }}
-          </span>
+            <span
+              class="user-status"
+              :class="{ online: userInfo.isOnline }"
+            >
+              <span class="status-dot-small" />
+              {{ userInfo.isOnline ? '在线' : '离线' }}
+            </span>
           </div>
         </div>
       </div>
@@ -81,24 +106,56 @@
       <!-- 头部 -->
       <header class="chat-header">
         <!-- 手机端返回按钮（仅手机端显示） -->
-        <button class="mobile-back-btn" @click="goHome">
-          <i class="fas fa-arrow-left"></i>
+        <button
+          class="mobile-back-btn"
+          @click="goHome"
+        >
+          <i class="fas fa-arrow-left" />
         </button>
 
         <div class="header-info">
-          <i class="fas fa-robot"></i>
-          <h2 class="header-title">探店助手</h2>
+          <i class="fas fa-robot" />
+          <h2 class="header-title">
+            探店助手
+          </h2>
           <span :class="['status-badge', { online: isOnline }]">
-            <span class="status-dot"></span>
+            <span class="status-dot" />
             {{ isOnline ? '在线' : '离线' }}
           </span>
+          <!-- 洞察开关（紧挨状态标签） -->
+          <div class="insight-controls">
+            <div
+              class="insight-toggle-item"
+              @click="toggleCreateInsight"
+            >
+              <span class="insight-label">创建洞察</span>
+              <span
+                class="toggle-slider"
+                :class="{ active: createInsightEnabled }"
+              />
+            </div>
+            <div
+              class="insight-toggle-item"
+              @click="toggleUseInsight"
+            >
+              <span class="insight-label">使用洞察</span>
+              <span
+                class="toggle-slider"
+                :class="{ active: useInsightEnabled }"
+              />
+            </div>
+          </div>
         </div>
 
-          <!-- 清空对话按钮（只清空当前聊天内容） -->
-          <button class="desktop-clear-btn" @click="clearChat" title="清空当前对话">
-            <i class="fas fa-trash-alt"></i>
-            <span class="clear-label">清空对话</span>
-          </button>
+        <!-- 清空对话按钮（只清空当前聊天内容） -->
+        <button
+          class="desktop-clear-btn"
+          title="清空当前对话"
+          @click="clearChat"
+        >
+          <i class="fas fa-trash-alt" />
+          <span class="clear-label">清空对话</span>
+        </button>
       </header>
 
       <!-- 快捷提问 -->
@@ -114,17 +171,25 @@
       </div>
 
       <!-- 对话容器 -->
-      <div class="chat-container" ref="chatContainer">
+      <div
+        ref="chatContainer"
+        class="chat-container"
+      >
         <!-- 空状态 -->
-        <div v-if="messages.length === 0" class="empty-state">
+        <div
+          v-if="messages.length === 0"
+          class="empty-state"
+        >
           <div class="empty-icon">
-    <img
-      src="/images/2.png"
-      alt="探店助手"
-      style="width: 64px; height: 64px; object-fit: contain;"
-    />
-  </div>
-          <h3 class="empty-title">你好！我是探店助手</h3>
+            <img
+              src="/images/2.png"
+              alt="探店助手"
+              style="width: 64px; height: 64px; object-fit: contain;"
+            >
+          </div>
+          <h3 class="empty-title">
+            你好！我是探店助手
+          </h3>
           <span class="empty-hint">输入你想找的餐厅或美食开始对话</span>
         </div>
 
@@ -135,112 +200,169 @@
           :class="['message-row', msg.role]"
         >
           <!-- AI 头像 -->
-          <div v-if="msg.role === 'assistant'" class="avatar assistant-avatar">
+          <div
+            v-if="msg.role === 'assistant'"
+            class="avatar assistant-avatar"
+          >
             🤖
           </div>
 
           <div :class="['message-bubble', msg.role]">
-            <div class="message-content">{{ msg.content }}</div>
+            <div class="message-content">
+              {{ msg.content }}
+            </div>
 
-              <!-- 选项区域（仅当有 options 且未处理） -->
-  <div v-if="msg.options && msg.options.length && !msg.isOptionHandled" class="options-container">
-    <div class="options-list">
-      <button
-        v-for="opt in msg.options"
-        :key="opt"
-        class="option-btn"
-        @click="selectOption(opt, msg.id)"
-      >
-        {{ opt }}
-      </button>
-    </div>
-    <button class="generate-btn" @click="generateFinal(msg.id)">
-      直接生成推荐
-    </button>
-  </div>
+            <!-- 新增：文件附件列表（当消息包含文件时） -->
+            <div
+              v-if="msg.files && msg.files.length"
+              class="file-attachments"
+            >
+              <div
+                v-for="(file, index) in msg.files"
+                :key="index"
+                class="file-attachment-item"
+              >
+                <i class="fas fa-file-alt file-icon" />
+                <div class="file-info">
+                  <span class="file-name">{{ file.name }}</span>
+                  <span class="file-size">{{ formatFileSize(file.size) }}</span>
+                </div>
+              </div>
+            </div>
 
-  <!-- 推荐卡片 - 点击进入详情页 -->
-  <div v-if="msg.shop" class="recommend-card" @click="viewShopDetail(msg.shop.id)">
-    <div class="card-image">
-      <img :src="msg.shop.image" :alt="msg.shop.name" loading="lazy" />
-      <span class="card-badge">推荐</span>
-    </div>
-    <div class="card-body">
-      <div class="card-header-info">
-        <h3 class="shop-name">{{ msg.shop.name }}</h3>
-        <div class="shop-rating">
-          <i class="fas fa-star"></i>
-          <span>{{ msg.shop.rating }}</span>
-          <span class="review-count">({{ msg.shop.reviewCount }}条)</span>
-        </div>
-      </div>
 
-      <div class="reason">
-        <i class="fas fa-lightbulb"></i>
-        <span>{{ msg.shop.reason }}</span>
-      </div>
+            <!-- 选项区域（仅当有 options 且未处理） -->
+            <div
+              v-if="msg.options && msg.options.length && !msg.isOptionHandled"
+              class="options-container"
+            >
+              <div class="options-list">
+                <button
+                  v-for="opt in msg.options"
+                  :key="opt"
+                  class="option-btn"
+                  @click="selectOption(opt, msg.id)"
+                >
+                  {{ opt }}
+                </button>
+              </div>
+              <button
+                class="generate-btn"
+                @click="generateFinal(msg.id)"
+              >
+                直接生成推荐
+              </button>
+            </div>
 
-      <div class="shop-info-grid">
-        <div class="info-item">
-          <i class="fas fa-coins"></i>
-          <span>人均 ¥{{ msg.shop.price }}</span>
-        </div>
-        <div class="info-item">
-          <i class="fas fa-map-pin"></i>
-          <span>{{ msg.shop.address }}</span>
-        </div>
-        <div class="info-item">
-          <i class="fas fa-clock"></i>
-          <span>{{ msg.shop.hours }}</span>
-        </div>
-        <div class="info-item">
-          <i class="fas fa-phone"></i>
-          <span>{{ msg.shop.phone }}</span>
-        </div>
-      </div>
+            <!-- 推荐卡片 - 点击进入详情页 -->
+            <div
+              v-if="msg.shop"
+              class="recommend-card"
+              @click="viewShopDetail(msg.shop.id)"
+            >
+              <div class="card-image">
+                <img
+                  :src="msg.shop.image"
+                  :alt="msg.shop.name"
+                  loading="lazy"
+                >
+                <span class="card-badge">推荐</span>
+              </div>
+              <div class="card-body">
+                <div class="card-header-info">
+                  <h3 class="shop-name">
+                    {{ msg.shop.name }}
+                  </h3>
+                  <div class="shop-rating">
+                    <i class="fas fa-star" />
+                    <span>{{ msg.shop.rating }}</span>
+                    <span class="review-count">({{ msg.shop.reviewCount }}条)</span>
+                  </div>
+                </div>
 
-      <div class="shop-tags">
-        <span v-for="tag in msg.shop.tags" :key="tag" class="tag">
-          {{ tag }}
-        </span>
-      </div>
+                <div class="reason">
+                  <i class="fas fa-lightbulb" />
+                  <span>{{ msg.shop.reason }}</span>
+                </div>
 
-      <div class="shop-summary">
-        <i class="fas fa-quote-left"></i>
-        <span>{{ msg.shop.summary }}</span>
-      </div>
+                <div class="shop-info-grid">
+                  <div class="info-item">
+                    <i class="fas fa-coins" />
+                    <span>人均 ¥{{ msg.shop.price }}</span>
+                  </div>
+                  <div class="info-item">
+                    <i class="fas fa-map-pin" />
+                    <span>{{ msg.shop.address }}</span>
+                  </div>
+                  <div class="info-item">
+                    <i class="fas fa-clock" />
+                    <span>{{ msg.shop.hours }}</span>
+                  </div>
+                  <div class="info-item">
+                    <i class="fas fa-phone" />
+                    <span>{{ msg.shop.phone }}</span>
+                  </div>
+                </div>
 
-      <!-- 只有一个操作按钮 -->
-      <div class="card-action">
-        <button class="detail-btn">
-          <i class="fas fa-arrow-right"></i>
-          查看餐厅详情
-        </button>
-      </div>
-    </div>
-  </div>
+                <div class="shop-tags">
+                  <span
+                    v-for="tag in msg.shop.tags"
+                    :key="tag"
+                    class="tag"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
 
-  <div class="message-time">{{ msg.time }}</div>
+                <div class="shop-summary">
+                  <i class="fas fa-quote-left" />
+                  <span>{{ msg.shop.summary }}</span>
+                </div>
+
+                <!-- 只有一个操作按钮 -->
+                <div class="card-action">
+                  <button class="detail-btn">
+                    <i class="fas fa-arrow-right" />
+                    查看餐厅详情
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="message-time">
+              {{ msg.time }}
+            </div>
           </div>
 
           <!-- 用户头像 - 修改为使用用户注册的头像 -->
-          <div v-if="msg.role === 'user'" class="avatar user-avatar">
+          <div
+            v-if="msg.role === 'user'"
+            class="avatar user-avatar"
+          >
             <img
               v-if="userInfo.avatar"
               :src="userInfo.avatar"
               alt="用户头像"
               class="avatar-img"
+            >
+            <i
+              v-else
+              class="fas fa-user"
             />
-            <i v-else class="fas fa-user"></i>
           </div>
         </div>
 
         <!-- 加载状态 -->
-        <div v-if="isLoading" class="message-row assistant">
-          <div class="avatar assistant-avatar">🤖</div>
+        <div
+          v-if="isLoading"
+          class="message-row assistant"
+        >
+          <div class="avatar assistant-avatar">
+            🤖
+          </div>
           <div class="message-bubble assistant">
             <div class="message-content loading-dots">
-              <span></span><span></span><span></span>
+              <span /><span /><span />
             </div>
           </div>
         </div>
@@ -248,45 +370,117 @@
 
       <!-- 输入区域 -->
       <div class="input-area">
-        <div class="input-container">
+        <!-- 待上传文件列表 -->
+        <div
+          v-if="pendingFiles.length > 0"
+          class="pending-files"
+        >
+          <div
+            v-for="(fileItem, index) in pendingFiles"
+            :key="fileItem.id"
+            class="pending-file-item"
+            :class="{ error: fileItem.status === 'error' }"
+          >
+            <span class="file-name">
+              <i class="fas fa-file" />
+              {{ fileItem.file.name }}
+            </span>
+            <span class="file-size">{{ formatFileSize(fileItem.file.size) }}</span>
+            <span
+              v-if="fileItem.status === 'uploading'"
+              class="file-status"
+            >
+              <i class="fas fa-spinner fa-spin" /> 上传中...
+            </span>
+            <span
+              v-else-if="fileItem.status === 'success'"
+              class="file-status success"
+            >
+              <i class="fas fa-check-circle" /> 已上传
+            </span>
+            <span
+              v-else-if="fileItem.status === 'error'"
+              class="file-status error"
+            >
+              <i class="fas fa-exclamation-circle" /> 上传失败
+            </span>
+            <button
+              v-if="fileItem.status === 'error'"
+              class="retry-file-btn"
+              title="重试上传"
+              @click="retryFile(index)"
+            >
+              <i class="fas fa-redo" />
+            </button>
+            <button
+              class="remove-file-btn"
+              title="移除文件"
+              @click="removePendingFile(index)"
+            >
+              <i class="fas fa-times" />
+            </button>
+          </div>
+        </div>
 
+        <div class="input-container">
           <input
             v-model="inputText"
             type="text"
             placeholder="输入你想问的问题..."
-            @keyup.enter="sendMessage(inputText)"
             class="chat-input"
-          />
+            @keyup.enter="sendMessage(inputText)"
+          >
 
-<!-- 语音按钮 -->
-<button
-  class="tool-btn"
-  title="语音输入"
-  @click="toggleRecording"
-  :class="{ recording: isRecording }"
->
-  <!-- ✅ 使用两个图标：一个作为背景，一个作为动态效果 -->
-  <span class="mic-wrapper">
-    <i class="fas fa-microphone mic-icon"></i>
-    <span class="mic-waves" v-if="isRecording">
-      <span class="wave wave1"></span>
-      <span class="wave wave2"></span>
-      <span class="wave wave3"></span>
-    </span>
-  </span>
-</button>
+          <!-- 文件上传按钮 -->
+          <button
+            class="tool-btn"
+            title="上传文件"
+            @click="triggerFileUpload"
+          >
+            <i class="fas fa-plus" />
+          </button>
+
+          <!-- 隐藏的文件选择器 -->
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".doc,.docx,.pdf,.txt,.md,.png,.jpg,"
+            style="display: none"
+            @change="handleFileUpload"
+          >
+
+          <!-- 语音按钮 -->
+          <button
+            class="tool-btn"
+            title="语音输入"
+            :class="{ recording: isRecording }"
+            @click="toggleRecording"
+          >
+            <!-- ✅ 使用两个图标：一个作为背景，一个作为动态效果 -->
+            <span class="mic-wrapper">
+              <i class="fas fa-microphone mic-icon" />
+              <span
+                v-if="isRecording"
+                class="mic-waves"
+              >
+                <span class="wave wave1" />
+                <span class="wave wave2" />
+                <span class="wave wave3" />
+              </span>
+            </span>
+          </button>
 
           <button
-            @click="sendMessage(inputText)"
             class="send-btn"
-            :disabled="!inputText.trim() || isLoading"
+            :disabled="(!inputText.trim() && pendingFiles.length === 0) || isLoading"
+            @click="sendMessage(inputText)"
           >
-            <i class="fas fa-paper-plane"></i>
+            <i class="fas fa-paper-plane" />
             <span class="send-label">发送</span>
           </button>
         </div>
         <p class="disclaimer">
-          <i class="fas fa-shield-alt"></i>
+          <i class="fas fa-shield-alt" />
           内容由AI生成，仅供参考
         </p>
       </div>
@@ -297,9 +491,11 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, watch } from 'vue'
 import { useRouter , useRoute} from 'vue-router'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
 const route = useRoute()
+const toast = useToast()
 
 // ============================================
 // 1. 类型定义
@@ -313,6 +509,7 @@ interface Message {
   shop?: RecommendShop  // 添加推荐卡片数据
   options?: string[]   // 选项列表（仅 assistant 消息携带）
   isOptionHandled?: boolean // 标记该选项是否已被用户处理（点击后禁用）
+  files?: { name: string; size: number }[]
 }
 
 interface Conversation {
@@ -381,11 +578,17 @@ const currentConversationId = ref<number | null>(null)
 const isRecording = ref(false)  // 是否正在录音
 const recognition = ref<any>(null)  // 语音识别实例
 const audioLevel = ref(0) // 声音大小（0-100）
+
+// 洞察开关状态
+const createInsightEnabled = ref(false)
+const useInsightEnabled = ref(false)
 // 音频上下文
 let audioContext: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let dataArray: Uint8Array | null = null
 let animationId: number | null = null
+
+const fileInput = ref<HTMLInputElement | null>(null)
 
 // ============================================
 // 3. 工具函数
@@ -429,18 +632,27 @@ const getUserInfo = async (): Promise<void> => {
     const response = await fetch('/api/user/profile', {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
       },
     })
 
     if (response.ok) {
-      const data = await response.json()
-      const userData = data.data || data
+      const result = await response.json()
+      const userData = result.data || result
+
+      // 处理头像 URL
+      let avatar = userData.avatar || ''
+      if (avatar && !avatar.startsWith('http')) {
+        const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+        const path = avatar.startsWith('/') ? avatar : `/${avatar}`
+        avatar = `${baseURL}${path}`
+      }
+
       userInfo.value = {
         id: userData.id ?? 1,
-        name: userData.name || '用户',
-        avatar: userData.avatar || '',
-        isOnline: userData.isOnline ?? true,
+        name: userData.username || '用户',
+        avatar: avatar,
+        isOnline: userData.is_online ?? true,
       }
     } else {
       console.warn('获取用户信息失败，使用默认用户信息')
@@ -679,7 +891,7 @@ const deleteConversation = async (index: number): Promise<void> => {
       }
     } catch (error) {
       console.error('删除对话失败:', error)
-      alert('删除失败，请稍后重试')
+      toast.error('删除失败，请稍后重试')
     }
   }
 }
@@ -690,7 +902,7 @@ const deleteConversation = async (index: number): Promise<void> => {
 
 const clearAllHistory = async (): Promise<void> => {
   if (conversationList.value.length === 0) {
-    alert('暂无历史记录')
+    toast.info('暂无历史记录')
     return
   }
 
@@ -710,7 +922,7 @@ const clearAllHistory = async (): Promise<void> => {
       }
     } catch (error) {
       console.error('清空历史失败:', error)
-      alert('清空失败，请稍后重试')
+      toast.error('清空失败，请稍后重试')
     }
   }
 }
@@ -719,28 +931,68 @@ const clearAllHistory = async (): Promise<void> => {
 // 12. 核心功能：发送消息
 // ============================================
 
+// 发送消息（整合文件和文字）
 const sendMessage = async (
   text: string,
   extra?: { parentId?: string; action?: 'generate' }
 ) => {
   const trimmed = text.trim()
-  if (!trimmed || isLoading.value) return
-
-  // 创建用户消息（如果是点击“直接生成”，内容使用约定标识）
-  const userMsg: Message = {
-    id: crypto.randomUUID(),
-    role: 'user',
-    content: extra?.action === 'generate' ? '直接生成推荐' : trimmed,
-    time: getCurrentTime(),
+  if (!trimmed && pendingFiles.value.length === 0) return
+  if (trimmed && trimmed.length < 2 && pendingFiles.value.length === 0) {
+    toast.warning('请输入更完整的问题')
+    return
   }
-  messages.value.push(userMsg)
-  inputText.value = ''
-  await scrollToBottom()
+  if (isLoading.value) return
 
-  // 调用 AI 接口，传递 parentId 和 action
-  await callAIApi(trimmed, extra?.parentId, extra?.action)
+  // 处理文件上传
+  const hasPending = pendingFiles.value.some(
+    item => item.status === 'pending' || item.status === 'error'
+  )
+  if (hasPending) {
+    const allSuccess = await uploadPendingFiles()
+    if (!allSuccess) {
+      toast.warning('存在上传失败的文件，请重试后再发送')
+      return
+    }
+  }
+
+  // 收集成功上传的文件信息
+  const successFiles = pendingFiles.value.filter(item => item.status === 'success')
+  const fileList = successFiles.map(item => ({
+    name: item.file.name,
+    size: item.file.size,
+  }))
+
+  // 构建消息内容
+  let messageContent = trimmed || ''
+  // 如果有文件，在内容中添加文件列表（文本形式，用于显示）
+  if (fileList.length > 0) {
+    if (messageContent) messageContent += '\n'
+    messageContent += fileList.map(f => `📎 ${f.name}`).join('\n')
+  }
+
+  // 如果有文字或文件，发送消息
+  if (messageContent || fileList.length > 0) {
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: messageContent || '文件',
+      time: getCurrentTime(),
+      files: fileList, // ✅ 保存文件列表到消息对象
+    }
+    messages.value.push(userMsg)
+    inputText.value = ''
+    await scrollToBottom()
+
+    // 如果有文字，调用 AI
+    if (trimmed) {
+      await callAIApi(trimmed, extra?.parentId, extra?.action)
+    }
+  }
+
+  // 清空待上传列表（成功文件已发送）
+  pendingFiles.value = []
 }
-
 // ============================================
 // 13. AI API 调用
 // ============================================
@@ -936,11 +1188,11 @@ recognition.value.onresult = (event: any) => {
     console.error('语音识别错误:', event.error)
     isRecording.value = false
     if (event.error === 'not-allowed') {
-      alert('请允许浏览器使用麦克风权限')
+      toast.warning('请允许浏览器使用麦克风权限')
     } else if (event.error === 'no-speech') {
       // 没有检测到语音，静默处理
     } else {
-      alert('语音识别失败，请重试')
+      toast.error('语音识别失败，请重试')
     }
   }
 }
@@ -948,7 +1200,7 @@ recognition.value.onresult = (event: any) => {
 // 切换语音识别（点击麦克风按钮）
 const toggleRecording = async () => {
   if (!recognition.value) {
-    alert('当前浏览器不支持语音识别，请使用 Chrome 浏览器')
+    toast.warning('当前浏览器不支持语音识别，请使用 Chrome 浏览器')
     return
   }
 
@@ -956,7 +1208,7 @@ const toggleRecording = async () => {
     // 停止录音
     try {
       recognition.value.stop()
-    } catch (e) {}
+    } catch (e) {console.warn('停止录音时出错:', e)}
     isRecording.value = false
     stopAudioMonitoring()  // ✅ 停止声音监听
   } else {
@@ -968,7 +1220,7 @@ const toggleRecording = async () => {
       isRecording.value = true
     } catch (e) {
       console.error('启动语音识别失败:', e)
-      alert('启动语音识别失败，请重试')
+      toast.error('启动语音识别失败，请重试')
       stopAudioMonitoring()
     }
   }
@@ -1058,6 +1310,159 @@ const generateFinal = (parentId: string) => {
 
   // 发送特殊指令，携带 action: 'generate'
   sendMessage('直接生成', { parentId, action: 'generate' })
+}
+
+// ============================================
+// 22.文件上传功能
+// ============================================
+
+// 触发文件选择器
+const triggerFileUpload = () => {
+  fileInput.value?.click()
+}
+
+// 处理文件上传（只添加到待上传列表）
+const handleFileUpload = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  // 限制文件大小（10MB）
+  if (file.size > 10 * 1024 * 1024) {
+    toast.error('文件大小不能超过 10MB')
+    input.value = ''
+    return
+  }
+
+  // 添加到待上传列表，状态为 pending
+  pendingFiles.value.push({
+    id: crypto.randomUUID(),
+    file: file,
+    status: 'pending',
+  })
+
+  // 清空 input，以便再次选择
+  input.value = ''
+}
+
+// 待上传文件列表
+interface PendingFile {
+  id: string
+  file: File
+  status: 'pending' | 'uploading' | 'success' | 'error'
+  errorMsg?: string
+}
+const pendingFiles = ref<PendingFile[]>([])
+
+
+//格式化文件大小
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
+}
+
+// 移除待上传文件
+const removePendingFile = (index: number) => {
+  pendingFiles.value.splice(index, 1)
+}
+
+// 重试失败的文件
+const retryFile = (index: number) => {
+  const fileItem = pendingFiles.value[index]
+  if (!fileItem || fileItem.status !== 'error') return
+  // 重置状态为 pending，然后触发上传
+  fileItem.status = 'pending'
+  // 自动触发上传（用户点击发送时会一并上传）
+  toast.info('已加入上传队列，请点击发送')
+}
+
+// 批量上传待上传文件，返回是否全部成功
+const uploadPendingFiles = async (): Promise<boolean> => {
+  const toUpload = pendingFiles.value.filter(
+    item => item.status === 'pending' || item.status === 'error'
+  )
+  if (toUpload.length === 0) return true
+
+  toUpload.forEach(item => (item.status = 'uploading'))
+  isLoading.value = true
+
+  let allSuccess = true
+
+  for (const fileItem of toUpload) {
+    try {
+      const formData = new FormData()
+      formData.append('file', fileItem.file)
+
+      const response = await fetch('http://localhost:8000/api/file/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        let errorMsg = `上传失败 (HTTP ${response.status})`
+        try {
+          const errorData = await response.json()
+          // 支持多种错误格式
+          if (errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+              errorMsg = errorData.detail.map((d: any) => d.msg || d.message || '').filter(Boolean).join(', ')
+            } else {
+              errorMsg = errorData.detail
+            }
+          } else if (errorData.message) {
+            errorMsg = errorData.message
+          } else if (errorData.msg) {
+            errorMsg = errorData.msg
+          } else if (typeof errorData === 'string') {
+            errorMsg = errorData
+          }
+        } catch (e) {
+          // 解析失败，使用状态文本
+          errorMsg = `HTTP ${response.status}: ${response.statusText}`
+        }
+        throw new Error(errorMsg)
+      }
+
+      const result = await response.json()
+      if (result.code !== 200) {
+        throw new Error(result.message || '上传失败')
+      }
+
+      fileItem.status = 'success'
+    } catch (error) {
+      console.error('文件上传失败:', error)
+      fileItem.status = 'error'
+      fileItem.errorMsg = error instanceof Error ? error.message : '上传失败'
+      allSuccess = false
+      toast.error(`文件 "${fileItem.file.name}" 上传失败: ${fileItem.errorMsg}`)
+    }
+  }
+
+  isLoading.value = false
+  return allSuccess
+}
+
+// ============================================
+// 洞察功能（预留接口）
+// ============================================
+
+const toggleCreateInsight = () => {
+  createInsightEnabled.value = !createInsightEnabled.value
+  // TODO: 调用后端接口开启/关闭创建洞察
+  console.log('创建洞察状态:', createInsightEnabled.value)
+  toast.info(`创建洞察已${createInsightEnabled.value ? '开启' : '关闭'}`)
+}
+
+const toggleUseInsight = () => {
+  useInsightEnabled.value = !useInsightEnabled.value
+  // TODO: 调用后端接口开启/关闭使用洞察
+  console.log('使用洞察状态:', useInsightEnabled.value)
+  toast.info(`使用洞察已${useInsightEnabled.value ? '开启' : '关闭'}`)
 }
 </script>
 
@@ -2457,4 +2862,210 @@ const generateFinal = (parentId: string) => {
 .generate-btn:hover {
   background: #d97706;
 }
+
+/* 待上传文件列表 */
+.pending-files {
+  padding: 0.5rem 0.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.5rem;
+}
+
+.pending-file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f8fafc;
+  padding: 0.3rem 0.6rem 0.3rem 0.8rem;
+  border-radius: 0.6rem;
+  border: 1px solid #e2e8f0;
+  font-size: 0.8rem;
+}
+
+.pending-file-item.error {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #334155;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+.file-status {
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.file-status.success {
+  color: #22c55e;
+}
+.file-status.error {
+  color: #ef4444;
+}
+.file-status.uploading {
+  color: #3b82f6;
+}
+
+.remove-file-btn,
+.retry-file-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.3rem;
+  transition: all 0.2s;
+}
+
+.remove-file-btn:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.retry-file-btn:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+/* 洞察控制区域 */
+.insight-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0.5rem;
+}
+
+.insight-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.9);
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.insight-toggle-item:hover {
+  color: #ffffff;
+}
+
+.insight-icon {
+  font-size: 0.9rem;
+}
+
+.insight-label {
+  white-space: nowrap;
+}
+
+/* 洞察控制区域 */
+.insight-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0.5rem;
+}
+
+.insight-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.9);
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.insight-toggle-item:hover {
+  color: #ffffff;
+}
+
+.insight-icon {
+  font-size: 0.9rem;
+}
+
+.insight-label {
+  white-space: nowrap;
+}
+
+/* 滑块样式（与个人中心风格一致） */
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+}
+
+/* 竖向开关容器 */
+.insight-controls {
+  display: flex;
+  flex-direction: column;   /* 竖向排列 */
+  gap: 2px;
+  margin-left: 0.8rem;      /* 与状态标签保持一点间距 */
+}
+
+.insight-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;   /* 放大字体 */
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.insight-toggle-item .toggle-slider {
+  width: 24px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 7px;
+  position: relative;
+  transition: background 0.25s;
+  flex-shrink: 0;
+}
+
+.insight-toggle-item .toggle-slider::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.25s;
+}
+
+.insight-toggle-item .toggle-slider.active {
+  background: #4ade80;
+}
+.insight-toggle-item .toggle-slider.active::after {
+  transform: translateX(10px);
+}
+
+/* 手机端隐藏 */
+@media (max-width: 768px) {
+  .insight-controls {
+    display: none;
+  }
+}
+
 </style>

@@ -1,5 +1,22 @@
 import { inject } from 'vue'
 
+let globalToast: ReturnType<typeof createToastApi> | null = null
+
+const createToastApi = (toast: any) => ({
+  showToast: toast.showToast,
+  success: toast.success,
+  error: toast.error,
+  warning: toast.warning,
+  info: toast.info,
+  clearAll: toast.clearAll,
+})
+
+export const setGlobalToast = (toast: any) => {
+  globalToast = createToastApi(toast)
+}
+
+export const getGlobalToast = () => globalToast
+
 export interface ToastOptions {
   message: string
   type?: 'success' | 'error' | 'warning' | 'info'
@@ -11,7 +28,7 @@ export interface ToastOptions {
 
 export const useToast = () => {
   // 从 provide 中获取 toast 实例
-  const toast = inject('toast') as any
+  const toast = (inject('toast') as any) ?? globalToast
 
   // 如果 toast 不存在，使用控制台警告
   if (!toast) {
@@ -35,12 +52,5 @@ export const useToast = () => {
     }
   }
 
-  return {
-    showToast: toast.showToast,
-    success: toast.success,
-    error: toast.error,
-    warning: toast.warning,
-    info: toast.info,
-    clearAll: toast.clearAll,
-  }
+  return createToastApi(toast)
 }
