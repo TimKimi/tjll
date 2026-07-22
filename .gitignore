@@ -73,10 +73,10 @@ backend/.env
 backend/.env.*
 
 # Runtime logs (never commit, regenerated at runtime)
-    logs/
+logs/
 
-    # Model weights under backend/rag: keep placeholders only
-    backend/rag/models/**
+# Model weights under backend/rag: keep placeholders only
+backend/rag/models/**
 !backend/rag/models/**/
 !backend/rag/models/**/.gitkeep
 !backend/rag/models/**/README.md

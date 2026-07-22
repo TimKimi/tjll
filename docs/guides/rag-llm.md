@@ -6,33 +6,42 @@
 
 ## 1. 你们只需要调用 LLM 门面
 
-**不要**直接 `import backend.rag`。检索、重排、OpenSearch 细节已封装在 LLM 管线内部。
+**不要**直接 `import backend.rag`。检索、重排、OpenSearch 细节已封装在 LangGraph ask 管线内部。
 
-推荐写法：
+推荐写法（**流式**）：
 
 ```python
-from backend.llm import ask, AskRequest, AskResponse
+from backend.llm import ask, AskRequest, AskResponse, release_ask_session
 
 # 方式一：dict（类似 JSON 包）
-resp: AskResponse = ask(
+stream = ask(
     {
         "query": "这家店适合约会吗？",
         "section_id": "user-42-session-1",
         "uuid": "req-550e8400",
-        # 以下字段本阶段可传，暂不处理：
-        # "pdf": ..., "docx": ..., "doc": ..., "md": ..., "images": ...,
+        # 可选：insight_create / insight_use（本阶段透传，业务暂不处理）
+        # 附件字段可传，当前忽略：pdf / docx / doc / md / images
     }
 )
 
-print(resp.answer)       # LLM 回复
-print(resp.sources)      # 本轮用到的 RAG 片段（无 embedding）
-print(resp.history)      # 本轮写入前已有的会话历史
+for piece in stream:          # answer 文本块
+    print(piece, end="", flush=True)
+
+resp: AskResponse = stream.response  # 流结束后可读完整响应
+assert resp is not None
+print(resp.answer)            # 完整回复
+print(resp.sources)           # 本轮 RAG 片段（无 embedding）
+print(resp.history)           # 本轮写入前历史（含扩展字段）
+print(resp.query_filename)    # 本轮附带文件名（暂为空串）
 print(resp.query, resp.section_id, resp.uuid)
 
+# 可选：释放会话槽（历史已在每轮结束写入 Redis；release 主要用于腾出 LRU 池）
+release_ask_session(resp.uuid, resp.section_id)
+
 # 方式二：结构化对象
-resp = ask(AskRequest(query="...", section_id="...", uuid="..."))
-# 需要 dict 时：
-payload = resp.model_dump()
+stream = ask(AskRequest(query="...", section_id="...", uuid="..."))
+"".join(stream)
+payload = stream.response.model_dump()
 ```
 
 ### 请求字段
@@ -40,9 +49,10 @@ payload = resp.model_dump()
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `query` | 是 | 用户问题（str） |
-| `section_id` | 是 | 会话/分区 ID，用作 Redis 多轮历史 key |
-| `uuid` | 否 | 请求关联 ID，原样回传，不参与历史 |
-| `docx` / `doc` / `md` / `pdf` / `images` | 否 | **占位**：可传，当前忽略；后续可能按附件分流路由 |
+| `uuid` | 是 | 用户/请求关联 ID；与 `section_id` **同时必填**，共同作为历史 Redis key（`{uuid}::{section_id}`） |
+| `section_id` | 是 | 会话/分区 ID |
+| `insight_create` / `insight_use` | 否 | 占位，默认 `false` |
+| `docx` / `doc` / `md` / `pdf` / `images` | 否 | **占位**：可传，当前忽略 |
 
 ### 响应字段（`AskResponse` / `model_dump()`）
 
@@ -50,24 +60,29 @@ payload = resp.model_dump()
 |------|------|------|
 | `query` | `str` | 本轮原问题 |
 | `section_id` | `str` | 会话 ID |
-| `uuid` | `str \| null` | 入参回传（未传则为 `null`） |
+| `uuid` | `str` | 入参回传（必填） |
 | `answer` | `str` | 本轮 LLM 回复全文 |
 | `sources` | `list[RagSnippet]` | 本轮检索/精排后的片段（无 embedding） |
-| `history` | `list[HistoryMessage]` | 本轮写入 Redis **之前**已有的会话消息 |
+| `history` | `list[HistoryMessage]` | 本轮写入前已有的会话消息（含扩展，**不含** `search_query`） |
+| `query_filename` | `str` | 当前轮用户请求附带文件名；**暂固定为空串**，后续维护 |
 
 `RagSnippet`：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `content` | `str` | 片段正文（索引字段 `text`） |
-| `metadata` | `dict` | 索引全字段（除 `embedding` / `text`）+ `score` / `rerank_score` 等 |
+| `content` | `str` | 片段正文 |
+| `metadata` | `dict` | 索引全字段（除 `embedding`）+ `score` / `rerank_score` 等 |
 
-`HistoryMessage`：
+`HistoryMessage`（响应契约）：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `role` | `"user" \| "assistant" \| "system"` | 角色 |
 | `content` | `str` | 消息正文 |
+| `filename` | `str \| null` | **用户轮**关联文件名，可为空 |
+| `sources` | `list[RagSnippet] \| null` | **助手轮**该次回复用到的参考资料 |
+
+说明：内部 Redis 仍会持久化用户轮的 `search_query`（改写后的检索句），但**不出现在** `AskResponse.history` 中。
 
 示例（`resp.model_dump()`）：
 
@@ -77,6 +92,7 @@ payload = resp.model_dump()
   "section_id": "user-42-session-1",
   "uuid": "req-550e8400",
   "answer": "根据现有资料……",
+  "query_filename": "",
   "sources": [
     {
       "content": "服务很好，食物新鲜……",
@@ -88,40 +104,48 @@ payload = resp.model_dump()
         "rerank_score": 0.91,
         "polarity": "positive",
         "id": "biz",
-        "name": "Acme Oyster House",
-        "alias": "acme-oyster-house",
-        "is_last_chunk": true
+        "name": "Acme Oyster House"
       }
     }
   ],
   "history": [
-    { "role": "user", "content": "推荐一家性价比高的餐厅" },
-    { "role": "assistant", "content": "推荐 Acme Oyster House……" }
+    {
+      "role": "user",
+      "content": "推荐一家性价比高的餐厅",
+      "filename": "",
+      "sources": null
+    },
+    {
+      "role": "assistant",
+      "content": "推荐 Acme Oyster House……",
+      "filename": null,
+      "sources": [
+        { "content": "……", "metadata": { "name": "Acme Oyster House" } }
+      ]
+    }
   ]
 }
 ```
 
 说明：
 
-- `sources[].metadata` 常见键（Yelp）：`chunk_id`、`document_id`、`chunk_index`、`polarity`、`id`、`name`、`alias`、`is_last_chunk`、`score`、`rerank_score` 等。PDF 遗留数据可能仍有 `source_file`，Yelp chunk 通常没有。
 - `history` **不含**本轮的 `query` / `answer`（二者已在响应顶层）；首次提问时 `history` 为 `[]`。
+- 历史按 `uuid` + `section_id` **同时必填**隔离；缺任一则拒绝创建会话/读写历史。内存会话池最多 5 个；**每轮 ask 结束后立即刷 Redis**（release / LRU / 进程退出仍会再 flush 空 pending）。
 
-### 本阶段唯一处理路径
+### 本阶段处理路径
 
 ```text
-加载 Redis 历史
-  → 查询重述（有历史时）
-  → OpenSearch 混合检索（BM25 + 向量）
-  → BGE Rerank
-  → LLM 生成
-  → 写回历史
+按 uuid+section_id 取/建会话（内存历史）
+  → LangGraph：prepare →（有历史则 rewrite）→ retrieve_rerank
+  → 流式 LLM 生成
+  → 本轮写入内存历史并立即刷 Redis（含 search_query/filename/sources 扩展）
 ```
 
-后续若按附件走不同路由，仍会通过同一 `ask()` 门面扩展，调用方接口尽量保持稳定。
+契约定义见：`backend/llm/schemas.py`；实现见：`backend/llm/graph/`。
 
 ### 进阶（一般不需要）
 
-`answer_query` / `answer_query_with_sources` / `stream_answer_query` 仍可从 `backend.llm` 导入，属于管线内部能力；**协作方请优先用 `ask`**。
+`answer_query` / `answer_query_with_sources` / `stream_answer_query` 仍可从 `backend.llm` 导入（旧 LCEL 管线）；**协作方请优先用流式 `ask`**。
 
 ---
 
@@ -130,7 +154,7 @@ payload = resp.model_dump()
 | 依赖 | 用途 | 配置要点 |
 |------|------|----------|
 | OpenAI 兼容 LLM | 生成与重述 | `.env` 中 LLM 相关项 |
-| Redis | 多轮历史 | `REDIS_*` |
+| Redis | 多轮历史 + LangGraph checkpoint | `REDIS_*`（需 Redis Stack） |
 | OpenSearch | 混合检索 | 索引默认 `yelp_biz_v1`（`OPENSEARCH_INDEX`） |
 | 本机 BGE embedding / rerank | 向量化与精排 | `backend/rag/models/` 下权重；`EMBEDDING_DEVICE` |
 
@@ -217,14 +241,14 @@ cd D:\softwareinstal\pycharm\program\SHIXUNDAXIANGMU\tjll
 
 ## 5. 日志
 
-`ask` / 检索 / 入库脚本会把日志写到 `backend/docs/`（可由 `.env` 的 `LOG_DIR` / `LOG_LEVEL` 调整；**只写文件，不打控制台**）：
+`ask` / 检索 / 入库脚本会把日志写到 `logs/`（可由 `.env` 的 `LOG_DIR` / `LOG_LEVEL` 调整）：
 
 | 文件 | Logger |
 |------|--------|
-| `backend/docs/llm.log` | `backend.llm.*` |
-| `backend/docs/rag.log` | `backend.rag.*` |
+| `logs/llm.log` | `backend.llm.*` |
+| `logs/rag.log` | `backend.rag.*` |
 
-每轮 `ask` 在 `llm.log` 中会记录：写入前历史全文、query 改造前后、精排后完整 chunk（`content` + metadata，无 embedding）、AI 回复全文。
+开发环境（`APP_ENV=development`）下部分模块会额外打到控制台；详见 `backend/core/logger.py`。
 
 `*.log` 已在 `.gitignore` 中，不会进 git。
 
@@ -232,7 +256,7 @@ cd D:\softwareinstal\pycharm\program\SHIXUNDAXIANGMU\tjll
 
 ## 6. 自检清单
 
-- [ ] `from backend.llm import ask` 可导入
-- [ ] Redis / OpenSearch / LLM 可达
+- [ ] `from backend.llm import ask` 可导入，且为流式（`for x in ask(...): ...`）
+- [ ] Redis Stack / OpenSearch / LLM 可达
 - [ ] `yelp_biz_v1` 已有 cleaned 入库数据
 - [ ] （可选）`.venv` 中 `torch.cuda.is_available() == True` 且 `.env` 为 `EMBEDDING_DEVICE=cuda`

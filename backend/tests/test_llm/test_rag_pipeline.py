@@ -34,11 +34,11 @@ def test_answer_query(monkeypatch):
         def invoke(self, payload, config=None):
             assert payload == {"query": "你好"}
             assert config is not None
-            assert config["configurable"]["session_id"] == "s1"
+            assert config["configurable"]["session_id"] == "u1::s1"
             return "链回答"
 
     monkeypatch.setattr(pipe, "build_full_rag_chain", lambda: FakeChain())
-    assert pipe.answer_query("你好", "s1") == "链回答"
+    assert pipe.answer_query("你好", "s1", "u1") == "链回答"
 
 
 def test_stream_answer_query(monkeypatch):
@@ -47,11 +47,13 @@ def test_stream_answer_query(monkeypatch):
     class FakeChain:
         def stream(self, payload, config=None):
             assert payload["query"] == "流式"
+            assert config is not None
+            assert config["configurable"]["session_id"] == "u2::s2"
             yield "一"
             yield "二"
 
     monkeypatch.setattr(pipe, "build_full_rag_chain", lambda: FakeChain())
-    assert "".join(pipe.stream_answer_query("流式", "s2")) == "一二"
+    assert "".join(pipe.stream_answer_query("流式", "s2", "u2")) == "一二"
 
 
 def test_answer_query_with_sources(monkeypatch):
@@ -70,11 +72,11 @@ def test_answer_query_with_sources(monkeypatch):
         )
     ]
 
-    monkeypatch.setattr(pipe, "get_history", lambda section_id: hist)
+    monkeypatch.setattr(pipe, "get_history", lambda uuid, section_id: hist)
     monkeypatch.setattr(pipe, "retrieve_rerank_docs", lambda inputs: docs)
     monkeypatch.setattr(pipe, "get_llm", lambda temperature=0.2: _fake_llm())
 
-    result = pipe.answer_query_with_sources("问题", "sec-9")
+    result = pipe.answer_query_with_sources("问题", "sec-9", "user-1")
     assert isinstance(result, pipe.RagAnswer)
     assert result.answer == "带来源的回答"
     assert result.query == "问题"

@@ -1,13 +1,10 @@
-"""LLM 模块：客户端封装 + 协作方门面 + RAG 会话一条龙。
+"""LLM 模块。
 
-其他后端模块推荐只使用::
+协作入口::
 
     from backend.llm import ask, AskRequest, AskResponse
-
-不要直接依赖 ``backend.rag``。
 """
 
-from backend.llm.api import AskRequest, AskResponse, HistoryMessage, RagSnippet, ask
 from backend.llm.client.llm import (
     get_llm,
     get_llm_with_tools,
@@ -18,21 +15,25 @@ from backend.llm.client.llm import (
     stream_llm,
     stream_with_tools,
 )
+from backend.llm.graph import AskStream, ask, release_ask_session
 from backend.llm.pipeline.rag_pipeline import (
     RagAnswer,
     answer_query,
     answer_query_with_sources,
     stream_answer_query,
 )
+from backend.llm.schemas import AskRequest, AskResponse, HistoryMessage, RagSnippet
 
 __all__ = [
-    # 推荐：协作方门面
+    # 门面
     "AskRequest",
     "AskResponse",
+    "AskStream",
     "HistoryMessage",
     "RagSnippet",
     "ask",
-    # 进阶 / 内部
+    "release_ask_session",
+    # 管线 / 客户端
     "RagAnswer",
     "answer_query",
     "answer_query_with_sources",

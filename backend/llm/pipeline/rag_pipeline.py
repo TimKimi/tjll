@@ -1,4 +1,4 @@
-"""对外一条龙：query + section_id → 回答。"""
+"""RAG pipeline：query / uuid / section_id → 回答。"""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from backend.llm.client.llm import get_llm
 from backend.llm.pipeline.chains import build_full_rag_chain
 from backend.llm.pipeline.context import format_docs, retrieve_rerank_docs
 from backend.llm.prompts.rag import RAG_PROMPT_WITH_HISTORY
-from backend.llm.session.history import get_history
+from backend.llm.session.history import get_history, make_history_session_id
 from backend.logging_setup import setup_app_logging
 
 logger = logging.getLogger("backend.llm.pipeline.rag_pipeline")
@@ -24,7 +24,7 @@ logger = logging.getLogger("backend.llm.pipeline.rag_pipeline")
 
 @dataclass
 class RagAnswer:
-    """带来源与历史快照的 RAG 回答。"""
+    """含 sources 与 history 快照的回答。"""
 
     answer: str
     query: str
@@ -33,9 +33,9 @@ class RagAnswer:
     history: list[dict] = field(default_factory=list)
 
 
-def _session_config(section_id: str) -> dict:
-    """section_id 映射为 LangChain configurable.session_id。"""
-    return {"configurable": {"session_id": section_id}}
+def _session_config(uuid: str, section_id: str) -> dict:
+    """构造 LangChain session_id 配置。"""
+    return {"configurable": {"session_id": make_history_session_id(uuid, section_id)}}
 
 
 def _sources_from_docs(docs: list[Document]) -> list[dict]:
@@ -51,7 +51,7 @@ def _sources_from_docs(docs: list[Document]) -> list[dict]:
 
 
 def _history_snapshot(messages: Sequence[BaseMessage]) -> list[dict]:
-    """本轮写入前的历史 → [{role, content}, ...]。"""
+    """消息列表转为 role/content 快照。"""
     out: list[dict] = []
     for msg in messages:
         content = str(getattr(msg, "content", "") or "")
@@ -71,53 +71,68 @@ def _json_log(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def answer_query(query: str, section_id: str) -> str:
-    """非流式完整 RAG 回答（重述 + 检索 + rerank + Redis 历史）。"""
-    setup_app_logging()
-    logger.info("answer_query section_id=%s query_len=%d", section_id, len(query))
-    try:
-        chain = build_full_rag_chain()
-        return chain.invoke({"query": query}, config=_session_config(section_id))
-    except Exception:
-        logger.exception("answer_query failed section_id=%s", section_id)
-        raise
-
-
-def stream_answer_query(query: str, section_id: str) -> Iterator[str]:
-    """流式完整 RAG 回答。"""
+def answer_query(query: str, section_id: str, uuid: str) -> str:
+    """非流式回答。"""
     setup_app_logging()
     logger.info(
-        "stream_answer_query section_id=%s query_len=%d", section_id, len(query)
+        "answer_query uuid=%s section_id=%s query_len=%d",
+        uuid,
+        section_id,
+        len(query),
     )
     try:
         chain = build_full_rag_chain()
-        yield from chain.stream({"query": query}, config=_session_config(section_id))
+        return chain.invoke({"query": query}, config=_session_config(uuid, section_id))
     except Exception:
-        logger.exception("stream_answer_query failed section_id=%s", section_id)
+        logger.exception("answer_query failed uuid=%s section_id=%s", uuid, section_id)
         raise
 
 
-def answer_query_with_sources(query: str, section_id: str) -> RagAnswer:
-    """完整 RAG 回答，并返回精排后的资料片段 + 写入前历史快照。"""
+def stream_answer_query(query: str, section_id: str, uuid: str) -> Iterator[str]:
+    """流式回答。"""
     setup_app_logging()
     logger.info(
-        "answer_query_with_sources start section_id=%s query=%r",
+        "stream_answer_query uuid=%s section_id=%s query_len=%d",
+        uuid,
+        section_id,
+        len(query),
+    )
+    try:
+        chain = build_full_rag_chain()
+        yield from chain.stream(
+            {"query": query}, config=_session_config(uuid, section_id)
+        )
+    except Exception:
+        logger.exception(
+            "stream_answer_query failed uuid=%s section_id=%s", uuid, section_id
+        )
+        raise
+
+
+def answer_query_with_sources(query: str, section_id: str, uuid: str) -> RagAnswer:
+    """非流式回答，附带 sources 与写入前 history。"""
+    setup_app_logging()
+    logger.info(
+        "answer_query_with_sources start uuid=%s section_id=%s query=%r",
+        uuid,
         section_id,
         query,
     )
     try:
-        history = get_history(section_id)
+        history = get_history(uuid, section_id)
         hist_msgs = list(history.messages)
         hist_snapshot = _history_snapshot(hist_msgs)
         logger.info(
-            "history_before_write section_id=%s messages=%s",
+            "history_before_write uuid=%s section_id=%s messages=%s",
+            uuid,
             section_id,
             _json_log(hist_snapshot),
         )
         docs = retrieve_rerank_docs({"query": query, "history": hist_msgs})
         sources = _sources_from_docs(docs)
         logger.info(
-            "sources_used section_id=%s chunks=%s",
+            "sources_used uuid=%s section_id=%s chunks=%s",
+            uuid,
             section_id,
             _json_log(sources),
         )
@@ -132,7 +147,8 @@ def answer_query_with_sources(query: str, section_id: str) -> RagAnswer:
         history.add_user_message(query)
         history.add_ai_message(answer)
         logger.info(
-            "answer_query_with_sources ok section_id=%s answer=%r",
+            "answer_query_with_sources ok uuid=%s section_id=%s answer=%r",
+            uuid,
             section_id,
             answer,
         )
@@ -145,7 +161,8 @@ def answer_query_with_sources(query: str, section_id: str) -> RagAnswer:
         )
     except Exception:
         logger.exception(
-            "answer_query_with_sources failed section_id=%s",
+            "answer_query_with_sources failed uuid=%s section_id=%s",
+            uuid,
             section_id,
         )
         raise

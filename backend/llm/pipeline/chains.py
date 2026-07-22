@@ -1,4 +1,4 @@
-"""LCEL RAG 链（移植自 shixun/rag.py，imports 使用 backend.*）。"""
+"""LCEL RAG 链。"""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from backend.llm.client.llm import get_llm
 from backend.llm.pipeline.context import format_docs, retrieve_rerank_context
 from backend.llm.prompts.rag import RAG_PROMPT, RAG_PROMPT_WITH_HISTORY
-from backend.llm.session.history import get_history
+from backend.llm.session.history import get_history_by_session_key
 from backend.rag.retrieve import get_retriever, rerank_docs
 from backend.config import settings
 
 
 def build_rag_chain(k: int | None = None):
-    """最简 RAG 链：混合检索 → prompt → LLM。"""
+    """检索 + 生成。"""
     retriever = get_retriever(mode="hybrid", k=k or settings.retrieval_top_k)
     llm = get_llm()
 
@@ -37,7 +37,7 @@ def build_rag_chain_with_rerank(
     recall_k: int | None = None,
     top_n: int | None = None,
 ):
-    """RAG 链 + rerank 精排。"""
+    """检索 + rerank + 生成。"""
     recall_k = recall_k or settings.retrieval_top_k
     top_n = top_n or settings.rerank_top_n
     retriever = get_retriever(mode="hybrid", k=recall_k)
@@ -62,7 +62,7 @@ def build_rag_chain_with_history(
     recall_k: int | None = None,
     top_n: int | None = None,
 ):
-    """RAG 链 + rerank + Redis 多轮历史（不含查询重述）。"""
+    """检索 + rerank + 历史 + 生成（无重述）。"""
     recall_k = recall_k or settings.retrieval_top_k
     top_n = top_n or settings.rerank_top_n
     retriever = get_retriever(mode="hybrid", k=recall_k)
@@ -91,14 +91,14 @@ def build_rag_chain_with_history(
 
     return RunnableWithMessageHistory(
         core_chain,
-        get_session_history=get_history,
+        get_session_history=get_history_by_session_key,
         input_messages_key="query",
         history_messages_key="history",
     )
 
 
 def build_full_rag_chain():
-    """完整链：重述 → 检索 → rerank → 生成（检索用改写 query，生成用原 query）。"""
+    """重述 + 检索 + rerank + 生成。"""
     llm = get_llm()
 
     core_chain = (
@@ -114,7 +114,7 @@ def build_full_rag_chain():
 
     return RunnableWithMessageHistory(
         core_chain,
-        get_session_history=get_history,
+        get_session_history=get_history_by_session_key,
         input_messages_key="query",
         history_messages_key="history",
     )
