@@ -558,7 +558,7 @@ const isLoadingFavorites = ref(false)
     }
 
     const result = await response.json()
-    if (result.code !== 0) {
+    if (result.code !== 200) {
       throw new Error(result.message || '上传失败')
     }
 

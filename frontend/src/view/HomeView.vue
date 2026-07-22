@@ -209,7 +209,10 @@ const goToRestaurants = (query: string) => {
 }
 
 const goToChatWithQuery = (query: string) => {
-  router.push('/chat')
+  router.push({
+    path:'/chat',
+    query: {q: query}
+  })
 }
 
 // ============================================

@@ -180,7 +180,7 @@ const handleLogin = async () => {
     if (response.ok) {
       const result = await response.json()
 
-      if (result.code !== 0) {
+      if (result.code !== 200) {
         errorMessage.value = result.message || '登录失败'
         return
       }
@@ -235,7 +235,7 @@ const handleLogin = async () => {
 
   const handleForgotPassword = () => {
   // 跳转到找回密码页面
-   alert('请联系管理员重置密码')
+  router.push('/forgot-password')
   }
 
   const handleSocialLogin = (platform: string) => {

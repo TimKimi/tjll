@@ -76,6 +76,27 @@
           </div>
         </div>
 
+        <!-- 角色修改模态框 -->
+<div v-if="showRoleModal" class="modal-overlay" @click.self="closeRoleModal">
+  <div class="modal-content">
+    <h3>修改用户角色</h3>
+    <p>用户：<strong>{{ selectedUser?.username }}</strong></p>
+    <div class="form-group">
+      <label>新角色：</label>
+      <select v-model="newRole">
+        <option value="user">普通用户</option>
+        <option value="admin">管理员</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" @click="closeRoleModal">取消</button>
+      <button class="btn btn-primary" @click="updateRole" :disabled="isSubmitting">
+        {{ isSubmitting ? '提交中...' : '确认修改' }}
+      </button>
+    </div>
+  </div>
+</div>
+
         <!-- 加载状态 -->
         <div v-if="isLoading" class="loading-state">
           <i class="fas fa-spinner fa-spin"></i>
@@ -98,40 +119,58 @@
                 <th>邮箱</th>
                 <th>个性签名</th>
                 <th>状态</th>
+                <th>角色</th>
+                <th>操作</th>
                 <th>注册时间</th>
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="user in paginatedUsers"
-                :key="user.id"
-                :class="{ 'row-active': user.is_online }"
-              >
-                <td class="col-id">#{{ user.id }}</td>
-                <td class="col-name">
-                  <div class="user-info-cell">
-                    <img
-  v-if="user.avatar"
-  :src="getFullAvatarUrl(user.avatar)"
-  alt="头像"
-  class="user-avatar-small"
-  @error="user.avatar = ''"
-/>
-                    <i v-else class="fas fa-user-circle user-avatar-small-icon"></i>
-                    <span>{{ user.username }}</span>
-                  </div>
-                </td>
-                <td class="col-email">{{ user.email || '无' }}</td>
-                <td class="col-bio">{{ user.bio || '无' }}</td>
-                <td class="col-status">
-                  <span class="status-badge" :class="{ online: user.is_online }">
-                    <span class="status-dot-small"></span>
-                    {{ user.is_online ? '在线' : '离线' }}
-                  </span>
-                </td>
-                <td class="col-time">{{ formatTime(user.register_time) }}</td>
-              </tr>
-            </tbody>
+  <tr
+    v-for="user in paginatedUsers"
+    :key="user.id"
+    :class="{ 'row-active': user.is_online }"
+  >
+    <td class="col-id">#{{ user.id }}</td>
+    <td class="col-name">
+      <div class="user-info-cell">
+        <img
+          v-if="user.avatar"
+          :src="getFullAvatarUrl(user.avatar)"
+          alt="头像"
+          class="user-avatar-small"
+          @error="user.avatar = ''"
+        />
+        <i v-else class="fas fa-user-circle user-avatar-small-icon"></i>
+        <span>{{ user.username }}</span>
+      </div>
+    </td>
+    <td class="col-email">{{ user.email || '无' }}</td>
+    <td class="col-bio">{{ user.bio || '无' }}</td>
+    <!-- 状态列 -->
+    <td class="col-status">
+      <span class="status-badge" :class="{ online: user.is_online }">
+        <span class="status-dot-small"></span>
+        {{ user.is_online ? '在线' : '离线' }}
+      </span>
+    </td>
+    <!-- 角色列 -->
+    <td class="col-role">
+      <span class="role-badge" :class="user.role">
+        {{ user.role === 'admin' ? '管理员' : '普通用户' }}
+      </span>
+    </td>
+    <!-- 操作列 -->
+    <td class="col-actions">
+      <button class="action-btn edit-role" @click="openRoleModal(user)">
+        <i class="fas fa-user-cog"></i> 改角色
+      </button>
+      <button class="action-btn delete-user" @click="confirmDelete(user)">
+        <i class="fas fa-trash-alt"></i> 删除
+      </button>
+    </td>
+    <td class="col-time">{{ formatTime(user.register_time) }}</td>
+  </tr>
+</tbody>
           </table>
         </div>
 
@@ -166,9 +205,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
 const adminAvatarInput = ref<HTMLInputElement | null>(null)
+const toast = useToast()
 // ============================================
 // 类型定义（与后端返回字段完全一致）
 // ============================================
@@ -180,6 +221,7 @@ interface User {
   email: string
   bio: string
   register_time: string  // ISO 8601 格式
+  role: string
 }
 
 interface AdminInfo {
@@ -202,6 +244,12 @@ const adminInfo = ref<AdminInfo>({
 const searchKeyword = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
+
+// 角色修改模态框
+const showRoleModal = ref(false)
+const selectedUser = ref<User | null>(null)
+const newRole = ref('user')
+const isSubmitting = ref(false)
 
 // ============================================
 // 计算属性
@@ -254,7 +302,7 @@ const formatTime = (isoString: string) => {
 // ============================================
 // 接口地址: GET /api/admin/users
 // 请求头: Authorization: Bearer {token}
-// 响应: { code: 0, message: 'success', data: User[] }
+// 响应: { code: 200, message: 'success', data: User[] }
 // ============================================
 const loadUsers = async () => {
   isLoading.value = true
@@ -269,7 +317,7 @@ const loadUsers = async () => {
     if (!response.ok) throw new Error('获取用户列表失败')
     const result = await response.json()
 
-    if (result.code === 0) {
+    if (result.code === 200) {
       // 从 data.items 提取列表，并映射字段名
       const items = result.data.items || []
       userList.value = items.map((item: any) => {
@@ -296,7 +344,7 @@ const loadUsers = async () => {
     currentPage.value = 1
   } catch (error) {
     console.error('加载用户列表失败:', error)
-    alert('加载用户列表失败，请稍后重试')
+    toast.error('加载用户列表失败，请稍后重试')
   } finally {
     isLoading.value = false
   }
@@ -307,7 +355,7 @@ const loadUsers = async () => {
 // ============================================
 // 接口地址: GET /api/admin/profile
 // 请求头: Authorization: Bearer {token}
-// 响应: { code: 0, data: AdminInfo }
+// 响应: { code: 200, data: AdminInfo }
 // ============================================
 const loadAdminInfo = async () => {
   try {
@@ -320,8 +368,8 @@ const loadAdminInfo = async () => {
     })
     if (!response.ok) throw new Error('获取管理员信息失败')
     const result = await response.json()
-    // 根据后端实际返回结构处理（示例：{ code: 0, data: { ... } }）
-    if (result.code === 0) {
+    // 根据后端实际返回结构处理（示例：{ code: 200, data: { ... } }）
+    if (result.code === 200) {
       const data = result.data
       const avatar = data.avatar || ''
       const fullAvatar = avatar ? (avatar.startsWith('http') ? avatar : `http://localhost:8000${avatar}`) : ''
@@ -432,7 +480,7 @@ const handleAdminAvatarUpload = async (event: Event) => {
   if (!file) return
 
   if (file.size > 2 * 1024 * 1024) {
-    alert('图片大小不能超过2MB')
+    toast.error('图片大小不能超过2MB')
     return
   }
 
@@ -451,7 +499,7 @@ const handleAdminAvatarUpload = async (event: Event) => {
 
     if (!response.ok) throw new Error(`上传失败 (HTTP ${response.status})`)
     const result = await response.json()
-    if (result.code !== 0) throw new Error(result.message || '上传失败')
+    if (result.code !== 200) throw new Error(result.message || '上传失败')
 
     // 拼接完整 URL
     const avatarUrl = result.data.avatar
@@ -463,14 +511,91 @@ const handleAdminAvatarUpload = async (event: Event) => {
     saved.avatar = fullUrl
     localStorage.setItem('admin_userInfo', JSON.stringify(saved))
 
-    alert('头像更新成功')
+    toast.success('头像更新成功')
   } catch (error) {
     console.error('管理员头像上传失败:', error)
-    alert(error instanceof Error ? error.message : '上传失败，请重试')
+    toast.error(error instanceof Error ? error.message : '上传失败，请重试')
   }
 
   // 清空 input 值，以便重复选择同一文件
   input.value = ''
+}
+
+// ============================================
+// 修改角色
+// ============================================
+
+// 打开模态框
+const openRoleModal = (user: User) => {
+  selectedUser.value = user
+  newRole.value = user.role || 'user'
+  showRoleModal.value = true
+}
+
+// 关闭模态框
+const closeRoleModal = () => {
+  showRoleModal.value = false
+  selectedUser.value = null
+  newRole.value = 'user'
+}
+
+// 提交修改角色
+const updateRole = async () => {
+  if (!selectedUser.value) return
+  const userId = selectedUser.value.id
+  isSubmitting.value = true
+  try {
+    const response = await fetch(`http://localhost:8000/api/admin/users/${userId}/role`, {
+      method: 'PUT', // 或者根据后端实际要求使用 PATCH
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('admin_token') || ''}`
+      },
+      body: JSON.stringify({ role: newRole.value })
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const result = await response.json()
+    if (result.code !== 200) throw new Error(result.message || '修改失败')
+    toast.success('角色修改成功')
+    closeRoleModal()
+    // 刷新列表（重新加载用户数据）
+    await loadUsers()
+  } catch (error) {
+    console.error('修改角色失败:', error)
+    toast.error(error instanceof Error ? error.message : '修改失败，请重试')
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// ============================================
+// 删除普通用户
+// ============================================
+
+// 删除用户（带二次确认）
+const confirmDelete = (user: User) => {
+  if (!confirm(`确定要删除用户“${user.username}”（ID: ${user.id}）吗？此操作不可恢复！`)) return
+  deleteUser(user.id)
+}
+
+const deleteUser = async (userId: number | string) => {
+  try {
+    const response = await fetch(`http://localhost:8000/api/admin/users/${userId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('admin_token') || ''}`
+      }
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const result = await response.json()
+    if (result.code !== 200) throw new Error(result.message || '删除失败')
+    toast.success('用户已删除')
+    // 刷新列表
+    await loadUsers()
+  } catch (error) {
+    console.error('删除用户失败:', error)
+    toast.error(error instanceof Error ? error.message : '删除失败，请重试')
+  }
 }
 
 // ============================================
@@ -480,7 +605,7 @@ onMounted(() => {
   // 检查是否为管理员（生产环境取消注释）
   const role = localStorage.getItem('admin_role')
   if (role !== 'admin') {
-    alert('您没有管理员权限')
+    toast.error('您没有管理员权限')
     router.push('/')
     return
   }
@@ -1028,5 +1153,129 @@ onMounted(() => {
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
+}
+
+/* 角色列样式 */
+.col-role {
+  width: 100px;
+}
+.role-badge {
+  display: inline-block;
+  padding: 0.2rem 0.8rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #e2e8f0;
+  color: #475569;
+}
+.role-badge.admin {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.role-badge.user {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* 操作列 */
+.col-actions {
+  width: 160px;
+  white-space: nowrap;
+}
+.action-btn {
+  padding: 0.2rem 0.6rem;
+  border: none;
+  border-radius: 0.4rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-right: 0.3rem;
+}
+.action-btn i {
+  margin-right: 0.2rem;
+}
+.edit-role {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.edit-role:hover {
+  background: #dbeafe;
+}
+.delete-user {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.delete-user:hover {
+  background: #fee2e2;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.modal-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 1rem;
+  min-width: 300px;
+  max-width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.modal-content h3 {
+  margin-top: 0;
+}
+.modal-content .form-group {
+  margin: 1rem 0;
+}
+.modal-content .form-group label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-weight: 500;
+}
+.modal-content .form-group select {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.4rem;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+.btn {
+  padding: 0.4rem 1.2rem;
+  border: none;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.btn-secondary {
+  background: #e5e7eb;
+  color: #374151;
+}
+.btn-secondary:hover {
+  background: #d1d5db;
+}
+.btn-primary {
+  background: #2563eb;
+  color: white;
+}
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

@@ -6,8 +6,11 @@ import LoginView from '../view/LoginView.vue'
 import RegisterView from '../view/RegisterView.vue'
 import PersonalProfileView from '../view/PersonalProfileView.vue'
 import RestaurantView from '../view/RestaurantView.vue'
+import AdminLoginView from '../view/AdminLoginView.vue'
 import AdminView from '../view/AdminView.vue'
 import RestaurantListView from '../view/RestaurantListView.vue'
+import ForgotPassword from '../view/ForgotPassword.vue'
+import ResetPassword from '../view/ResetPassword.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -40,9 +43,19 @@ const router = createRouter({
       }
     },
     {
+      path: '/forgot-password',
+      name: 'ForgotPassword',
+      component: ForgotPassword
+    },
+    {
+      path: '/reset-password',
+      name: 'ResetPassword',
+      component: ResetPassword
+    },
+    {
       path: '/admin/login',
       name: 'admin-login',
-      component: () => import('../view/AdminLoginView.vue'),
+      component: AdminLoginView,
       meta: {
         title: '管理员登录',
         requiresAuth: false,

@@ -305,7 +305,7 @@ if (sourceType.value === 'yelp' && filters.location) {
     }
 
     const result = await response.json()
-    if (result.code !== 0) {
+    if (result.code !== 200) {
       throw new Error(result.message || '获取列表失败')
     }
 

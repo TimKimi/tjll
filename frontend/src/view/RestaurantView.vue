@@ -424,7 +424,7 @@ const response = await fetch(url, {
     }
 
     const result = await response.json()
-    if (result.code !== 0) {
+    if (result.code !== 200) {
       throw new Error(result.message || '获取餐厅详情失败')
     }
 
@@ -706,7 +706,7 @@ const isOpenNow = (hoursData: any, timezone?: string): boolean => {
 // 接口地址: POST /api/review/list/
 // 请求头: Authorization: Bearer {token}
 // 请求体: { business_id, page, page_size, sort_by, source }
-// 响应: { code: 0, data: { items: [], total: 0 } }
+// 响应: { code: 200, data: { items: [], total: 0 } }
 // ============================================
 const loadMoreReviews = async () => {
   if (isLoadingMore.value || !hasMoreReviews.value) return
@@ -752,7 +752,7 @@ const url = `http://localhost:8000/api/review/list?${params.toString()}`
     console.log('完整响应：', result)
 console.log('items 长度：', result.data?.items?.length)
 console.log('total：', result.data?.total)
-    if (result.code !== 0) {
+    if (result.code !== 200) {
       throw new Error(result.message || '接口返回错误码')
     }
 
