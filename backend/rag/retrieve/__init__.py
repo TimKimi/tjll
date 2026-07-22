@@ -6,6 +6,8 @@ from backend.rag.retrieve.search import (
     get_retriever,
     hybrid_search,
     search_insight_text,
+    search_section_document_texts,
+    search_section_insight_text,
     vector_search,
 )
 
@@ -16,5 +18,7 @@ __all__ = [
     "hybrid_search_with_rerank",
     "rerank_docs",
     "search_insight_text",
+    "search_section_document_texts",
+    "search_section_insight_text",
     "vector_search",
 ]

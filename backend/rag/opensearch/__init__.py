@@ -5,6 +5,8 @@ from backend.rag.opensearch.schema import (
     ensure_index,
     ensure_insight_index,
     ensure_search_pipeline,
+    ensure_section_document_index,
+    ensure_section_insight_index,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "ensure_index",
     "ensure_insight_index",
     "ensure_search_pipeline",
+    "ensure_section_document_index",
+    "ensure_section_insight_index",
 ]

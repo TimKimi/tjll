@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     """索引名称"""
     opensearch_insight_index: str = "user_insight_v1"
     """用户洞察专用索引"""
+    opensearch_section_insight_index: str = "section_insight_v1"
+    """会话洞察属性切块索引"""
+    opensearch_section_document_index: str = "section_document_v1"
+    """会话上传文档切块索引"""
     embedding_model_path: str = "rag/models/bge-base-zh-v1.5"
     """Embedding 模型路径（相对 backend/）"""
     rerank_model_path: str = "rag/models/bge-reranker-v2-m3"
@@ -142,12 +146,14 @@ class Settings(BaseSettings):
     """文本块大小（字符数）"""
     chunk_overlap: int = 50
     """文本块重叠（字符数）"""
-    insight_chunk_size: int = 800
+    insight_chunk_size: int = 200
     """用户洞察拼接/切分目标长度（字符数）"""
     retrieval_top_k: int = 10
     """初筛返回条数"""
     rerank_top_n: int = 3
     """精排后返回条数"""
+    section_document_top_n: int = 1
+    """会话文档检索默认返回 chunk 数"""
     hybrid_pipeline_name: str = "rag_hybrid_pipeline"
     hybrid_bm25_weight: float = 0.3
     hybrid_vector_weight: float = 0.7
