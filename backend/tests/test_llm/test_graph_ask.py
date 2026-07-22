@@ -228,23 +228,30 @@ def test_graph_ask_stream_service(monkeypatch):
         content="上次问过",
         filename="",
         insight_create=False,
+        insight_use=False,
         sources=None,
     )
     assert hist.history[1].role == "assistant"
     assert hist.history[1].content == "上次答过"
     assert hist.history[1].sources == [RagSnippet(content="旧资料", metadata={})]
     assert hist.history[1].insight_create is None
+    assert hist.history[1].insight_use is None
     assert hist.history[2].content == "适合约会吗"
     assert hist.history[2].insight_create is True
+    assert hist.history[2].insight_use is False
+    assert hist.insight_create is True
+    assert hist.insight_use is False
     dumped = hist.history[0].model_dump()
     assert "search_query" not in dumped
     assert "insight_create" in dumped
+    assert "insight_use" in dumped
 
     # 每轮结束已刷 Redis
     assert len(redis_hist.added) == 2
     assert redis_hist.added[0].content == "适合约会吗"
     assert redis_hist.added[0].additional_kwargs["search_query"] == "改写后的查询"
     assert redis_hist.added[0].additional_kwargs["insight_create"] is True
+    assert redis_hist.added[0].additional_kwargs["insight_use"] is False
     assert redis_hist.added[1].content == "适合"
 
     session = get_ask_session("req-9", "sec-1", checkpointer=mem)

@@ -62,6 +62,7 @@ class AskSession:
         search_query: str,
         filename: str | None = None,
         insight_create: bool = False,
+        insight_use: bool = False,
         sources: list[dict[str, Any]] | None = None,
     ) -> None:
         """本轮问答写入内存，并立即刷入 Redis。"""
@@ -71,6 +72,7 @@ class AskSession:
                 "search_query": search_query,
                 "filename": filename or "",
                 "insight_create": bool(insight_create),
+                "insight_use": bool(insight_use),
             },
         )
         ai = AIMessage(

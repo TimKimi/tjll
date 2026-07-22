@@ -33,6 +33,7 @@ def history_snapshot(messages: Sequence[BaseMessage]) -> list[dict[str, Any]]:
                 "search_query": extra.get("search_query"),
                 "filename": extra.get("filename") or "",
                 "insight_create": bool(extra.get("insight_create", False)),
+                "insight_use": bool(extra.get("insight_use", False)),
                 "sources": None,
             }
         elif isinstance(msg, AIMessage):
@@ -43,6 +44,7 @@ def history_snapshot(messages: Sequence[BaseMessage]) -> list[dict[str, Any]]:
                 "search_query": None,
                 "filename": None,
                 "insight_create": None,
+                "insight_use": None,
                 "sources": extra.get("sources") or [],
             }
         elif isinstance(msg, SystemMessage):
@@ -52,6 +54,7 @@ def history_snapshot(messages: Sequence[BaseMessage]) -> list[dict[str, Any]]:
                 "search_query": None,
                 "filename": None,
                 "insight_create": None,
+                "insight_use": None,
                 "sources": None,
             }
         else:
@@ -61,6 +64,7 @@ def history_snapshot(messages: Sequence[BaseMessage]) -> list[dict[str, Any]]:
                 "search_query": None,
                 "filename": None,
                 "insight_create": None,
+                "insight_use": None,
                 "sources": None,
             }
         out.append(item)
