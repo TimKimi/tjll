@@ -623,7 +623,8 @@ const isOpenNow = (hoursData: any, timezone?: string): boolean => {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: method === 'POST' ? JSON.stringify({
-        shop_id: restaurantData.value.id   // 改为 shop_id（下划线）
+        shop_id: restaurantData.value.id,   // 改为 shop_id（下划线）
+        source: source.value   // 新增 source 字段
       }) : undefined
     })
 
@@ -816,7 +817,7 @@ const remainingReviewsCount = computed(() => {
   // ============================================
   const openGallery = (index: number = 0) => {
     if (!restaurantData.value?.images || restaurantData.value.images.length === 0) {
-      alert('暂无图片')
+      toast.info('暂无图片')
       return
     }
     currentImageIndex.value = index
@@ -860,7 +861,7 @@ const remainingReviewsCount = computed(() => {
   const navigateToRestaurant = () => {
     const data = restaurantData.value
     if (!data) {
-      alert('暂无地址信息')
+      toast.warning('暂无地址信息')
       return
     }
 
@@ -929,7 +930,7 @@ const remainingReviewsCount = computed(() => {
         }).catch(() => {})
       } else {
         navigator.clipboard.writeText(window.location.href)
-        alert('链接已复制，快去分享给朋友吧！')
+        toast.success('链接已复制，快去分享给朋友吧！')
       }
     }
   }

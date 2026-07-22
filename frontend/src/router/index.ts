@@ -11,6 +11,7 @@ import AdminView from '../view/AdminView.vue'
 import RestaurantListView from '../view/RestaurantListView.vue'
 import ForgotPassword from '../view/ForgotPassword.vue'
 import ResetPassword from '../view/ResetPassword.vue'
+import { getGlobalToast } from '@/composables/useToast'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -144,7 +145,7 @@ router.beforeEach((to, from, next) => {
   // ====== 4. 先处理管理员权限 ======
   if (requiresAdmin) {
     if (!adminToken || adminRole !== 'admin') {
-      alert('您没有管理员权限')
+      getGlobalToast()?.error('您没有管理员权限')
       next('/')
       return
     }

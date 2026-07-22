@@ -297,9 +297,11 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, watch } from 'vue'
 import { useRouter , useRoute} from 'vue-router'
+import { useToast } from '@/composables/useToast'
 
 const router = useRouter()
 const route = useRoute()
+const toast = useToast()
 
 // ============================================
 // 1. 类型定义
@@ -679,7 +681,7 @@ const deleteConversation = async (index: number): Promise<void> => {
       }
     } catch (error) {
       console.error('删除对话失败:', error)
-      alert('删除失败，请稍后重试')
+      toast.error('删除失败，请稍后重试')
     }
   }
 }
@@ -690,7 +692,7 @@ const deleteConversation = async (index: number): Promise<void> => {
 
 const clearAllHistory = async (): Promise<void> => {
   if (conversationList.value.length === 0) {
-    alert('暂无历史记录')
+    toast.info('暂无历史记录')
     return
   }
 
@@ -710,7 +712,7 @@ const clearAllHistory = async (): Promise<void> => {
       }
     } catch (error) {
       console.error('清空历史失败:', error)
-      alert('清空失败，请稍后重试')
+      toast.error('清空失败，请稍后重试')
     }
   }
 }
@@ -936,11 +938,11 @@ recognition.value.onresult = (event: any) => {
     console.error('语音识别错误:', event.error)
     isRecording.value = false
     if (event.error === 'not-allowed') {
-      alert('请允许浏览器使用麦克风权限')
+      toast.warning('请允许浏览器使用麦克风权限')
     } else if (event.error === 'no-speech') {
       // 没有检测到语音，静默处理
     } else {
-      alert('语音识别失败，请重试')
+      toast.error('语音识别失败，请重试')
     }
   }
 }
@@ -948,7 +950,7 @@ recognition.value.onresult = (event: any) => {
 // 切换语音识别（点击麦克风按钮）
 const toggleRecording = async () => {
   if (!recognition.value) {
-    alert('当前浏览器不支持语音识别，请使用 Chrome 浏览器')
+    toast.warning('当前浏览器不支持语音识别，请使用 Chrome 浏览器')
     return
   }
 
@@ -968,7 +970,7 @@ const toggleRecording = async () => {
       isRecording.value = true
     } catch (e) {
       console.error('启动语音识别失败:', e)
-      alert('启动语音识别失败，请重试')
+      toast.error('启动语音识别失败，请重试')
       stopAudioMonitoring()
     }
   }

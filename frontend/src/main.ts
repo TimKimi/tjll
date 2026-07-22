@@ -3,6 +3,7 @@ import App from './App.vue'
 import router from './router'
 import '@fortawesome/fontawesome-free/css/all.min.css'
 import ToastNotification from './components/ToastNotification.vue'
+import { setGlobalToast } from './composables/useToast'
 
 const app = createApp(App)
 
@@ -21,6 +22,7 @@ const toast = toastVM.mount(toastContainer)
 // 提供全局 Toast
 app.config.globalProperties.$toast = toast
 app.provide('toast', toast)
+setGlobalToast(toast)
 
 app.use(router)
 

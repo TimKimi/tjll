@@ -176,8 +176,10 @@
   <script setup lang="ts">
   import { ref, reactive, computed, watch } from 'vue'
   import { useRouter } from 'vue-router'
+  import { useToast } from '@/composables/useToast'
 
   const router = useRouter()
+  const toast = useToast()
 
   // ============================================
   // 表单数据
@@ -325,7 +327,7 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerForm.email)) {
 
         // ✅ 注册成功，跳转到登录页
         // 可以显示成功提示
-        alert('注册成功！请登录')
+        toast.success('注册成功！请登录')
 
         // 跳转到登录页
         router.push('/login')
@@ -353,11 +355,11 @@ if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerForm.email)) {
   }
 
   const showTerms = () => {
-    alert('用户协议内容...')
+    toast.info('用户协议内容...')
   }
 
   const showPrivacy = () => {
-    alert('隐私政策内容...')
+    toast.info('隐私政策内容...')
   }
   </script>
 

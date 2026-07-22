@@ -134,8 +134,10 @@
   <script setup lang="ts">
   import { ref, reactive } from 'vue'
   import { useRouter } from 'vue-router'
+  import { useToast } from '@/composables/useToast'
 
   const router = useRouter()
+  const toast = useToast()
 
   // ============================================
   // 表单数据
@@ -241,7 +243,7 @@ const handleLogin = async () => {
   const handleSocialLogin = (platform: string) => {
     console.log(`使用 ${platform} 登录`)
     // 跳转到第三方授权
-    alert(`${platform} 登录功能开发中...`)
+    toast.info(`${platform} 登录功能开发中...`)
   }
   </script>
 

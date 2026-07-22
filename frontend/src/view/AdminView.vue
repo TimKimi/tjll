@@ -113,17 +113,17 @@
         <div v-else class="table-responsive">
           <table class="user-table">
             <thead>
-              <tr>
-                <th>ID</th>
-                <th>用户名</th>
-                <th>邮箱</th>
-                <th>个性签名</th>
-                <th>状态</th>
-                <th>角色</th>
-                <th>操作</th>
-                <th>注册时间</th>
-              </tr>
-            </thead>
+  <tr>
+    <th class="col-id">ID</th>
+    <th class="col-name">用户名</th>
+    <th class="col-email">邮箱</th>
+    <th class="col-bio">个性签名</th>
+    <th class="col-status">状态</th>
+    <th class="col-role">角色</th>
+    <th class="col-actions">操作</th>
+    <th class="col-time">注册时间</th>
+  </tr>
+</thead>
             <tbody>
   <tr
     v-for="user in paginatedUsers"
@@ -892,33 +892,38 @@ onMounted(() => {
 
 /* 列宽 */
 .col-id {
-  width: 60px;
+  width: 6%;
+  min-width: 60px;
   color: #94a3b8;
   font-weight: 500;
 }
 
 .col-name {
-  min-width: 120px;
+  width: 14%;
 }
 
 .col-email {
+  width: 18%;
   min-width: 150px;
 }
 
 .col-bio {
-  min-width: 120px;
-  max-width: 200px;
+  width: 14%;
+  min-width: 80px;
+  max-width: 180px;      /* 防止过长 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .col-status {
-  width: 80px;
+  width: 8%;
+  min-width: 70px;
 }
 
 .col-time {
-  min-width: 150px;
+  width: 14%;
+  min-width: 140px;
   font-size: 0.75rem;
   color: #94a3b8;
 }
@@ -1052,6 +1057,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .admin-header {
     padding: 0.5rem 1rem;
+    display: none;
   }
 
   .brand-name {
@@ -1157,7 +1163,9 @@ onMounted(() => {
 
 /* 角色列样式 */
 .col-role {
-  width: 100px;
+  width: 10%;
+  min-width: 80px;
+  white-space: nowrap;
 }
 .role-badge {
   display: inline-block;
@@ -1179,7 +1187,8 @@ onMounted(() => {
 
 /* 操作列 */
 .col-actions {
-  width: 160px;
+  width: 16%;
+  min-width: 140px;
   white-space: nowrap;
 }
 .action-btn {

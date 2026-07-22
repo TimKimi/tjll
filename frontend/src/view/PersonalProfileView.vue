@@ -224,6 +224,7 @@
           </span>
           <span class="shop-price">¥{{ shop.price }}/人</span>
           <span v-if="shop.category" class="shop-category-tag">{{ shop.category }}</span>
+          <span v-if="shop.source" class="shop-source-tag">{{ shop.source }}</span>
         </div>
         <div class="shop-address">
           <i class="fas fa-map-pin"></i>
@@ -283,8 +284,10 @@
   <script setup lang="ts">
   import { ref, reactive, computed, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
+  import { useToast } from '@/composables/useToast'
 
   const router = useRouter()
+  const toast = useToast()
 
   // ============================================
   // 类型定义
@@ -318,6 +321,7 @@ interface FavoriteShop {
   address: string
   category?: string
   createdAt?: string
+  source?: string
 }
 
   // ============================================
@@ -516,7 +520,7 @@ const isLoadingFavorites = ref(false)
         }
       } catch (error) {
         console.error('删除对话失败:', error)
-        alert('删除失败，请稍后重试')
+        toast.error('删除失败，请稍后重试')
       }
     }
   }
@@ -534,7 +538,7 @@ const isLoadingFavorites = ref(false)
   if (!file) return
 
   if (file.size > 2 * 1024 * 1024) {
-    alert('图片大小不能超过2MB')
+    toast.warning('图片大小不能超过2MB')
     return
   }
 
@@ -574,7 +578,7 @@ localStorage.setItem('userInfo', JSON.stringify(saved))
 
   } catch (error) {
     console.error('头像上传失败:', error)
-    alert(error instanceof Error ? error.message : '上传失败，请重试')
+    toast.error(error instanceof Error ? error.message : '上传失败，请重试')
   }
 }
 
@@ -610,7 +614,7 @@ const getFullAvatarUrl = (avatar: string): string => {
   if (isEditing.value) {
     // 保存
     if (!editForm.username.trim()) {
-      alert('用户名不能为空')
+      toast.warning('用户名不能为空')
       return
     }
     try {
@@ -634,10 +638,10 @@ const getFullAvatarUrl = (avatar: string): string => {
       userInfo.value.bio = editForm.bio.trim()
       // 可选：更新 localStorage 缓存
       saveUserInfo()
-      alert('保存成功')
+      toast.success('保存成功')
     } catch (error) {
       console.error('保存用户信息失败:', error)
-      alert('保存失败，请稍后重试')
+      toast.error('保存失败，请稍后重试')
       return
     }
   }
@@ -662,11 +666,11 @@ const getFullAvatarUrl = (avatar: string): string => {
   // 设置操作
   // ============================================
   const showPrivacySettings = () => {
-    alert('隐私设置页面开发中...')
+    toast.info('隐私设置页面开发中...')
   }
 
   const showAbout = () => {
-    alert('探店助手 v1.0.0\n让选择更简单')
+    toast.info('探店助手 v1.0.0', { detail: '让选择更简单' })
   }
 
   // ============================================
@@ -748,6 +752,7 @@ const loadFavorites = async (): Promise<void> => {
         address: item.address || '',
         category: item.category || '',
         createdAt: item.created_at,
+        source: item.source || '',
       }))
       // 更新本地缓存（可选）
       localStorage.setItem('favorites', JSON.stringify(favoritesList.value))
@@ -806,7 +811,7 @@ const removeFavorite = async (shopId: string | number): Promise<void> => {
       }
     } catch (error) {
       console.error('移除收藏失败:', error)
-      alert('移除收藏失败，请稍后重试')
+      toast.error('移除收藏失败，请稍后重试')
     }
   }
 }
@@ -1675,5 +1680,12 @@ const goToRestaurant = (shopId: string | number ): void => {
   .favorite-meta {
     font-size: 0.7rem;
   }
+}
+.shop-source-tag {
+  background: #e0e7ff;
+  padding: 0.1rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  color: #4338ca;
 }
   </style>
