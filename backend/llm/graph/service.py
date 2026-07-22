@@ -17,7 +17,6 @@ from backend.llm.schemas import (
     HistoryMessage,
     RagSnippet,
 )
-from backend.logging_setup import setup_app_logging
 
 logger = logging.getLogger("backend.llm.graph.service")
 
@@ -81,7 +80,6 @@ def ask(req: AskRequest | dict[str, Any]) -> AskStream:
     - 响应 ``history`` 含 filename/sources 扩展，不含 search_query
     - ``query_filename`` 表示本轮附件文件名，暂固定为空串
     """
-    setup_app_logging()
     request = req if isinstance(req, AskRequest) else AskRequest.model_validate(req)
     logger.info(
         "graph ask start section_id=%s uuid=%s query_len=%d "

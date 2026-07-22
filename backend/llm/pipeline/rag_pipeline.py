@@ -17,7 +17,6 @@ from backend.llm.pipeline.chains import build_full_rag_chain
 from backend.llm.pipeline.context import format_docs, retrieve_rerank_docs
 from backend.llm.prompts.rag import RAG_PROMPT_WITH_HISTORY
 from backend.llm.session.history import get_history, make_history_session_id
-from backend.logging_setup import setup_app_logging
 
 logger = logging.getLogger("backend.llm.pipeline.rag_pipeline")
 
@@ -73,7 +72,6 @@ def _json_log(payload: Any) -> str:
 
 def answer_query(query: str, section_id: str, uuid: str) -> str:
     """非流式回答。"""
-    setup_app_logging()
     logger.info(
         "answer_query uuid=%s section_id=%s query_len=%d",
         uuid,
@@ -90,7 +88,6 @@ def answer_query(query: str, section_id: str, uuid: str) -> str:
 
 def stream_answer_query(query: str, section_id: str, uuid: str) -> Iterator[str]:
     """流式回答。"""
-    setup_app_logging()
     logger.info(
         "stream_answer_query uuid=%s section_id=%s query_len=%d",
         uuid,
@@ -111,7 +108,6 @@ def stream_answer_query(query: str, section_id: str, uuid: str) -> Iterator[str]
 
 def answer_query_with_sources(query: str, section_id: str, uuid: str) -> RagAnswer:
     """非流式回答，附带 sources 与写入前 history。"""
-    setup_app_logging()
     logger.info(
         "answer_query_with_sources start uuid=%s section_id=%s query=%r",
         uuid,
