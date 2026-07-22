@@ -141,6 +141,7 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
         "a1",
         search_query="q1",
         filename="",
+        insight_create=True,
         sources=[{"content": "c1", "metadata": {}}],
     )
     s2 = pool.get_or_create("b", "s2")
@@ -151,6 +152,7 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
     assert len(flushed) == 2
     assert flushed[0].content == "q1"
     assert flushed[0].additional_kwargs["search_query"] == "q1"
+    assert flushed[0].additional_kwargs["insight_create"] is True
     assert flushed[1].additional_kwargs["sources"][0]["content"] == "c1"
 
 
@@ -163,7 +165,11 @@ def test_graph_ask_stream_service(monkeypatch):
     prior = [
         HumanMessage(
             content="上次问过",
-            additional_kwargs={"search_query": "上次问过", "filename": ""},
+            additional_kwargs={
+                "search_query": "上次问过",
+                "filename": "",
+                "insight_create": False,
+            },
         ),
         AIMessage(
             content="上次答过",
@@ -211,22 +217,34 @@ def test_graph_ask_stream_service(monkeypatch):
     assert resp.query_filename == ""
     assert len(resp.sources) == 1
     assert resp.sources[0].content == "服务很好"
-    assert resp.history[0] == HistoryMessage(
+    assert "history" not in AskResponse.model_fields
+
+    hist = svc.get_ask_history(uuid="req-9", section_id="sec-1")
+    assert hist.uuid == "req-9"
+    assert hist.section_id == "sec-1"
+    assert len(hist.history) == 4  # prior 2 + 本轮 2
+    assert hist.history[0] == HistoryMessage(
         role="user",
         content="上次问过",
         filename="",
+        insight_create=False,
         sources=None,
     )
-    assert resp.history[1].role == "assistant"
-    assert resp.history[1].content == "上次答过"
-    assert resp.history[1].sources == [RagSnippet(content="旧资料", metadata={})]
-    dumped = resp.history[0].model_dump()
+    assert hist.history[1].role == "assistant"
+    assert hist.history[1].content == "上次答过"
+    assert hist.history[1].sources == [RagSnippet(content="旧资料", metadata={})]
+    assert hist.history[1].insight_create is None
+    assert hist.history[2].content == "适合约会吗"
+    assert hist.history[2].insight_create is True
+    dumped = hist.history[0].model_dump()
     assert "search_query" not in dumped
+    assert "insight_create" in dumped
 
     # 每轮结束已刷 Redis
     assert len(redis_hist.added) == 2
     assert redis_hist.added[0].content == "适合约会吗"
     assert redis_hist.added[0].additional_kwargs["search_query"] == "改写后的查询"
+    assert redis_hist.added[0].additional_kwargs["insight_create"] is True
     assert redis_hist.added[1].content == "适合"
 
     session = get_ask_session("req-9", "sec-1", checkpointer=mem)
@@ -234,3 +252,58 @@ def test_graph_ask_stream_service(monkeypatch):
 
     release_ask_session("req-9", "sec-1")
     assert len(redis_hist.added) == 2
+
+
+def test_delete_ask_history_and_by_uuid(monkeypatch):
+    import backend.llm.graph.service as svc
+    import backend.llm.graph.session_pool as pool_mod
+    import backend.llm.session.history as history_mod
+
+    class FakeRedisHistory:
+        def __init__(self, messages=None):
+            self.messages = list(messages or [])
+            self.cleared = False
+
+        def clear(self) -> None:
+            self.cleared = True
+            self.messages.clear()
+
+        def add_message(self, message) -> None:
+            self.messages.append(message)
+
+    store: dict[str, FakeRedisHistory] = {
+        "u1::s1": FakeRedisHistory([HumanMessage(content="a")]),
+        "u1::s2": FakeRedisHistory([HumanMessage(content="b")]),
+        "u2::s9": FakeRedisHistory([HumanMessage(content="c")]),
+    }
+
+    def fake_get_history(uuid: str, section_id: str) -> FakeRedisHistory:
+        key = f"{uuid}::{section_id}"
+        if key not in store:
+            store[key] = FakeRedisHistory()
+        return store[key]
+
+    monkeypatch.setattr(pool_mod, "get_history", fake_get_history)
+    monkeypatch.setattr(history_mod, "get_history", fake_get_history)
+    monkeypatch.setattr(
+        history_mod,
+        "list_history_session_ids_for_uuid",
+        lambda uuid: sorted(k for k in store if k.startswith(f"{uuid}::")),
+    )
+
+    reset_ask_graph_cache()
+    pool = get_session_pool()
+    s = pool.get_or_create("u1", "s1")
+    s.history = [HumanMessage(content="mem")]
+
+    out = svc.delete_ask_history(uuid="u1", section_id="s1")
+    assert out.deleted_sessions == 1
+    assert out.section_ids == ["s1"]
+    assert store["u1::s1"].cleared is True
+    assert "u1::s1" not in pool._sessions
+
+    out2 = svc.delete_ask_histories_by_uuid(uuid="u1")
+    assert out2.section_id is None
+    assert set(out2.section_ids) == {"s1", "s2"}
+    assert store["u1::s2"].cleared is True
+    assert store["u2::s9"].cleared is False

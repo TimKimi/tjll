@@ -20,7 +20,7 @@ class RagSnippet(BaseModel):
 
 
 class HistoryMessage(BaseModel):
-    """会话历史单条（本轮写入前已存在的消息；响应中不含 search_query）。"""
+    """会话历史单条（对外不含 search_query）。"""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -29,6 +29,10 @@ class HistoryMessage(BaseModel):
     filename: str | None = Field(
         default=None,
         description="用户轮：关联文件名，可为空",
+    )
+    insight_create: bool | None = Field(
+        default=None,
+        description="用户轮：该次请求是否要求创建洞察；助手/系统轮为 null",
     )
     sources: list[RagSnippet] | None = Field(
         default=None,
@@ -60,7 +64,7 @@ class AskRequest(BaseModel):
 
 
 class AskResponse(BaseModel):
-    """ask() 响应。"""
+    """ask() 响应（不含会话历史；历史请用 get_ask_history）。"""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -72,11 +76,51 @@ class AskResponse(BaseModel):
         default_factory=list,
         description="本轮参考资料RAG片段",
     )
-    history: list[HistoryMessage] = Field(
-        default_factory=list,
-        description="已有会话历史（含扩展字段，不含 search_query）",
-    )
     query_filename: str = Field(
         default="",
         description="当前轮用户请求附带的文件名；暂为空，后续维护",
+    )
+
+
+class HistoryRequest(BaseModel):
+    """拉取/删除单个会话历史的入参。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    uuid: str = Field(..., min_length=1, description="用户/请求关联 ID")
+    section_id: str = Field(..., min_length=1, description="会话/分区 ID")
+
+
+class HistoryResponse(BaseModel):
+    """完整会话历史（含扩展字段，不含 search_query）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    uuid: str
+    section_id: str
+    history: list[HistoryMessage] = Field(default_factory=list)
+
+
+class DeleteHistoryByUuidRequest(BaseModel):
+    """按 uuid 删除该用户全部会话历史的入参。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    uuid: str = Field(..., min_length=1, description="用户/请求关联 ID")
+
+
+class DeleteHistoryResponse(BaseModel):
+    """删除历史结果。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    uuid: str
+    section_id: str | None = Field(
+        default=None,
+        description="单会话删除时回传；按 uuid 全删时为 null",
+    )
+    deleted_sessions: int = Field(..., description="实际清理的会话数")
+    section_ids: list[str] = Field(
+        default_factory=list,
+        description="被清理的 section_id 列表",
     )

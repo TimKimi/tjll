@@ -2,7 +2,7 @@
 
 协作入口::
 
-    from backend.llm import ask, AskRequest, AskResponse
+    from backend.llm import ask, get_ask_history, delete_ask_history, AskRequest
 """
 
 from backend.llm.client.llm import (
@@ -15,23 +15,46 @@ from backend.llm.client.llm import (
     stream_llm,
     stream_with_tools,
 )
-from backend.llm.graph import AskStream, ask, release_ask_session
+from backend.llm.graph import (
+    AskStream,
+    ask,
+    delete_ask_histories_by_uuid,
+    delete_ask_history,
+    get_ask_history,
+    release_ask_session,
+)
 from backend.llm.pipeline.rag_pipeline import (
     RagAnswer,
     answer_query,
     answer_query_with_sources,
     stream_answer_query,
 )
-from backend.llm.schemas import AskRequest, AskResponse, HistoryMessage, RagSnippet
+from backend.llm.schemas import (
+    AskRequest,
+    AskResponse,
+    DeleteHistoryByUuidRequest,
+    DeleteHistoryResponse,
+    HistoryMessage,
+    HistoryRequest,
+    HistoryResponse,
+    RagSnippet,
+)
 
 __all__ = [
     # 门面
     "AskRequest",
     "AskResponse",
     "AskStream",
+    "DeleteHistoryByUuidRequest",
+    "DeleteHistoryResponse",
     "HistoryMessage",
+    "HistoryRequest",
+    "HistoryResponse",
     "RagSnippet",
     "ask",
+    "delete_ask_histories_by_uuid",
+    "delete_ask_history",
+    "get_ask_history",
     "release_ask_session",
     # 管线 / 客户端
     "RagAnswer",
