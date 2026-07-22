@@ -272,15 +272,16 @@ class TestForgotPassword:
 
 
 class TestResetPassword:
-    """测试密码重置。"""
+    """测试密码重置（24 位 hex 密钥，邮箱签名内置）。"""
 
     @pytest.mark.asyncio
     async def test_reset_password_success(self, mock_db):
-        """有效的令牌应能重置密码。"""
+        """有效的密钥 + 匹配的哈希 → 重置成功。"""
         from datetime import datetime, timedelta, timezone
         from backend.services.auth import AuthService, _hash_token
 
-        raw_token = "valid_reset_token_123"
+        # 24 位 hex 密钥（服务端会自动去格式化、小写化）
+        raw_token = "abcd1234ef567890abcd1234"
         mock_user = MagicMock()
         mock_user.id = "u_abc"
         mock_user.reset_token = _hash_token(raw_token)
@@ -302,8 +303,35 @@ class TestResetPassword:
         mock_db.commit.assert_awaited()
 
     @pytest.mark.asyncio
+    async def test_reset_password_with_formatting(self, mock_db):
+        """带短横线和大写的格式化密钥也应能正常解析。"""
+        from datetime import datetime, timedelta, timezone
+        from backend.services.auth import AuthService, _hash_token
+
+        clean_token = "abcd1234ef567890abcd1234"
+        # 用户可能输入 ABCD-1234-EF56-7890-ABCD-1234 格式
+        formatted_input = "ABCD-1234-EF56-7890-ABCD-1234"
+        mock_user = MagicMock()
+        mock_user.id = "u_abc"
+        mock_user.reset_token = _hash_token(clean_token)
+        mock_user.reset_token_exp = datetime.now(timezone.utc).replace(
+            tzinfo=None
+        ) + timedelta(hours=1)
+        mock_user.password_hash = "old_hash"
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute.return_value = mock_result
+
+        service = AuthService(mock_db)
+        await service.reset_password(formatted_input, "new_password_123")
+
+        assert mock_user.password_hash != "old_hash"
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
     async def test_reset_password_invalid_token(self, mock_db):
-        """无效的令牌应抛出异常。"""
+        """数据库中不存在的密钥应拒绝。"""
         from backend.core.exceptions import AppError
         from backend.services.auth import AuthService
 
@@ -312,5 +340,32 @@ class TestResetPassword:
         mock_db.execute.return_value = mock_result
 
         service = AuthService(mock_db)
-        with pytest.raises(AppError, match="重置链接无效"):
-            await service.reset_password("bad_token", "new_pw")
+        with pytest.raises(AppError, match="密钥无效"):
+            await service.reset_password("ffffffffffffffffffffffff", "new_pw")
+
+    @pytest.mark.asyncio
+    async def test_reset_password_expired_token(self, mock_db):
+        """过期的密钥应拒绝并清除。"""
+        from datetime import datetime, timedelta, timezone
+        from backend.core.exceptions import AppError
+        from backend.services.auth import AuthService, _hash_token
+
+        raw_token = "deadbeef12345678deadbeef"
+        mock_user = MagicMock()
+        mock_user.id = "u_expired"
+        mock_user.reset_token = _hash_token(raw_token)
+        mock_user.reset_token_exp = datetime.now(timezone.utc).replace(
+            tzinfo=None
+        ) - timedelta(hours=1)  # 已过期
+        mock_user.password_hash = "old_hash"
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_user
+        mock_db.execute.return_value = mock_result
+
+        service = AuthService(mock_db)
+        with pytest.raises(AppError, match="密钥已过期"):
+            await service.reset_password(raw_token, "new_pw")
+        # 过期后应清除 token
+        assert mock_user.reset_token is None
+        assert mock_user.reset_token_exp is None
