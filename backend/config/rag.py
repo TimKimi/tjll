@@ -20,6 +20,8 @@ class RAGMixin:
     opensearch_verify_certs: bool = False
     # 索引名称（不同实验建议用不同索引隔离）
     opensearch_index: str = "yelp_biz_v1"
+    # 用户洞察专用索引
+    opensearch_insight_index: str = "user_insight_v1"
 
     # ── 向量模型（相对 backend/；权重文件不入 git）──
     # bge-base-zh-v1.5 中文 Embedding 模型路径
@@ -38,6 +40,8 @@ class RAGMixin:
     chunk_size: int = 500
     # 文本块重叠（字符数）
     chunk_overlap: int = 50
+    # 用户洞察拼接/切分目标长度（字符数）
+    insight_chunk_size: int = 800
 
     # ── 检索参数 ─────────────────────────────────────────────
     # 初筛返回条数

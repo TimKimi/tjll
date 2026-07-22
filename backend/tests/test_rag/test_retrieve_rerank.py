@@ -55,8 +55,8 @@ def test_hybrid_search_with_rerank(monkeypatch):
             {
                 "text": "命中",
                 "chunk_id": "c",
-                "document_id": "d",
-                "source_file": "s.pdf",
+                "id": "d",
+                "name": "s.pdf",
                 "chunk_index": 0,
                 "_score": 1.0,
             }

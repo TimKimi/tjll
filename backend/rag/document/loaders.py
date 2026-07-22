@@ -1,9 +1,11 @@
-"""统一文档加载：按后缀返回纯文本 / Markdown。"""
+"""统一文档加载：按后缀返回纯文本 / Markdown；可选切成 chunk（不入库）。"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from backend.rag.document.chunking import split_text_to_chunks
+from backend.rag.document.clean import clean_text
 from backend.rag.document.pdf import parse_pdf_with_mineru
 
 
@@ -40,6 +42,23 @@ def load_document_as_text(file_path: str) -> str:
 
     raise ValueError(
         f"不支持的文件类型: {ext}。支持: .pdf .md .txt .doc .docx .xls .xlsx"
+    )
+
+
+def file_to_chunks(
+    file_path: str,
+    *,
+    chunk_size: int | None = None,
+    chunk_overlap: int | None = None,
+) -> list[str]:
+    """加载文件 → 清洗 → 切分为 chunk 列表（不做 embedding / 入库）。"""
+    text = clean_text(load_document_as_text(file_path))
+    if not text:
+        return []
+    return split_text_to_chunks(
+        text,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
     )
 
 

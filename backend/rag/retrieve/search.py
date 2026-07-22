@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
@@ -175,3 +175,81 @@ def hits_to_documents(hits: list[dict]) -> list[Document]:
             meta["score"] = h["_score"]
         docs.append(Document(page_content=text, metadata=meta))
     return docs
+
+
+def search_insight_text(
+    query: str,
+    *,
+    uuid: str | None = None,
+    index_name: str | None = None,
+    recall_k: int | None = None,
+) -> str:
+    """洞察索引：混合检索 + 精排，只返回一条 chunk 的 text；无结果返回空串。
+
+    若传入 ``uuid``，在 BM25 / knn 两侧加 document_id 过滤。
+    """
+    from backend.rag.retrieve.rerank import rerank_docs
+
+    query = (query or "").strip()
+    if not query:
+        return ""
+    client = get_opensearch_client()
+    index_name = index_name or settings.opensearch_insight_index
+    if not client.indices.exists(index=index_name):
+        return ""
+
+    k = recall_k or settings.retrieval_top_k
+    pipeline = settings.hybrid_pipeline_name
+    ensure_search_pipeline(pipeline)
+    query_vec = embed_query(query)
+    doc_filter = {"term": {"document_id": uuid}} if uuid else None
+
+    bm25_q: dict[str, Any]
+    knn_q: dict[str, Any]
+    if doc_filter is not None:
+        bm25_q = {
+            "bool": {
+                "must": {"match": {"text": {"query": query}}},
+                "filter": [doc_filter],
+            }
+        }
+        knn_q = {
+            "knn": {
+                "embedding": {
+                    "vector": query_vec,
+                    "k": max(k * 4, k),
+                    "filter": doc_filter,
+                }
+            }
+        }
+    else:
+        bm25_q = {"match": {"text": {"query": query}}}
+        knn_q = {
+            "knn": {
+                "embedding": {
+                    "vector": query_vec,
+                    "k": max(k * 4, k),
+                }
+            }
+        }
+
+    body = {
+        "size": k,
+        "query": {"hybrid": {"queries": [bm25_q, knn_q]}},
+        "_source": _SOURCE_EXCLUDES,
+    }
+    try:
+        resp = client.search(
+            index=index_name,
+            body=body,
+            params={"search_pipeline": pipeline},
+        )
+    except Exception:
+        logger.exception("search_insight failed index=%s uuid=%s", index_name, uuid)
+        raise
+
+    hits = _format_hits(resp)
+    docs = rerank_docs(query, hits_to_documents(hits), top_n=1)
+    if not docs:
+        return ""
+    return str(docs[0].page_content or "")

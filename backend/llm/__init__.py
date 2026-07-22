@@ -23,6 +23,7 @@ from backend.llm.graph import (
     get_ask_history,
     release_ask_session,
 )
+from backend.llm.insight import UserInsight, delete_insight_from_opensearch
 from backend.llm.pipeline.rag_pipeline import (
     RagAnswer,
     answer_query,
@@ -51,9 +52,11 @@ __all__ = [
     "HistoryRequest",
     "HistoryResponse",
     "RagSnippet",
+    "UserInsight",
     "ask",
     "delete_ask_histories_by_uuid",
     "delete_ask_history",
+    "delete_insight_from_opensearch",
     "get_ask_history",
     "release_ask_session",
     # 管线 / 客户端

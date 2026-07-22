@@ -147,7 +147,7 @@ delete_ask_histories_by_uuid(uuid="req-550e8400")
       "content": "服务很好，食物新鲜……",
       "metadata": {
         "chunk_id": "biz_pos_0000",
-        "document_id": "biz",
+        "id": "biz",
         "chunk_index": 0,
         "score": 1.23,
         "rerank_score": 0.91,
