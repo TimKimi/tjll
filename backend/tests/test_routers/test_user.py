@@ -2,21 +2,39 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock
 
-from backend.schemas.user import UserProfileResponse
+from backend.database import get_db
+from backend.main import app
 
 
 class TestUserRoutes:
     """测试用户路由端点。"""
 
-    @patch("backend.routers.user.UserService")
-    def test_get_profile(self, mock_service_class, client):
+    def _mock_user(self, **kwargs) -> MagicMock:
+        """创建模拟的 AppUser 实例。"""
+        user = MagicMock()
+        defaults = {
+            "id": "u_abc",
+            "username": "张三",
+            "avatar": "",
+            "is_online": True,
+            "email": "",
+            "bio": "",
+            "register_time": None,
+        }
+        for k, v in {**defaults, **kwargs}.items():
+            setattr(user, k, v)
+        return user
+
+    def _set_user_found(self, user: MagicMock | None) -> None:
+        """配置 mock_db 返回指定用户。"""
+        mock_db = app.dependency_overrides[get_db]()
+        mock_db.execute.return_value.scalar_one_or_none.return_value = user
+
+    def test_get_profile(self, client):
         """获取用户信息。"""
-        mock_instance = mock_service_class.return_value
-        mock_instance.get_profile = AsyncMock(
-            return_value=UserProfileResponse(id="u_abc", username="张三"),
-        )
+        self._set_user_found(self._mock_user(username="张三"))
         response = client.get(
             "/api/user/profile",
             headers={"Authorization": "Bearer test.token"},
@@ -26,26 +44,18 @@ class TestUserRoutes:
         assert data["code"] == 200
         assert data["data"]["username"] == "张三"
 
-    @patch("backend.routers.user.UserService")
-    def test_get_profile_not_found(self, mock_service_class, client):
+    def test_get_profile_not_found(self, client):
         """用户不存在。"""
-        mock_instance = mock_service_class.return_value
-        mock_instance.get_profile = AsyncMock(return_value=None)
+        self._set_user_found(None)
         response = client.get(
             "/api/user/profile",
             headers={"Authorization": "Bearer test.token"},
         )
         assert response.status_code == 404
 
-    @patch("backend.routers.user.UserService")
-    def test_update_profile(self, mock_service_class, client):
+    def test_update_profile(self, client):
         """更新用户信息。"""
-        mock_instance = mock_service_class.return_value
-        mock_instance.update_profile = AsyncMock(
-            return_value=UserProfileResponse(
-                id="u_abc", username="新名字", email="new@example.com"
-            ),
-        )
+        self._set_user_found(self._mock_user(username="张三"))
         response = client.put(
             "/api/user/profile",
             json={"username": "新名字", "email": "new@example.com"},

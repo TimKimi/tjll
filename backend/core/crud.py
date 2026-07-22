@@ -42,16 +42,37 @@ class SingletonConfig:
         reset: 是否注册 POST ``{prefix}/reset`` 路由（需提供 ``default_factory``）。
     """
 
+    # ── ORM / Schema ──
     model: type
     response_schema: type[BaseModel]
     update_schema: type[BaseModel] | None = None
+
+    # ── 所有者绑定 ──
     owner_field: str = "user_id"
     owner_id_from: str = "sub"
+
+    # ── 数据模式 ──
     data_mode: Literal["flat", "json"] = "flat"
     json_column: str | None = None
     default_factory: Callable[[], dict[str, Any]] | None = None
+
+    # ── 路由路径 ──
     prefix: str = ""
+
+    # ── OpenAPI 文档 ──
     tags: list[str] | None = None
+    summary_get: str = "获取详情"
+    summary_update: str = "更新详情"
+    summary_reset: str = "重置为默认值"
+    description_get: str = ""
+    description_update: str = ""
+    description_reset: str = ""
+
+    # ── 错误消息（可自定义） ──
+    error_not_found: str = "记录不存在"
+    error_invalid_data: str = "请求数据无效"
+
+    # ── 开关 ──
     get: bool = True
     update: bool = True
     reset: bool = False
@@ -83,6 +104,13 @@ def register_singleton_routes(
     factory: Callable[[], dict[str, Any]] | None = config.default_factory
     prefix: str = config.prefix
     tags: list[str | Enum] | None = cast("list[str | Enum] | None", config.tags)
+    summary_get: str = config.summary_get
+    summary_update: str = config.summary_update
+    summary_reset: str = config.summary_reset
+    desc_get: str = config.description_get
+    desc_update: str = config.description_update
+    desc_reset: str = config.description_reset
+    err_not_found: str = config.error_not_found
     enable_get: bool = config.get
     enable_update: bool = config.update
     enable_reset: bool = config.reset
@@ -90,7 +118,7 @@ def register_singleton_routes(
     # ── 构建响应 ─────────────────────────────────────────────
     def _build(obj: Any) -> dict[str, Any]:
         if data_mode == "flat":
-            return resp_schema.model_validate(obj).model_dump()
+            return resp_schema.model_validate(obj, from_attributes=True).model_dump()
         assert json_col is not None
         raw = getattr(obj, json_col) or {}
         return resp_schema(
@@ -106,8 +134,12 @@ def register_singleton_routes(
 
         @router.get(
             prefix,
-            summary="获取配置",
+            summary=summary_get,
+            description=desc_get or None,
             response_model=ApiResponse[dict[str, Any]],
+            responses={
+                404: {"description": err_not_found, "model": ApiResponse},
+            },
             tags=tags,
         )
         async def _get_route(
@@ -125,7 +157,7 @@ def register_singleton_routes(
             if factory:
                 data = resp_schema(settings=factory()).model_dump()
                 return ApiResponse.ok(data=data)
-            raise HTTPException(status_code=404, detail="配置不存在")
+            raise HTTPException(status_code=404, detail=err_not_found)
 
         _get_route.__name__ = f"get_{_tag}"
 
@@ -134,8 +166,13 @@ def register_singleton_routes(
 
         @router.put(
             prefix,
-            summary="更新配置",
+            summary=summary_update,
+            description=desc_update or None,
             response_model=ApiResponse[dict[str, Any]],
+            responses={
+                404: {"description": err_not_found, "model": ApiResponse},
+                400: {"description": "请求数据无效", "model": ApiResponse},
+            },
             tags=tags,
         )
         async def _put_route(
@@ -186,8 +223,12 @@ def register_singleton_routes(
 
         @router.post(
             f"{prefix}/reset",
-            summary="重置配置为默认值",
+            summary=summary_reset,
+            description=desc_reset or None,
             response_model=ApiResponse[dict[str, Any]],
+            responses={
+                404: {"description": err_not_found, "model": ApiResponse},
+            },
             tags=tags,
         )
         async def _reset_route(
