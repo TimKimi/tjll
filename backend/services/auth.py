@@ -24,6 +24,7 @@ from backend.schemas.auth import (
     UserInfo,
     UserRole,
 )
+from backend.llm.graph.service import on_user_logout
 
 logger = logging.getLogger("backend.services.auth")
 
@@ -129,6 +130,7 @@ class AuthService:
         if user:
             user.is_online = False
             await self.db.commit()
+            on_user_logout(user.id)
             logger.info("退出登录 id=%s", user_id)
 
     async def forgot_password(self, email: str) -> None:
