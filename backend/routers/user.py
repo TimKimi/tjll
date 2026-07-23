@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,12 @@ from backend.core.crud import SingletonConfig, register_singleton_routes
 from backend.core.dependencies import get_current_user
 from backend.core.exceptions import AppError
 from backend.database import get_db
+from backend.llm import (
+    delete_all_insights,
+    delete_user_insight,
+    get_user_insight,
+    update_user_insight_attrs,
+)
 from backend.models.app_user import AppUser
 from backend.models.user_setting import UserSetting
 from backend.schemas.common import ApiResponse
@@ -137,3 +144,61 @@ async def upload_avatar(
         return ApiResponse.ok(data=result, message="上传成功")
     except AppError as e:
         raise HTTPException(status_code=e.code, detail=e.message)
+
+
+# ═══════════════════════════════════════════════════════════
+# 用户画像
+# ═══════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/insight",
+    summary="获取用户画像",
+    response_model=ApiResponse[dict],
+)
+async def get_user_insight_route(
+    user: dict = Depends(get_current_user),
+) -> ApiResponse[dict]:
+    """获取当前用户的画像属性字典。"""
+    data = get_user_insight(uuid=user["sub"])
+    return ApiResponse.ok(data=data)
+
+
+@router.put(
+    "/insight",
+    summary="更新用户画像",
+    response_model=ApiResponse,
+)
+async def update_user_insight_route(
+    body: dict[str, Any],
+    user: dict = Depends(get_current_user),
+) -> ApiResponse:
+    """更新用户画像属性（全量替换）。传入 ``{key: value, ...}``。"""
+    ok = update_user_insight_attrs(uuid=user["sub"], attrs=body)
+    return ApiResponse.ok(message="画像已更新" if ok else "更新失败")
+
+
+@router.delete(
+    "/insight",
+    summary="删除用户画像",
+    response_model=ApiResponse,
+)
+async def delete_user_insight_route(
+    user: dict = Depends(get_current_user),
+) -> ApiResponse:
+    """删除当前用户的全部画像属性。"""
+    ok = delete_user_insight(uuid=user["sub"])
+    return ApiResponse.ok(message="画像已删除" if ok else "删除失败")
+
+
+@router.delete(
+    "/insights",
+    summary="删除所有画像数据（含各会话）",
+    response_model=ApiResponse,
+)
+async def delete_all_insights_route(
+    user: dict = Depends(get_current_user),
+) -> ApiResponse:
+    """删除当前用户所有画像数据（包含各会话的画像）。"""
+    ok = delete_all_insights(uuid=user["sub"])
+    return ApiResponse.ok(message="所有画像已删除" if ok else "删除失败")
