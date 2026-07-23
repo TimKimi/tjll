@@ -21,6 +21,7 @@ logger = logging.getLogger("tests.conftest")
 
 # 按 FK 依赖顺序排列，避免 DELETE 时违反外键约束
 _TABLES_TO_CLEAN = [
+    "user_settings",
     "favorites",
     "reviews",
     "businesses",

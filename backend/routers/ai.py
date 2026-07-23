@@ -84,12 +84,12 @@ async def ai_ask(
     summary="获取会话历史",
 )
 async def ai_get_history(
-    uuid: str = Query(..., description="用户/请求关联 ID"),
     section_id: str = Query(..., description="会话 ID"),
+    user: dict = Depends(get_current_user),
 ):
     """按 uuid + section_id 返回完整会话历史。"""
     try:
-        result = get_ask_history(uuid=uuid, section_id=section_id)
+        result = get_ask_history(uuid=user["sub"], section_id=section_id)
         return ApiResponse.ok(data=result.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -100,12 +100,12 @@ async def ai_get_history(
     summary="删除单条会话历史",
 )
 async def ai_delete_history(
-    uuid: str = Query(..., description="用户/请求关联 ID"),
     section_id: str = Query(..., description="会话 ID"),
+    user: dict = Depends(get_current_user),
 ):
     """删除指定 uuid + section_id 的会话历史。"""
     try:
-        result = delete_ask_history(uuid=uuid, section_id=section_id)
+        result = delete_ask_history(uuid=user["sub"], section_id=section_id)
         return ApiResponse.ok(data=result.model_dump(), message="已删除")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -116,11 +116,11 @@ async def ai_delete_history(
     summary="删除用户全部会话历史",
 )
 async def ai_delete_histories(
-    uuid: str = Query(..., description="用户/请求关联 ID"),
+    user: dict = Depends(get_current_user),
 ):
-    """删除该 uuid 下的全部会话历史（内存 + Redis）。"""
+    """删除当前用户下的全部会话历史（内存 + Redis）。"""
     try:
-        result = delete_ask_histories_by_uuid(uuid=uuid)
+        result = delete_ask_histories_by_uuid(uuid=user["sub"])
         return ApiResponse.ok(data=result.model_dump(), message="已删除")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -136,10 +136,11 @@ async def ai_delete_histories(
     summary="释放会话槽",
 )
 async def ai_release_session(
-    uuid: str = Query(..., description="用户/请求关联 ID"),
     section_id: str | None = Query(None, description="会话 ID（不传则释放全部）"),
+    user: dict = Depends(get_current_user),
 ):
-    """释放单个或全部会话槽（不删 Redis 历史）。"""
+    """释放当前用户单个或全部会话槽（不删 Redis 历史）。"""
+    uuid = user["sub"]
     if section_id:
         release_ask_session(uuid=uuid, section_id=section_id)
         return ApiResponse.ok(message="会话已释放")
@@ -153,38 +154,38 @@ async def ai_release_session(
 
 
 @router.get("/insight/user", summary="获取用户洞察")
-async def ai_get_user_insight(uuid: str = Query(...)):
-    result = get_user_insight(uuid=uuid)
+async def ai_get_user_insight(user: dict = Depends(get_current_user)):
+    result = get_user_insight(uuid=user["sub"])
     return ApiResponse.ok(data=result.model_dump())
 
 
 @router.get("/insight/section", summary="获取会话洞察")
 async def ai_get_section_insight(
-    uuid: str = Query(...),
     section_id: str = Query(...),
+    user: dict = Depends(get_current_user),
 ):
-    result = get_section_insight(uuid=uuid, section_id=section_id)
+    result = get_section_insight(uuid=user["sub"], section_id=section_id)
     return ApiResponse.ok(data=result.model_dump())
 
 
 @router.delete("/insight/user", summary="删除用户洞察")
-async def ai_delete_user_insight(uuid: str = Query(...)):
-    result = delete_user_insight(uuid=uuid)
+async def ai_delete_user_insight(user: dict = Depends(get_current_user)):
+    result = delete_user_insight(uuid=user["sub"])
     return ApiResponse.ok(data=result.model_dump())
 
 
 @router.delete("/insight/section", summary="删除会话洞察")
 async def ai_delete_section_insight(
-    uuid: str = Query(...),
     section_id: str = Query(...),
+    user: dict = Depends(get_current_user),
 ):
-    result = delete_section_insight(uuid=uuid, section_id=section_id)
+    result = delete_section_insight(uuid=user["sub"], section_id=section_id)
     return ApiResponse.ok(data=result.model_dump())
 
 
 @router.delete("/insight/all", summary="删除全部洞察")
-async def ai_delete_all_insights(uuid: str = Query(...)):
-    result = delete_all_insights(uuid=uuid)
+async def ai_delete_all_insights(user: dict = Depends(get_current_user)):
+    result = delete_all_insights(uuid=user["sub"])
     return ApiResponse.ok(data=result.model_dump())
 
 
@@ -195,12 +196,12 @@ async def ai_delete_all_insights(uuid: str = Query(...)):
 
 @router.post("/document", summary="加载会话文档")
 async def ai_load_document(
-    uuid: str = Query(...),
     section_id: str = Query(...),
     file_path: str = Query(...),
+    user: dict = Depends(get_current_user),
 ):
     result = load_section_document(
-        {"uuid": uuid, "section_id": section_id, "file_path": file_path}
+        {"uuid": user["sub"], "section_id": section_id, "file_path": file_path}
     )
     return ApiResponse.ok(data=result.model_dump())
 
@@ -212,12 +213,12 @@ async def ai_load_document(
 
 @router.post("/interrupt/create", summary="创建澄清问答")
 async def ai_create_interrupt(
-    uuid: str = Query(...),
     section_id: str = Query(...),
     query: str = Query(...),
+    user: dict = Depends(get_current_user),
 ):
     result = create_ask_interrupt(
-        {"uuid": uuid, "section_id": section_id, "query": query}
+        {"uuid": user["sub"], "section_id": section_id, "query": query}
     )
     return ApiResponse.ok(data=result.model_dump())
 
@@ -225,6 +226,7 @@ async def ai_create_interrupt(
 @router.post("/interrupt/submit", summary="提交澄清答案")
 async def ai_submit_interrupt(
     body: AskInterruptSubmitRequest,
+    user: dict = Depends(get_current_user),
 ):
     result = submit_ask_interrupt(body.model_dump())
     return ApiResponse.ok(data=result.model_dump())

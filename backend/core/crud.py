@@ -4,13 +4,11 @@
 支持 flat（直接读写模型属性）和 json（读写 JSON 列内键值）两种模式。
 """
 
-from __future__ import annotations
-
 import logging
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Literal, cast
+from typing import Any, Awaitable, Callable, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -40,6 +38,9 @@ class SingletonConfig:
         get: 是否注册 GET 路由。
         update: 是否注册 PUT 路由。
         reset: 是否注册 POST ``{prefix}/reset`` 路由（需提供 ``default_factory``）。
+        delete: 是否注册 DELETE 路由。
+        on_delete: DELETE 时的回调，参数为 ``(orm_instance, db_session)``，
+            用于清理文件等外部资源。
     """
 
     # ── ORM / Schema ──
@@ -64,18 +65,24 @@ class SingletonConfig:
     summary_get: str = "获取详情"
     summary_update: str = "更新详情"
     summary_reset: str = "重置为默认值"
+    summary_delete: str = "删除记录"
     description_get: str = ""
     description_update: str = ""
     description_reset: str = ""
+    description_delete: str = ""
 
     # ── 错误消息（可自定义） ──
     error_not_found: str = "记录不存在"
     error_invalid_data: str = "请求数据无效"
 
+    # ── 回调 ──
+    on_delete: Callable[[Any, AsyncSession], Awaitable[None]] | None = None
+
     # ── 开关 ──
     get: bool = True
     update: bool = True
     reset: bool = False
+    delete: bool = False
 
     def __post_init__(self) -> None:
         if self.data_mode == "json" and not self.json_column:
@@ -88,7 +95,7 @@ def register_singleton_routes(
     router: APIRouter,
     config: SingletonConfig,
 ) -> None:
-    """在 ``router`` 上注册单例资源的 GET / PUT / reset 路由。"""
+    """在 ``router`` 上注册单例资源的 GET / PUT / reset / DELETE 路由。"""
     _get_db = _make_db_dep()
     _get_user = _make_auth_dep()
     _tag = config.prefix.strip("/").replace("/", "_")
@@ -107,13 +114,19 @@ def register_singleton_routes(
     summary_get: str = config.summary_get
     summary_update: str = config.summary_update
     summary_reset: str = config.summary_reset
+    summary_delete: str = config.summary_delete
     desc_get: str = config.description_get
     desc_update: str = config.description_update
     desc_reset: str = config.description_reset
+    desc_delete: str = config.description_delete
     err_not_found: str = config.error_not_found
     enable_get: bool = config.get
     enable_update: bool = config.update
     enable_reset: bool = config.reset
+    enable_delete: bool = config.delete
+    on_delete_cb: Callable[[Any, AsyncSession], Awaitable[None]] | None = (
+        config.on_delete
+    )
 
     # ── 构建响应 ─────────────────────────────────────────────
     def _build(obj: Any) -> dict[str, Any]:
@@ -124,7 +137,7 @@ def register_singleton_routes(
         return resp_schema(
             id=obj.id,
             user_id=obj.user_id,
-            settings=raw,
+            **{json_col: raw},
             created_at=obj.created_at,
             updated_at=obj.updated_at,
         ).model_dump()
@@ -155,7 +168,11 @@ def register_singleton_routes(
                 return ApiResponse.ok(data=_build(instance))
 
             if factory:
-                data = resp_schema(settings=factory()).model_dump()
+                if data_mode == "flat":
+                    data = resp_schema(**factory()).model_dump()
+                else:
+                    assert json_col is not None
+                    data = resp_schema(**{json_col: factory()}).model_dump()
                 return ApiResponse.ok(data=data)
             raise HTTPException(status_code=404, detail=err_not_found)
 
@@ -176,7 +193,7 @@ def register_singleton_routes(
             tags=tags,
         )
         async def _put_route(
-            req: dict[str, Any],
+            req: upd_schema,  # type: ignore
             db: AsyncSession = Depends(_get_db),
             current_user: dict[str, Any] = Depends(_get_user),
         ) -> ApiResponse[dict[str, Any]]:
@@ -185,9 +202,8 @@ def register_singleton_routes(
                 select(model_cls).where(getattr(model_cls, owner_field) == owner_id)
             )
             instance = result.scalar_one_or_none()
-            # 手动校验请求数据
-            validated = upd_schema(**req)
-            update_data = validated.model_dump(exclude_none=True)
+            # req 已被 FastAPI 用 upd_schema 校验过，直接提取非 None 字段
+            update_data = req.model_dump(exclude_none=True)  # type: ignore[attr-defined]
 
             if not instance:
                 instance = model_cls(
@@ -195,8 +211,15 @@ def register_singleton_routes(
                     **{owner_field: owner_id},
                 )
                 if data_mode == "flat":
-                    for field, value in update_data.items():
-                        setattr(instance, field, value)
+                    # 新建记录：合并默认值 + 请求中的字段
+                    if factory:
+                        merged = dict(factory())
+                        merged.update(update_data)
+                        for field, value in merged.items():
+                            setattr(instance, field, value)
+                    else:
+                        for field, value in update_data.items():
+                            setattr(instance, field, value)
                 else:
                     assert json_col is not None
                     setattr(instance, json_col, update_data)
@@ -268,6 +291,42 @@ def register_singleton_routes(
             return ApiResponse.ok(data=_build(instance), message="已重置为默认值")
 
         _reset_route.__name__ = f"reset_{_tag}"
+
+    # ── DELETE ────────────────────────────────────────────────
+    if enable_delete:
+
+        @router.delete(
+            prefix,
+            summary=summary_delete,
+            description=desc_delete or None,
+            response_model=ApiResponse,
+            responses={
+                404: {"description": err_not_found, "model": ApiResponse},
+            },
+            tags=tags,
+        )
+        async def _delete_route(
+            db: AsyncSession = Depends(_get_db),
+            current_user: dict[str, Any] = Depends(_get_user),
+        ) -> ApiResponse:
+            owner_id = current_user.get(owner_id_from)
+            result: Result[Any] = await db.execute(
+                select(model_cls).where(getattr(model_cls, owner_field) == owner_id)
+            )
+            instance = result.scalar_one_or_none()
+            if not instance:
+                raise HTTPException(status_code=404, detail=err_not_found)
+
+            # 清理外部资源（文件等）
+            if on_delete_cb:
+                await on_delete_cb(instance, db)
+
+            await db.delete(instance)
+            await db.commit()
+            logger.info("记录已删除 owner=%s prefix=%s", owner_id, prefix)
+            return ApiResponse.ok(message="已删除")
+
+        _delete_route.__name__ = f"delete_{_tag}"
 
 
 def _make_db_dep() -> Any:

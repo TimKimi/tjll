@@ -40,10 +40,9 @@ class LlmService:
                 select(UserSetting).where(UserSetting.user_id == owner_id)
             )
             setting = result.scalar_one_or_none()
-            if setting and setting.settings:
-                s = setting.settings
-                cfg_insight_create = bool(s.get("insight_create", False))
-                cfg_insight_use = bool(s.get("insight_use", False))
+            if setting:
+                cfg_insight_create = bool(setting.insight_create)
+                cfg_insight_use = bool(setting.insight_use)
 
         if insight_create is not None:
             cfg_insight_create = insight_create

@@ -64,15 +64,28 @@ class AvatarService:
         avatar_dir = PROJECT_ROOT / _AVATAR_DIR
         avatar_dir.mkdir(parents=True, exist_ok=True)
 
-        # ── 写文件 ──
+        # ── 查询用户（先取旧头像信息，用于后续删旧文件） ──
+        result = await self.db.execute(select(AppUser).where(AppUser.id == user_id))
+        user = result.scalar_one_or_none()
+
+        # ── 删除旧头像文件 ──
+        if user and user.avatar:
+            old_filename = Path(user.avatar).name
+            old_path = avatar_dir / old_filename
+            try:
+                if old_path.exists():
+                    old_path.unlink()
+                    logger.info("已删除旧头像: %s", old_path)
+            except OSError as e:
+                logger.warning("删除旧头像失败: %s, %s", old_path, e)
+
+        # ── 写新文件 ──
         unique_name = f"{user_id}_{uuid.uuid4().hex[:8]}{ext}"
         file_path = avatar_dir / unique_name
         file_path.write_bytes(compressed)
 
         # ── 更新 DB ──
         avatar_url = f"/static/avatars/{unique_name}"
-        result = await self.db.execute(select(AppUser).where(AppUser.id == user_id))
-        user = result.scalar_one_or_none()
         if user:
             user.avatar = avatar_url
             await self.db.commit()
