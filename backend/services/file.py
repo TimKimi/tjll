@@ -35,12 +35,13 @@ class FileService:
     def __init__(self) -> None:
         self._static_dir = Path(__file__).resolve().parent.parent / "static"
 
-    async def upload(self, file: UploadFile, user: dict) -> dict:
-        """上传文件并返回文件信息。
+    async def upload(self, file: UploadFile, user: dict, section_id: str) -> dict:
+        """上传文件到当前会话并返回文件信息。
 
         Args:
             file: 上传的文件（FastAPI 的 UploadFile）。
             user: 当前用户 JWT payload（需包含 ``sub`` 和 ``username``）。
+            section_id: 当前会话 ID，与 AI 对话的 ``section_id`` 对应。
 
         Returns:
             dict: {filename, url, size, mime_type}
@@ -85,9 +86,9 @@ class FileService:
                 code=400,
             )
 
-        # ── 4. 构建存储路径（static/file/{username}/）────
+        # ── 4. 构建存储路径（static/file/{username}/{section_id}/）────
         username = user.get("username", "unknown")
-        user_dir = self._static_dir / "file" / username
+        user_dir = self._static_dir / "file" / username / section_id
         user_dir.mkdir(parents=True, exist_ok=True)
 
         dest = user_dir / safe_name
@@ -100,15 +101,16 @@ class FileService:
 
         file_size = len(content)
         logger.info(
-            "文件上传成功 user=%s name=%s size=%d",
+            "文件上传成功 user=%s section_id=%s name=%s size=%d",
             username,
+            section_id,
             safe_name,
             file_size,
         )
 
         return {
             "filename": safe_name,
-            "url": f"/static/file/{username}/{safe_name}",
+            "url": f"/static/file/{username}/{section_id}/{safe_name}",
             "size": file_size,
             "mime_type": guessed_type or "application/octet-stream",
         }
