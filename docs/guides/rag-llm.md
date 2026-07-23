@@ -292,7 +292,12 @@ submit_ask_interrupt(
 【对话】ask
   → ensure 洞察
   → 附件字段 add_used_filenames（不解析文件）
-  → LangGraph：prepare →（有历史则 rewrite）→ retrieve_rerank
+  → LangGraph：prepare
+      →（有附件）fetch_attachments
+      →（insight_use）fetch_user_insight
+      → fetch_section_insight
+      →（有历史或 insight/attachment）rewrite
+      → retrieve_rerank
   → 流式 LLM 生成 → 本轮写入内存 pending
 
 【释放】finalize
@@ -302,10 +307,6 @@ submit_ask_interrupt(
 ```
 
 契约定义见：`backend/schemas/llm.py`（`backend/llm/schemas.py` 为重导出）；实现见：`backend/llm/graph/service.py`。
-
-### 进阶（一般不需要）
-
-`answer_query` / `answer_query_with_sources` / `stream_answer_query` 仍可从 `backend.llm` 导入（旧 LCEL 管线）；**协作方请优先用流式 `ask`**。
 
 ---
 

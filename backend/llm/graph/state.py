@@ -17,9 +17,11 @@ class AskState(TypedDict, total=False):
     query: str
     section_id: str
     uuid: str
-    insight_create: bool
-    insight_use: bool
     history: list[BaseMessage]
+    insight_use: bool  # 是否检索用户级洞察属性
     search_query: str
-    context: str
+    context: str  # 参考资料（RAG 检索结果）
     answer: str
+    insight: list[str]  # 用户/会话属性片段
+    attachment: list[str]  # 本轮附件文档 chunk
+    attachment_filenames: list[str]  # 本轮附件路径（边检测用）

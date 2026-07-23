@@ -164,6 +164,8 @@ class UserInsight:
 
     def search(self, query: str) -> str:
         """混合检索 + 精排，返回本 uuid 下最优一条 chunk 的 text。"""
+        if self.last_chunk_size <= 0:
+            return ""
         return search_insight_text(query, uuid=self.uuid)
 
     def save_to_redis(self) -> None:

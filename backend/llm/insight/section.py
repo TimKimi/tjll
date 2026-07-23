@@ -364,6 +364,8 @@ class SectionInsight(UserInsight):
 
     def search_section(self, query: str) -> str:
         """检索本会话属性切块（混合 + 精排，返回最优一条）。"""
+        if self.last_section_chunk_size <= 0:
+            return ""
         return search_section_insight_text(
             query, uuid=self.uuid, section_id=self.section_id
         )
@@ -519,6 +521,10 @@ class SectionInsight(UserInsight):
         top_n: int | None = None,
     ) -> list[str]:
         """检索本会话上传文档切块；可选按 filename（source_file）过滤。"""
+        if filename is not None:
+            name = filename.strip()
+            if not name or name not in self._filenames:
+                return []
         return search_section_document_texts(
             query,
             uuid=self.uuid,

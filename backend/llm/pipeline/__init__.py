@@ -1,25 +1,7 @@
-"""RAG 生成链路。"""
+"""RAG 辅助（图路径仍用 format_docs）。"""
 
-from backend.llm.pipeline.chains import (
-    build_full_rag_chain,
-    build_rag_chain,
-    build_rag_chain_with_history,
-    build_rag_chain_with_rerank,
-)
-from backend.llm.pipeline.rag_pipeline import (
-    RagAnswer,
-    answer_query,
-    answer_query_with_sources,
-    stream_answer_query,
-)
+from backend.llm.pipeline.context import format_docs
 
 __all__ = [
-    "RagAnswer",
-    "answer_query",
-    "answer_query_with_sources",
-    "build_full_rag_chain",
-    "build_rag_chain",
-    "build_rag_chain_with_history",
-    "build_rag_chain_with_rerank",
-    "stream_answer_query",
+    "format_docs",
 ]

@@ -629,9 +629,11 @@ def ask(req: AskRequest | dict[str, Any]) -> AskStream:
             "query": request.query,
             "section_id": request.section_id,
             "uuid": request.uuid,
-            "insight_create": request.insight_create,
-            "insight_use": request.insight_use,
             "history": history_before,
+            "insight_use": request.insight_use,
+            "attachment_filenames": list(used_paths),
+            "insight": [],
+            "attachment": [],
         },
         config={
             "configurable": {

@@ -98,8 +98,33 @@ def test_search_section_and_documents_delegate(monkeypatch):
     )
 
     s = SectionInsight("u1", "sec1")
+    s.last_section_chunk_size = 1
+    s._filenames.append("a.md")
     assert s.search_section("你好") == "attr:你好:u1:sec1"
     assert s.search_documents("q", filename="a.md", top_n=2) == ["doc:q:a.md:2"]
+    assert s.search_documents("q", filename="missing.md", top_n=2) == []
+    s.last_section_chunk_size = 0
+    assert s.search_section("你好") == ""
+
+
+def test_user_search_skips_when_no_chunks(monkeypatch):
+    from backend.llm.insight import model as model_mod
+    from backend.llm.insight.model import UserInsight
+
+    called = {"n": 0}
+
+    def boom(*a, **k):
+        called["n"] += 1
+        return "should-not"
+
+    monkeypatch.setattr(model_mod, "search_insight_text", boom)
+    u = UserInsight("u1")
+    assert u.last_chunk_size == 0
+    assert u.search("q") == ""
+    assert called["n"] == 0
+    u.last_chunk_size = 2
+    assert u.search("q") == "should-not"
+    assert called["n"] == 1
 
 
 def test_load_file_pipeline(tmp_path, monkeypatch):

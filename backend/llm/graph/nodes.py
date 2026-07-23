@@ -12,6 +12,7 @@ from backend.config import settings
 from backend.llm.graph.session_pool import get_session_pool
 from backend.llm.graph.state import AskState
 from backend.llm.graph.tools import sources_from_docs
+from backend.llm.insight.registry import ensure_section_insight
 from backend.llm.pipeline.context import format_docs
 from backend.llm.rephrase.rewrite import rewrite_query
 from backend.rag.retrieve import get_retriever, rerank_docs
@@ -87,29 +88,104 @@ def prepare(state: AskState) -> dict[str, Any]:
     if not uuid:
         raise ValueError("uuid is required")
     history = list(state.get("history") or [])
+    filenames = [
+        str(x).strip()
+        for x in (state.get("attachment_filenames") or [])
+        if str(x).strip()
+    ]
     logger.info(
-        "prepare uuid=%s section_id=%s history_msgs=%d query_len=%d",
+        "prepare uuid=%s section_id=%s history_msgs=%d query_len=%d "
+        "insight_use=%s attachment_files=%d",
         uuid,
         section_id,
         len(history),
         len(query),
+        bool(state.get("insight_use")),
+        len(filenames),
     )
     return {
         "query": query,
         "section_id": section_id,
         "uuid": uuid,
-        "insight_create": bool(state.get("insight_create", False)),
-        "insight_use": bool(state.get("insight_use", False)),
         "history": history,
+        "insight_use": bool(state.get("insight_use")),
+        "attachment_filenames": filenames,
+        "insight": [],
+        "attachment": [],
         "search_query": query,
     }
 
 
+def fetch_attachments(state: AskState) -> dict[str, Any]:
+    """按本轮附件路径各检索 1 条文档 chunk → attachment。"""
+    uuid = state["uuid"]
+    section_id = state["section_id"]
+    query = state["query"]
+    section = ensure_section_insight(uuid, section_id)
+    chunks: list[str] = []
+    for path in state.get("attachment_filenames") or []:
+        name = str(path).strip()
+        if not name:
+            continue
+        texts = section.search_documents(query, filename=name, top_n=1)
+        if texts and str(texts[0]).strip():
+            chunks.append(str(texts[0]).strip())
+    logger.info(
+        "fetch_attachments uuid=%s section_id=%s files=%d chunks=%d",
+        uuid,
+        section_id,
+        len(state.get("attachment_filenames") or []),
+        len(chunks),
+    )
+    return {"attachment": chunks}
+
+
+def fetch_user_insight(state: AskState) -> dict[str, Any]:
+    """用户级属性最优片段 → 追加 insight。"""
+    uuid = state["uuid"]
+    section_id = state["section_id"]
+    section = ensure_section_insight(uuid, section_id)
+    text = (section.search(state["query"]) or "").strip()
+    insight = list(state.get("insight") or [])
+    if text:
+        insight.append(text)
+    logger.info(
+        "fetch_user_insight uuid=%s section_id=%s hit=%s",
+        uuid,
+        section_id,
+        bool(text),
+    )
+    return {"insight": insight}
+
+
+def fetch_section_insight(state: AskState) -> dict[str, Any]:
+    """会话属性最优片段 → 追加 insight。"""
+    uuid = state["uuid"]
+    section_id = state["section_id"]
+    section = ensure_section_insight(uuid, section_id)
+    text = (section.search_section(state["query"]) or "").strip()
+    insight = list(state.get("insight") or [])
+    if text:
+        insight.append(text)
+    logger.info(
+        "fetch_section_insight uuid=%s section_id=%s hit=%s",
+        uuid,
+        section_id,
+        bool(text),
+    )
+    return {"insight": insight}
+
+
 def rewrite(state: AskState) -> dict[str, Any]:
-    """结合历史重述检索 query；生成仍用原 query。"""
+    """结合历史 / insight / attachment 合成 search_query；生成仍用原 query。"""
     query = state["query"]
     history = state.get("history") or []
-    search_query = rewrite_query(query, history)
+    search_query = rewrite_query(
+        query,
+        history,
+        insight=state.get("insight"),
+        attachment=state.get("attachment"),
+    )
     return {"search_query": search_query}
 
 

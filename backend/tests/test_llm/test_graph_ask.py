@@ -12,7 +12,12 @@ from backend.llm.graph.builder import (
     release_ask_session,
     reset_ask_graph_cache,
 )
-from backend.llm.graph.router import route_after_history
+from backend.llm.graph.router import (
+    route_after_attachment,
+    route_after_enrich,
+    route_after_history,
+    route_after_user_insight,
+)
 from backend.llm.graph.session_pool import AskSessionPool, get_session_pool
 from backend.llm.graph.tools import sources_from_docs
 from backend.llm.schemas import AskResponse, HistoryMessage, RagSnippet
@@ -61,6 +66,28 @@ def test_route_after_history_with_messages():
     )
 
 
+def test_route_after_attachment():
+    assert route_after_attachment({}) == "fetch_section_insight"
+    assert route_after_attachment({"insight_use": True}) == "fetch_user_insight"
+    assert (
+        route_after_attachment({"attachment_filenames": ["a.md"]})
+        == "fetch_attachments"
+    )
+
+
+def test_route_after_user_insight():
+    assert route_after_user_insight({}) == "fetch_section_insight"
+    assert route_after_user_insight({"insight_use": True}) == "fetch_user_insight"
+
+
+def test_route_after_enrich_with_insight_or_attachment():
+    assert route_after_enrich({"insight": ["x"]}) == "rewrite"
+    assert route_after_enrich({"attachment": ["y"]}) == "rewrite"
+    assert route_after_enrich({"history": [], "insight": [], "attachment": []}) == (
+        "retrieve_rerank"
+    )
+
+
 def test_sources_from_docs_strips_embedding():
     docs = [
         Document(
@@ -97,6 +124,13 @@ def test_retrieve_writes_sources_to_session_not_state(monkeypatch):
     monkeypatch.setattr(
         pool_mod, "get_history", lambda uuid, section_id: _FakeHistory()
     )
+    monkeypatch.setattr(
+        nodes_mod, "fetch_section_insight", lambda state: {"insight": []}
+    )
+    monkeypatch.setattr(nodes_mod, "fetch_user_insight", lambda state: {"insight": []})
+    monkeypatch.setattr(
+        nodes_mod, "fetch_attachments", lambda state: {"attachment": []}
+    )
 
     mem = MemorySaver()
     graph = build_ask_graph(checkpointer=mem)
@@ -111,6 +145,10 @@ def test_retrieve_writes_sources_to_session_not_state(monkeypatch):
             "section_id": "sec-g1",
             "uuid": "u1",
             "history": [],
+            "insight_use": False,
+            "attachment_filenames": [],
+            "insight": [],
+            "attachment": [],
         },
         config={"configurable": {"thread_id": "u1::sec-g1"}},
     )
@@ -211,12 +249,21 @@ def test_graph_ask_stream_service(monkeypatch):
 
     reset_ask_graph_cache()
     monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
-    monkeypatch.setattr(nodes_mod, "rewrite_query", lambda q, h: "改写后的查询")
+    monkeypatch.setattr(
+        nodes_mod, "rewrite_query", lambda q, h, **kwargs: "改写后的查询"
+    )
     monkeypatch.setattr(
         nodes_mod, "get_retriever", lambda mode="hybrid", k=None: FakeRetriever()
     )
     monkeypatch.setattr(nodes_mod, "rerank_docs", lambda q, d, top_n=None: d)
     monkeypatch.setattr(svc, "get_llm", lambda temperature=0.7: _fake_llm("适合"))
+    monkeypatch.setattr(
+        nodes_mod, "fetch_section_insight", lambda state: {"insight": []}
+    )
+    monkeypatch.setattr(nodes_mod, "fetch_user_insight", lambda state: {"insight": []})
+    monkeypatch.setattr(
+        nodes_mod, "fetch_attachments", lambda state: {"attachment": []}
+    )
 
     import backend.llm.insight.store as store_mod
 
