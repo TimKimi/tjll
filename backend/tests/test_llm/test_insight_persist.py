@@ -15,7 +15,7 @@ from backend.llm.insight.registry import (
     get_insight_registry,
 )
 from backend.llm.insight.section import SectionInsight
-from backend.llm.schemas import AskResponse
+from backend.llm.schemas import AskParams, AskResult
 
 
 class _FakeRedis:
@@ -127,12 +127,8 @@ def test_load_section_document_calls_load_file_and_deletes(tmp_path, monkeypatch
         lambda *a, **k: (1, []),
     )
 
-    out = svc.load_section_document(
-        {"uuid": "u1", "section_id": "s1", "file_path": str(f)}
-    )
-    assert out.chunks == 1
-    assert out.source_file == "note.md"
-    assert "note.md" in out.filenames
+    ok = svc.load_section_document(uuid="u1", section_id="s1", file_path=str(f))
+    assert ok is True
     assert not f.exists()
     section = ensure_section_insight("u1", "s1")
     assert "note.md" in section.filenames()
@@ -179,16 +175,16 @@ def test_ask_marks_used_without_load_file(monkeypatch):
     get_session_pool().set_shared_graph(graph, mem)
 
     stream = svc.ask(
-        {
-            "query": "你好",
-            "uuid": "u-ask",
-            "section_id": "s-ask",
-            "md": "docs/note.md",
-        }
+        AskParams(
+            query="你好",
+            uuid="u-ask",
+            section_id="s-ask",
+            md="docs/note.md",
+        )
     )
     assert "".join(stream) == "ok"
     resp = stream.response
-    assert isinstance(resp, AskResponse)
+    assert isinstance(resp, AskResult)
     assert resp.query_filename == "docs/note.md"
     assert called == []
     sec = ensure_section_insight("u-ask", "s-ask")

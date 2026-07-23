@@ -131,9 +131,10 @@ def get_ask_session(
     return get_session_pool().get_or_create(uuid, section_id)
 
 
-def release_ask_session(uuid: str, section_id: str) -> None:
+def release_ask_session(uuid: str, section_id: str) -> bool:
     """显式释放会话并刷 Redis 历史；uuid 与 section_id 均必填。"""
     get_session_pool().release(uuid, section_id)
+    return True
 
 
 def reset_ask_graph_cache() -> None:

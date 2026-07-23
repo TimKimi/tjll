@@ -184,6 +184,16 @@ def make_session_key(uuid: str, section_id: str) -> str:
     return make_history_session_id(uuid, section_id)
 
 
+def session_history(uuid: str, section_id: str) -> list[BaseMessage]:
+    """从图节点/路由读取内存历史；不从 Redis 重载。"""
+    session = get_session_pool().get_or_create(
+        uuid,
+        section_id,
+        load_history=False,
+    )
+    return list(session.history)
+
+
 class AskSessionPool:
     """最多 MAX_SESSIONS 个会话；空闲超时 / 显式释放 / LRU 时 finalize。"""
 

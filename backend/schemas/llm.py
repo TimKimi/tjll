@@ -1,20 +1,18 @@
-"""AI / LLM 请求/响应模型。
+"""AI / LLM 协作模型（Python 门面，非 HTTP DTO）。
 
-集中存放后端服务与 AI 模块交互所用的全部 Pydantic 模型。
-外部模块请直接 ``from backend.schemas.llm import ...``。
+外部模块请 ``from backend.schemas.llm import ...`` 或 ``from backend.llm import ...``。
+结构体禁止以 Request/Response 结尾；路由层由对接方自行封装。
 """
 
 from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
 class RagSnippet(BaseModel):
     """单条 RAG 片段：正文 + 索引元字段（不含 embedding）。"""
-
-    model_config = ConfigDict(extra="ignore")
 
     content: str = Field(..., description="片段正文（text）")
     metadata: dict[str, Any] = Field(
@@ -26,8 +24,6 @@ class RagSnippet(BaseModel):
 class HistoryMessage(BaseModel):
     """会话历史单条（对外不含 search_query）。"""
 
-    model_config = ConfigDict(extra="ignore")
-
     role: Literal["user", "assistant", "system"] = Field(..., description="角色")
     content: str = Field(..., description="消息正文")
     filename: str | None = Field(
@@ -36,11 +32,11 @@ class HistoryMessage(BaseModel):
     )
     insight_create: bool | None = Field(
         default=None,
-        description="用户轮：该次请求是否要求创建洞察；助手/系统轮为 null",
+        description="用户轮：该次是否要求创建洞察；助手/系统为 null",
     )
     insight_use: bool | None = Field(
         default=None,
-        description="用户轮：该次请求是否使用洞察；助手/系统轮为 null",
+        description="用户轮：该次是否使用洞察；助手/系统为 null",
     )
     sources: list[RagSnippet] | None = Field(
         default=None,
@@ -48,10 +44,8 @@ class HistoryMessage(BaseModel):
     )
 
 
-class AskRequest(BaseModel):
-    """ask() 入参。附件字段可传，当前忽略。"""
-
-    model_config = ConfigDict(extra="ignore")
+class AskParams(BaseModel):
+    """ask() 入参。"""
 
     query: str = Field(..., min_length=1, description="用户问题")
     section_id: str = Field(..., min_length=1, description="会话/分区 ID（历史 key）")
@@ -70,10 +64,8 @@ class AskRequest(BaseModel):
     insight_use: bool = Field(default=False, description="是否使用洞察")
 
 
-class AskResponse(BaseModel):
-    """ask() 响应（不含会话历史；历史请用 get_ask_history）。"""
-
-    model_config = ConfigDict(extra="ignore")
+class AskResult(BaseModel):
+    """ask() 完整结果（不含会话历史；历史请用 get_ask_history）。"""
 
     query: str
     section_id: str
@@ -85,45 +77,12 @@ class AskResponse(BaseModel):
     )
     query_filename: str = Field(
         default="",
-        description="当前轮用户请求附带的文件名；暂为空，后续维护",
+        description="当前轮用户请求附带的文件名（逗号拼接路径）",
     )
 
 
-class AskChatRequest(BaseModel):
-    """AI 对话请求（HTTP 端点）。"""
-
-    model_config = {"extra": "ignore"}
-
-    query: str = Field(..., min_length=1, description="用户问题")
-    section_id: str = Field(..., min_length=1, description="会话 ID")
-    file_paths: list[str] = Field(
-        default_factory=list,
-        description="附件文件路径（需先上传到 static/file/{username}/{section_id}/）",
-    )
-    insight_create: bool | None = Field(
-        default=None,
-        description="覆盖用户全局配置：是否创建洞察（None=使用用户配置）",
-    )
-    insight_use: bool | None = Field(
-        default=None,
-        description="覆盖用户全局配置：是否使用洞察（None=使用用户配置）",
-    )
-    stream: bool = Field(default=True, description="是否流式返回")
-
-
-class HistoryRequest(BaseModel):
-    """拉取/删除单个会话历史，或按会话操作洞察的入参。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str = Field(..., min_length=1, description="用户/请求关联 ID")
-    section_id: str = Field(..., min_length=1, description="会话/分区 ID")
-
-
-class HistoryResponse(BaseModel):
+class AskHistory(BaseModel):
     """完整会话历史（含扩展字段，不含 search_query）。"""
-
-    model_config = ConfigDict(extra="ignore")
 
     uuid: str
     section_id: str
@@ -138,22 +97,8 @@ class HistoryResponse(BaseModel):
     )
 
 
-class UuidRequest(BaseModel):
-    """仅 uuid 的通用入参。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str = Field(..., min_length=1, description="用户/请求关联 ID")
-
-
-class DeleteHistoryByUuidRequest(UuidRequest):
-    """按 uuid 删除该用户全部会话历史的入参。"""
-
-
-class DeleteHistoryResponse(BaseModel):
-    """删除历史结果。"""
-
-    model_config = ConfigDict(extra="ignore")
+class DeleteHistoryResult(BaseModel):
+    """按 uuid 删除全部会话历史的结果。"""
 
     uuid: str
     section_id: str | None = Field(
@@ -167,145 +112,8 @@ class DeleteHistoryResponse(BaseModel):
     )
 
 
-class ReleaseSessionsResponse(BaseModel):
-    """按 uuid 释放会话池 / 登出清池的结果。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str
-    released_sessions: int = Field(..., description="释放的会话槽数量")
-    section_ids: list[str] = Field(
-        default_factory=list,
-        description="被释放的 section_id 列表",
-    )
-
-
-class DeleteInsightResponse(BaseModel):
-    """删除洞察结果（占位）。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str
-    section_id: str | None = Field(
-        default=None,
-        description="单会话删除时回传；否则 null",
-    )
-    deleted: bool = Field(..., description="是否视为删除成功（占位）")
-    scope: Literal["user", "section", "all"] = Field(
-        ...,
-        description="删除范围：用户总体 / 单会话 / 全部",
-    )
-
-
-class UserInsightResponse(BaseModel):
-    """用户总体洞察属性查询。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str
-    attrs: dict[str, str] = Field(default_factory=dict)
-
-
-class SectionInsightResponse(BaseModel):
-    """会话洞察属性查询（日后可动态合并父类属性）。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str
-    section_id: str
-    attrs: dict[str, str] = Field(default_factory=dict)
-    filenames: list[str] = Field(default_factory=list)
-
-
-class UpdateUserInsightAttrsRequest(BaseModel):
-    """批量更新用户总体洞察属性。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str = Field(..., min_length=1)
-    attrs: dict[str, Any] = Field(default_factory=dict)
-
-
-class UpdateSectionInsightAttrsRequest(BaseModel):
-    """批量更新会话洞察属性。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str = Field(..., min_length=1)
-    section_id: str = Field(..., min_length=1)
-    attrs: dict[str, Any] = Field(default_factory=dict)
-
-
-class SectionFactsResponse(BaseModel):
-    """会话 facts 读取。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str
-    section_id: str
-    facts: list[str] = Field(default_factory=list)
-
-
-class UpdateSectionFactsRequest(BaseModel):
-    """会话 facts 写入（语义对齐 SectionInsight.add_facts）。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str = Field(..., min_length=1)
-    section_id: str = Field(..., min_length=1)
-    items: list[str] = Field(default_factory=list)
-    start: int | None = Field(
-        default=None,
-        description="1-based：从第 start 条起截断再追加；None 表示仅追加",
-    )
-
-
-class SectionReviewResponse(BaseModel):
-    """会话 review 读取。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str
-    section_id: str
-    review: str = ""
-
-
-class SetSectionReviewRequest(BaseModel):
-    """会话 review 覆盖写入。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str = Field(..., min_length=1)
-    section_id: str = Field(..., min_length=1)
-    text: str = ""
-
-
-class LoadSectionDocumentRequest(BaseModel):
-    """加载并处理会话文档。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str = Field(..., min_length=1)
-    section_id: str = Field(..., min_length=1)
-    file_path: str = Field(..., min_length=1, description="相对 tjll 仓库根的路径")
-
-
-class LoadSectionDocumentResponse(BaseModel):
-    """文档处理结果（占位）。"""
-
-    model_config = ConfigDict(extra="ignore")
-
-    uuid: str
-    section_id: str
-    source_file: str = ""
-    chunks: int = 0
-    filenames: list[str] = Field(default_factory=list)
-
-
-class AskInterruptCreateRequest(BaseModel):
-    """创建 ask interrupt 澄清问卷。"""
-
-    model_config = ConfigDict(extra="ignore")
+class AskInterruptCreateParams(BaseModel):
+    """创建 ask interrupt 澄清问卷入参。"""
 
     uuid: str = Field(..., min_length=1)
     section_id: str = Field(..., min_length=1)
@@ -315,17 +123,13 @@ class AskInterruptCreateRequest(BaseModel):
 class AskInterruptQuestion(BaseModel):
     """单道澄清题：选项最后一项约定为「其他」。"""
 
-    model_config = ConfigDict(extra="ignore")
-
     id: str
     prompt: str
     options: list[str] = Field(default_factory=list)
 
 
-class AskInterruptCreateResponse(BaseModel):
+class AskInterruptCreateResult(BaseModel):
     """澄清问卷创建结果（占位可返回空 questions）。"""
-
-    model_config = ConfigDict(extra="ignore")
 
     uuid: str
     section_id: str
@@ -336,16 +140,12 @@ class AskInterruptCreateResponse(BaseModel):
 class AskInterruptAnswerItem(BaseModel):
     """单题答案：answer 为选项原文或自定义文本（非序号）。"""
 
-    model_config = ConfigDict(extra="ignore")
-
     question_id: str = Field(..., min_length=1)
     answer: str = Field(..., min_length=1)
 
 
-class AskInterruptSubmitRequest(BaseModel):
-    """提交澄清问卷答案。"""
-
-    model_config = ConfigDict(extra="ignore")
+class AskInterruptSubmitParams(BaseModel):
+    """提交澄清问卷答案入参。"""
 
     uuid: str = Field(..., min_length=1)
     section_id: str = Field(..., min_length=1)
@@ -353,10 +153,8 @@ class AskInterruptSubmitRequest(BaseModel):
     answers: list[AskInterruptAnswerItem] = Field(default_factory=list)
 
 
-class AskInterruptSubmitResponse(BaseModel):
+class AskInterruptSubmitResult(BaseModel):
     """澄清答案受理结果（占位）。"""
-
-    model_config = ConfigDict(extra="ignore")
 
     uuid: str
     section_id: str

@@ -9,7 +9,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from backend.config import settings
-from backend.llm.graph.session_pool import get_session_pool
+from backend.llm.graph.session_pool import get_session_pool, session_history
 from backend.llm.graph.state import AskState
 from backend.llm.graph.tools import sources_from_docs
 from backend.llm.insight.registry import ensure_section_insight
@@ -87,18 +87,18 @@ def prepare(state: AskState) -> dict[str, Any]:
         raise ValueError("section_id is required")
     if not uuid:
         raise ValueError("uuid is required")
-    history = list(state.get("history") or [])
     filenames = [
         str(x).strip()
         for x in (state.get("attachment_filenames") or [])
         if str(x).strip()
     ]
+    history_len = len(session_history(uuid, section_id))
     logger.info(
         "prepare uuid=%s section_id=%s history_msgs=%d query_len=%d "
         "insight_use=%s attachment_files=%d",
         uuid,
         section_id,
-        len(history),
+        history_len,
         len(query),
         bool(state.get("insight_use")),
         len(filenames),
@@ -107,7 +107,6 @@ def prepare(state: AskState) -> dict[str, Any]:
         "query": query,
         "section_id": section_id,
         "uuid": uuid,
-        "history": history,
         "insight_use": bool(state.get("insight_use")),
         "attachment_filenames": filenames,
         "insight": [],
@@ -179,7 +178,7 @@ def fetch_section_insight(state: AskState) -> dict[str, Any]:
 def rewrite(state: AskState) -> dict[str, Any]:
     """结合历史 / insight / attachment 合成 search_query；生成仍用原 query。"""
     query = state["query"]
-    history = state.get("history") or []
+    history = session_history(state["uuid"], state["section_id"])
     search_query = rewrite_query(
         query,
         history,
