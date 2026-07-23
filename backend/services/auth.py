@@ -16,6 +16,7 @@ from backend.config import settings
 from backend.core.email import send_email
 from backend.core.exceptions import AppError
 from backend.core.security import create_token, hash_password, verify_password
+from backend.llm import get_section_ids, release_ask_sessions_by_uuid
 from backend.models.app_user import AppUser
 from backend.schemas.auth import (
     LoginRequest,
@@ -24,7 +25,6 @@ from backend.schemas.auth import (
     UserInfo,
     UserRole,
 )
-from backend.llm.graph.service import on_user_logout
 
 logger = logging.getLogger("backend.services.auth")
 
@@ -108,7 +108,15 @@ class AuthService:
         user.is_online = True
         await self.db.commit()
 
-        logger.info("登录成功 id=%s username=%s", user.id, user.username)
+        # 获取该用户已有的会话列表，前端用于恢复历史会话
+        sections = get_section_ids(uuid=user.id)
+
+        logger.info(
+            "登录成功 id=%s username=%s sections=%d",
+            user.id,
+            user.username,
+            len(sections),
+        )
         return TokenResponse(
             token=token,
             user=UserInfo(
@@ -121,6 +129,7 @@ class AuthService:
                 register_time=user.register_time,
                 role=UserRole.ADMIN if user.role == "admin" else UserRole.USER,
             ),
+            sections=sections,
         )
 
     async def logout(self, user_id: str) -> None:
@@ -130,7 +139,7 @@ class AuthService:
         if user:
             user.is_online = False
             await self.db.commit()
-            on_user_logout(user.id)
+            release_ask_sessions_by_uuid(user.id)
             logger.info("退出登录 id=%s", user_id)
 
     async def forgot_password(self, email: str) -> None:
