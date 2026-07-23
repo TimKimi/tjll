@@ -1,4 +1,4 @@
-"""查询重述：首轮跳过，有历史时改写检索 query。"""
+"""查询重述：首轮且无洞察/附件时跳过；否则改写并清洗进 search_query。"""
 
 from __future__ import annotations
 
@@ -22,20 +22,69 @@ def has_history(history: Sequence[BaseMessage] | None) -> bool:
     return any(isinstance(m, (HumanMessage, AIMessage)) for m in history)
 
 
+def _nonempty_texts(items: Sequence[str] | None) -> list[str]:
+    if not items:
+        return []
+    return [str(x).strip() for x in items if str(x).strip()]
+
+
+def needs_rewrite(
+    history: Sequence[BaseMessage] | None,
+    *,
+    insight: Sequence[str] | None = None,
+    attachment: Sequence[str] | None = None,
+) -> bool:
+    """insight 非空 或 attachment 非空 或 非首轮 → 需要改写。"""
+    if has_history(history):
+        return True
+    if _nonempty_texts(insight):
+        return True
+    if _nonempty_texts(attachment):
+        return True
+    return False
+
+
+def _format_block(title: str, items: Sequence[str]) -> str:
+    lines = [f"- {t}" for t in items]
+    return f"{title}:\n" + "\n".join(lines)
+
+
 def build_rephrase_chain():
     """查询重述子链：temperature=settings.llm_rewrite_temperature。"""
     llm = get_llm(temperature=settings.llm_rewrite_temperature)
     return REPHRASE_PROMPT | llm | StrOutputParser()
 
 
-def rewrite_query(query: str, history: Sequence[BaseMessage] | None) -> str:
-    """首轮跳过重述；有历史时结合上下文改写检索 query。"""
-    if not has_history(history):
-        logger.info("rewrite skipped (no history) query=%r", query)
+def rewrite_query(
+    query: str,
+    history: Sequence[BaseMessage] | None,
+    *,
+    insight: Sequence[str] | None = None,
+    attachment: Sequence[str] | None = None,
+) -> str:
+    """合成检索用 search_query；跳过条件与 needs_rewrite 一致。"""
+    insight_list = _nonempty_texts(insight)
+    attachment_list = _nonempty_texts(attachment)
+    if not needs_rewrite(history, insight=insight_list, attachment=attachment_list):
+        logger.info(
+            "rewrite skipped (first turn, no insight/attachment) query=%r", query
+        )
         return query
+
+    insight_block = (
+        _format_block("相关属性", insight_list) if insight_list else "（无）"
+    )
+    attachment_block = (
+        _format_block("相关文档", attachment_list) if attachment_list else "（无）"
+    )
     rephrase = build_rephrase_chain()
     rewritten = rephrase.invoke(
-        {"query": query, "history": list(history or [])}
+        {
+            "query": query,
+            "history": list(history or []),
+            "insight_block": insight_block,
+            "attachment_block": attachment_block,
+        }
     ).strip()
     out = rewritten or query
     logger.info("rewrite before=%r after=%r", query, out)

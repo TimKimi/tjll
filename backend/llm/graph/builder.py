@@ -11,7 +11,11 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.config import settings
 from backend.llm.graph import nodes
-from backend.llm.graph.router import route_after_history
+from backend.llm.graph.router import (
+    route_after_attachment,
+    route_after_enrich,
+    route_after_user_insight,
+)
 from backend.llm.graph.session_pool import AskSession, get_session_pool
 from backend.llm.graph.state import AskState
 
@@ -38,13 +42,34 @@ def build_ask_graph(
     # cast: ty/langgraph StateT bound 与 typing.TypedDict(total=False) 推断不完全兼容
     graph = StateGraph(cast(Any, AskState))
     graph.add_node("prepare", nodes.prepare)
+    graph.add_node("fetch_attachments", nodes.fetch_attachments)
+    graph.add_node("fetch_user_insight", nodes.fetch_user_insight)
+    graph.add_node("fetch_section_insight", nodes.fetch_section_insight)
     graph.add_node("rewrite", nodes.rewrite)
     graph.add_node("retrieve_rerank", nodes.retrieve_rerank)
 
     graph.add_edge(START, "prepare")
     graph.add_conditional_edges(
         "prepare",
-        route_after_history,
+        route_after_attachment,
+        {
+            "fetch_attachments": "fetch_attachments",
+            "fetch_user_insight": "fetch_user_insight",
+            "fetch_section_insight": "fetch_section_insight",
+        },
+    )
+    graph.add_conditional_edges(
+        "fetch_attachments",
+        route_after_user_insight,
+        {
+            "fetch_user_insight": "fetch_user_insight",
+            "fetch_section_insight": "fetch_section_insight",
+        },
+    )
+    graph.add_edge("fetch_user_insight", "fetch_section_insight")
+    graph.add_conditional_edges(
+        "fetch_section_insight",
+        route_after_enrich,
         {
             "rewrite": "rewrite",
             "retrieve_rerank": "retrieve_rerank",
@@ -106,9 +131,10 @@ def get_ask_session(
     return get_session_pool().get_or_create(uuid, section_id)
 
 
-def release_ask_session(uuid: str, section_id: str) -> None:
+def release_ask_session(uuid: str, section_id: str) -> bool:
     """显式释放会话并刷 Redis 历史；uuid 与 section_id 均必填。"""
     get_session_pool().release(uuid, section_id)
+    return True
 
 
 def reset_ask_graph_cache() -> None:
@@ -117,3 +143,6 @@ def reset_ask_graph_cache() -> None:
     _compiled = None
     _checkpointer = None
     get_session_pool().reset()
+    from backend.llm.insight.registry import get_insight_registry
+
+    get_insight_registry().reset()

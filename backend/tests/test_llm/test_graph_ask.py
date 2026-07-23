@@ -12,10 +12,15 @@ from backend.llm.graph.builder import (
     release_ask_session,
     reset_ask_graph_cache,
 )
-from backend.llm.graph.router import route_after_history
+from backend.llm.graph.router import (
+    route_after_attachment,
+    route_after_enrich,
+    route_after_history,
+    route_after_user_insight,
+)
 from backend.llm.graph.session_pool import AskSessionPool, get_session_pool
 from backend.llm.graph.tools import sources_from_docs
-from backend.llm.schemas import AskResponse, HistoryMessage, RagSnippet
+from backend.llm.schemas import AskParams, AskResult, HistoryMessage, RagSnippet
 
 
 class _FakeHistory:
@@ -47,18 +52,50 @@ def _fake_llm(content: str = "图回答"):
     return _FakeStreamLLM()
 
 
-def test_route_after_history_empty():
-    assert route_after_history({"history": []}) == "retrieve_rerank"
-    assert route_after_history({}) == "retrieve_rerank"
+def test_route_after_history_empty(monkeypatch):
+    import backend.llm.graph.session_pool as pool_mod
 
-
-def test_route_after_history_with_messages():
-    assert (
-        route_after_history(
-            {"history": [HumanMessage(content="hi"), AIMessage(content="yo")]}
-        )
-        == "rewrite"
+    monkeypatch.setattr(
+        pool_mod, "get_history", lambda uuid, section_id: _FakeHistory()
     )
+    reset_ask_graph_cache()
+    assert route_after_history({}) == "retrieve_rerank"
+    assert (
+        route_after_history({"uuid": "u-empty", "section_id": "s-empty"})
+        == "retrieve_rerank"
+    )
+
+
+def test_route_after_history_with_messages(monkeypatch):
+    import backend.llm.graph.session_pool as pool_mod
+
+    monkeypatch.setattr(
+        pool_mod, "get_history", lambda uuid, section_id: _FakeHistory()
+    )
+    reset_ask_graph_cache()
+    session = get_session_pool().get_or_create("u-hist", "s-hist", load_history=False)
+    session.history = [HumanMessage(content="hi"), AIMessage(content="yo")]
+    assert route_after_history({"uuid": "u-hist", "section_id": "s-hist"}) == "rewrite"
+
+
+def test_route_after_attachment():
+    assert route_after_attachment({}) == "fetch_section_insight"
+    assert route_after_attachment({"insight_use": True}) == "fetch_user_insight"
+    assert (
+        route_after_attachment({"attachment_filenames": ["a.md"]})
+        == "fetch_attachments"
+    )
+
+
+def test_route_after_user_insight():
+    assert route_after_user_insight({}) == "fetch_section_insight"
+    assert route_after_user_insight({"insight_use": True}) == "fetch_user_insight"
+
+
+def test_route_after_enrich_with_insight_or_attachment():
+    assert route_after_enrich({"insight": ["x"]}) == "rewrite"
+    assert route_after_enrich({"attachment": ["y"]}) == "rewrite"
+    assert route_after_enrich({"insight": [], "attachment": []}) == "retrieve_rerank"
 
 
 def test_sources_from_docs_strips_embedding():
@@ -97,6 +134,13 @@ def test_retrieve_writes_sources_to_session_not_state(monkeypatch):
     monkeypatch.setattr(
         pool_mod, "get_history", lambda uuid, section_id: _FakeHistory()
     )
+    monkeypatch.setattr(
+        nodes_mod, "fetch_section_insight", lambda state: {"insight": []}
+    )
+    monkeypatch.setattr(nodes_mod, "fetch_user_insight", lambda state: {"insight": []})
+    monkeypatch.setattr(
+        nodes_mod, "fetch_attachments", lambda state: {"attachment": []}
+    )
 
     mem = MemorySaver()
     graph = build_ask_graph(checkpointer=mem)
@@ -110,7 +154,10 @@ def test_retrieve_writes_sources_to_session_not_state(monkeypatch):
             "query": "问题",
             "section_id": "sec-g1",
             "uuid": "u1",
-            "history": [],
+            "insight_use": False,
+            "attachment_filenames": [],
+            "insight": [],
+            "attachment": [],
         },
         config={"configurable": {"thread_id": "u1::sec-g1"}},
     )
@@ -134,7 +181,7 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
         return fake_by_key[key]
 
     monkeypatch.setattr(pool_mod, "get_history", fake_get_history)
-    pool = AskSessionPool(max_size=2)
+    pool = AskSessionPool(max_size=2, start_sweeper=False)
     s1 = pool.get_or_create("a", "s1")
     s1.append_turn(
         "q1",
@@ -144,6 +191,7 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
         insight_create=True,
         sources=[{"content": "c1", "metadata": {}}],
     )
+    assert fake_by_key.get("a::s1") is None or fake_by_key["a::s1"].added == []
     s2 = pool.get_or_create("b", "s2")
     s2.append_turn("q2", "a2", search_query="q2", filename="", sources=[])
     _s3 = pool.get_or_create("c", "s3")
@@ -153,7 +201,31 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
     assert flushed[0].content == "q1"
     assert flushed[0].additional_kwargs["search_query"] == "q1"
     assert flushed[0].additional_kwargs["insight_create"] is True
+    assert flushed[0].additional_kwargs["used"] is False
     assert flushed[1].additional_kwargs["sources"][0]["content"] == "c1"
+    assert flushed[1].additional_kwargs["used"] is False
+
+
+def test_session_pool_idle_sweep(monkeypatch):
+    import backend.llm.graph.session_pool as pool_mod
+
+    fake_by_key: dict[str, _FakeHistory] = {}
+
+    def fake_get_history(uuid: str, section_id: str) -> _FakeHistory:
+        key = f"{uuid}::{section_id}"
+        if key not in fake_by_key:
+            fake_by_key[key] = _FakeHistory()
+        return fake_by_key[key]
+
+    monkeypatch.setattr(pool_mod, "get_history", fake_get_history)
+    pool = AskSessionPool(max_size=5, idle_seconds=10, start_sweeper=False)
+    s1 = pool.get_or_create("a", "s1")
+    s1.append_turn("q", "a", search_query="q")
+    s1.last_used = 0.0
+    released = pool.sweep_idle(now=100.0)
+    assert released == ["a::s1"]
+    assert "a::s1" not in pool._sessions
+    assert len(fake_by_key["a::s1"].added) == 2
 
 
 def test_graph_ask_stream_service(monkeypatch):
@@ -186,12 +258,38 @@ def test_graph_ask_stream_service(monkeypatch):
 
     reset_ask_graph_cache()
     monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
-    monkeypatch.setattr(nodes_mod, "rewrite_query", lambda q, h: "改写后的查询")
+    monkeypatch.setattr(
+        nodes_mod, "rewrite_query", lambda q, h, **kwargs: "改写后的查询"
+    )
     monkeypatch.setattr(
         nodes_mod, "get_retriever", lambda mode="hybrid", k=None: FakeRetriever()
     )
     monkeypatch.setattr(nodes_mod, "rerank_docs", lambda q, d, top_n=None: d)
     monkeypatch.setattr(svc, "get_llm", lambda temperature=0.7: _fake_llm("适合"))
+    monkeypatch.setattr(
+        nodes_mod, "fetch_section_insight", lambda state: {"insight": []}
+    )
+    monkeypatch.setattr(nodes_mod, "fetch_user_insight", lambda state: {"insight": []})
+    monkeypatch.setattr(
+        nodes_mod, "fetch_attachments", lambda state: {"attachment": []}
+    )
+
+    import backend.llm.insight.store as store_mod
+
+    class _EmptyRedis:
+        def get(self, key: str):
+            return None
+
+        def set(self, *a, **k):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(store_mod, "_client", lambda: _EmptyRedis())
+    from backend.llm.insight.registry import get_insight_registry
+
+    get_insight_registry().reset()
 
     mem = MemorySaver()
     graph = build_ask_graph(checkpointer=mem)
@@ -200,24 +298,24 @@ def test_graph_ask_stream_service(monkeypatch):
     get_session_pool().set_shared_graph(graph, mem)
 
     stream = svc.ask(
-        {
-            "query": "适合约会吗",
-            "section_id": "sec-1",
-            "uuid": "req-9",
-            "insight_create": True,
-            "insight_use": False,
-        }
+        AskParams(
+            query="适合约会吗",
+            section_id="sec-1",
+            uuid="req-9",
+            insight_create=True,
+            insight_use=False,
+        )
     )
     text = "".join(stream)
     assert text == "适合"
     resp = stream.response
-    assert isinstance(resp, AskResponse)
+    assert isinstance(resp, AskResult)
     assert resp.uuid == "req-9"
     assert resp.answer == "适合"
     assert resp.query_filename == ""
     assert len(resp.sources) == 1
     assert resp.sources[0].content == "服务很好"
-    assert "history" not in AskResponse.model_fields
+    assert "history" not in AskResult.model_fields
 
     hist = svc.get_ask_history(uuid="req-9", section_id="sec-1")
     assert hist.uuid == "req-9"
@@ -245,20 +343,22 @@ def test_graph_ask_stream_service(monkeypatch):
     assert "search_query" not in dumped
     assert "insight_create" in dumped
     assert "insight_use" in dumped
+    assert "used" not in dumped
 
-    # 每轮结束已刷 Redis
+    # ask 后仍 pending；release 才刷 Redis
+    assert len(redis_hist.added) == 0
+    session = get_ask_session("req-9", "sec-1", checkpointer=mem)
+    assert len(session.pending_turns) == 1
+
+    assert release_ask_session("req-9", "sec-1") is True
     assert len(redis_hist.added) == 2
     assert redis_hist.added[0].content == "适合约会吗"
     assert redis_hist.added[0].additional_kwargs["search_query"] == "改写后的查询"
     assert redis_hist.added[0].additional_kwargs["insight_create"] is True
     assert redis_hist.added[0].additional_kwargs["insight_use"] is False
+    assert redis_hist.added[0].additional_kwargs["used"] is False
     assert redis_hist.added[1].content == "适合"
-
-    session = get_ask_session("req-9", "sec-1", checkpointer=mem)
-    assert session.pending_turns == []
-
-    release_ask_session("req-9", "sec-1")
-    assert len(redis_hist.added) == 2
+    assert redis_hist.added[1].additional_kwargs["used"] is False
 
 
 def test_delete_ask_history_and_by_uuid(monkeypatch):
@@ -303,9 +403,7 @@ def test_delete_ask_history_and_by_uuid(monkeypatch):
     s = pool.get_or_create("u1", "s1")
     s.history = [HumanMessage(content="mem")]
 
-    out = svc.delete_ask_history(uuid="u1", section_id="s1")
-    assert out.deleted_sessions == 1
-    assert out.section_ids == ["s1"]
+    assert svc.delete_ask_history(uuid="u1", section_id="s1") is True
     assert store["u1::s1"].cleared is True
     assert "u1::s1" not in pool._sessions
 
@@ -314,3 +412,15 @@ def test_delete_ask_history_and_by_uuid(monkeypatch):
     assert set(out2.section_ids) == {"s1", "s2"}
     assert store["u1::s2"].cleared is True
     assert store["u2::s9"].cleared is False
+
+
+def test_get_section_ids(monkeypatch):
+    import backend.llm.graph.service as svc
+
+    monkeypatch.setattr(
+        svc,
+        "list_history_session_ids_for_uuid",
+        lambda uuid: ["u1::s1", "u1::s2"] if uuid == "u1" else [],
+    )
+    assert svc.get_section_ids(uuid="u1") == ["s1", "s2"]
+    assert svc.get_section_ids(uuid="u-empty") == []
