@@ -25,8 +25,8 @@ stream = ask(
         "query": "这家店适合约会吗？",
         "section_id": "user-42-session-1",
         "uuid": "req-550e8400",
-        # 可选：insight_create / insight_use（本阶段透传；insight_create 会写入用户历史）
-        # 附件字段可传，当前忽略：pdf / docx / doc / md / images
+        # 可选：insight_create / insight_use
+        # 附件字段仅标记 used（须先 load_section_document）：pdf / docx / ...
     }
 )
 
@@ -37,14 +37,14 @@ resp: AskResponse = stream.response  # 流结束后可读完整响应
 assert resp is not None
 print(resp.answer)            # 完整回复
 print(resp.sources)           # 本轮 RAG 片段（无 embedding）
-print(resp.query_filename)    # 本轮附带文件名（暂为空串）
+print(resp.query_filename)    # 本轮请求体附件路径（逗号拼接）
 print(resp.query, resp.section_id, resp.uuid)
 
 # 需要会话历史时单独拉取（完整历史 + 扩展字段）
 hist = get_ask_history(uuid=resp.uuid, section_id=resp.section_id)
 print(hist.history)
 
-# 可选：释放会话槽（历史已在每轮结束写入 Redis；release 主要用于腾出 LRU 池）
+# 释放会话槽：删未用文件切块 + 将 pending 历史刷入 Redis
 release_ask_session(resp.uuid, resp.section_id)
 
 # 方式二：结构化对象
@@ -61,7 +61,7 @@ payload = stream.response.model_dump()
 | `uuid` | 是 | 用户/请求关联 ID；与 `section_id` **同时必填**，共同作为历史 Redis key（`{uuid}::{section_id}`） |
 | `section_id` | 是 | 会话/分区 ID |
 | `insight_create` / `insight_use` | 否 | 默认 `false`；均写入**用户轮**历史扩展字段 |
-| `docx` / `doc` / `md` / `pdf` / `images` | 否 | **占位**：可传，当前忽略 |
+| `docx` / `doc` / `txt` / `md` / `pdf` / `images` | 否 | 路径 `str` 或 `list[str]`；非空则 `add_used_filenames`（**不**解析文件）。文件须先经 `load_section_document` 入库 |
 
 ### 响应字段（`AskResponse` / `model_dump()`）
 
@@ -72,7 +72,7 @@ payload = stream.response.model_dump()
 | `uuid` | `str` | 入参回传（必填） |
 | `answer` | `str` | 本轮 LLM 回复全文 |
 | `sources` | `list[RagSnippet]` | 本轮检索/精排后的片段（无 embedding） |
-| `query_filename` | `str` | 当前轮用户请求附带文件名；**暂固定为空串**，后续维护 |
+| `query_filename` | `str` | 本轮请求体附件路径（逗号拼接）；不表示本轮新解析 |
 
 > 会话历史**不再**随 `AskResponse` 返回，请用下方 `get_ask_history`。
 
@@ -134,7 +134,7 @@ delete_ask_histories_by_uuid(uuid="req-550e8400")
 | `insight_use` | `bool \| null` | **用户轮**该次是否使用洞察；助手/系统为 `null` |
 | `sources` | `list[RagSnippet] \| null` | **助手轮**该次回复用到的参考资料 |
 
-说明：内部 Redis 仍会持久化用户轮的 `search_query`（改写后的检索句），但**不出现在**对外 `history` 中。顶层 `HistoryResponse.insight_*` 不是独立「会话设置」写接口，只是末条 user 轮快照。
+说明：内部 Redis 仍会持久化用户轮的 `search_query`（改写后的检索句），以及消息 `additional_kwargs.used`（仅内部使用），但**均不出现在**对外 `history` 中。顶层 `HistoryResponse.insight_*` 不是独立「会话设置」写接口，只是末条 user 轮快照。
 
 示例（`AskResponse.model_dump()`）：
 
@@ -196,7 +196,11 @@ delete_ask_histories_by_uuid(uuid="req-550e8400")
 说明：
 
 - 历史按 `uuid` + `section_id` **同时必填**隔离；缺任一则拒绝。
-- 内存会话池最多 5 个；**每轮 ask 结束后立即刷 Redis**（release / LRU / 进程退出仍会再 flush 空 pending）。
+- 内存会话池最多 5 个；**ask 只写内存**，在以下时机 finalize（删磁盘 → 未用 OS 切块 → `_filenames=_used_filenames` → 用户/会话洞察写入 Redis → 刷聊天历史）：
+  1. 池满（>5）LRU 驱逐最久未用；
+  2. 显式 `release_ask_session` / `release_ask_sessions_by_uuid` / `on_user_logout`；
+  3. 空闲超过 2 分钟（后台 sweep）。
+- 洞察 Redis key：`insight:user:{uuid}`、`insight:section:{uuid}::{section_id}`。ask/load 时内存未命中则从 Redis 恢复；仅当该 uuid 下无剩余 section 时释放内存 UserInsight。
 - `get_ask_history`：若会话仍在池内则读内存副本，否则从 Redis 加载（不额外驱逐其它会话）。
 
 ### 会话池释放 / 登出
@@ -212,7 +216,7 @@ from backend.llm import (
 # 释放单个会话槽
 release_ask_session(uuid="req-550e8400", section_id="user-42-session-1")
 
-# 按 uuid 释放该用户池内全部槽位（不删 Redis 历史）
+# 按 uuid 释放该用户池内全部槽位（刷 Redis + 删未用文件，不删历史 key）
 release_ask_sessions_by_uuid(UuidRequest(uuid="req-550e8400"))
 # 登出钩子：当前与上一接口同契约
 on_user_logout(uuid="req-550e8400")
@@ -238,7 +242,9 @@ on_user_logout(uuid="req-550e8400")
 
 `update_section_facts` 入参：`{ uuid, section_id, items: list[str], start?: int }`（`start` 为 1-based 截断起点，语义对齐 `SectionInsight.add_facts`）。
 
-### 文档处理（占位）
+### 文档处理（`load_section_document`）
+
+协作方应**先**加载文件，再在 `ask` 附件字段带上路径标记 used：
 
 ```python
 from backend.llm import load_section_document, LoadSectionDocumentRequest
@@ -250,7 +256,8 @@ load_section_document(
         file_path="data/uploads/note.md",  # 相对 tjll 根
     )
 )
-# -> { uuid, section_id, source_file, chunks: 0, filenames: [] }
+# -> { uuid, section_id, source_file, chunks, filenames }
+# 成功入库后会删除磁盘原文件；写入 SectionInsight._filenames + OpenSearch
 ```
 
 ### Ask interrupt 澄清问答（占位，供后续 interrupt）
@@ -278,14 +285,23 @@ submit_ask_interrupt(
 ### 本阶段处理路径
 
 ```text
-按 uuid+section_id 取/建会话（内存历史）
+【文件】load_section_document
+  → ensure 洞察（内存 → Redis → 新建）
+  → section.load_file（_filenames + OpenSearch；成功删磁盘）
+
+【对话】ask
+  → ensure 洞察
+  → 附件字段 add_used_filenames（不解析文件）
   → LangGraph：prepare →（有历史则 rewrite）→ retrieve_rerank
-  → 流式 LLM 生成
-  → 本轮写入内存历史并立即刷 Redis
-    （含 search_query / filename / insight_create / insight_use / sources）
+  → 流式 LLM 生成 → 本轮写入内存 pending
+
+【释放】finalize
+  → 按 _filenames 清磁盘 → delete_unused_files
+  → sync _filenames=_used_filenames
+  → section + user save_to_redis → 刷聊天历史
 ```
 
-契约定义见：`backend/llm/schemas.py`；实现见：`backend/llm/graph/service.py`。
+契约定义见：`backend/schemas/llm.py`（`backend/llm/schemas.py` 为重导出）；实现见：`backend/llm/graph/service.py`。
 
 ### 进阶（一般不需要）
 
