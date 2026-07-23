@@ -1,14 +1,13 @@
 """用户设置表 ORM 模型。
 
-以 JSON 列存储设置项（key-value），新增设置项无需改表结构。
+每个设置项都是独立字段，新增设置在模型和 schema 同步加字段即可。
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base
@@ -22,15 +21,16 @@ class UserSetting(Base):
     id: Mapped[str] = mapped_column(String(22), primary_key=True, comment="ID")
     user_id: Mapped[str] = mapped_column(
         String(22),
-        ForeignKey("app_users.id"),
+        ForeignKey("app_users.id", ondelete="CASCADE"),
         unique=True,
         index=True,
         comment="用户 ID",
     )
-    settings: Mapped[dict] = mapped_column(
-        JSON(none_as_null=True),
-        default=dict,
-        comment='用户配置 JSON，如 {"insight_create": false, ...}',
+    insight_create: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="是否开启洞察创建"
+    )
+    insight_use: Mapped[bool] = mapped_column(
+        Boolean, default=False, comment="是否使用历史洞察"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), comment="创建时间"
