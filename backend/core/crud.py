@@ -130,6 +130,14 @@ def register_singleton_routes(
 
     # ── 构建响应 ─────────────────────────────────────────────
     def _build(obj: Any) -> dict[str, Any]:
+        """
+        将 ORM 实例转为响应字典。
+
+        - flat 模式：resp_schema.model_validate(obj, from_attributes=True)
+          → Pydantic 从 ORM 对象的属性读取字段值，自动映射到同名字段。
+        - json 模式：手动从 ORM 对象提取字段，JSON 列的值作为响应 schema
+          的对应字段传入（如 settings 字段）。
+        """
         if data_mode == "flat":
             return resp_schema.model_validate(obj, from_attributes=True).model_dump()
         assert json_col is not None
@@ -154,6 +162,7 @@ def register_singleton_routes(
                 404: {"description": err_not_found, "model": ApiResponse},
             },
             tags=tags,
+            operation_id=f"get_{_tag}",
         )
         async def _get_route(
             db: AsyncSession = Depends(_get_db),
@@ -167,7 +176,10 @@ def register_singleton_routes(
             if instance:
                 return ApiResponse.ok(data=_build(instance))
 
+            # 没有记录但配置了 default_factory → 返回默认值（不写入 DB）
             if factory:
+                # resp_schema(**factory())：将默认值 dict 解包为
+                # Pydantic 模型的字段，由 Pydantic 自动填充缺失字段的默认值
                 if data_mode == "flat":
                     data = resp_schema(**factory()).model_dump()
                 else:
@@ -175,8 +187,6 @@ def register_singleton_routes(
                     data = resp_schema(**{json_col: factory()}).model_dump()
                 return ApiResponse.ok(data=data)
             raise HTTPException(status_code=404, detail=err_not_found)
-
-        _get_route.__name__ = f"get_{_tag}"
 
     # ── PUT ──────────────────────────────────────────────────
     if enable_update and upd_schema is not None:
@@ -191,6 +201,7 @@ def register_singleton_routes(
                 400: {"description": "请求数据无效", "model": ApiResponse},
             },
             tags=tags,
+            operation_id=f"put_{_tag}",
         )
         async def _put_route(
             req: upd_schema,  # type: ignore
@@ -202,16 +213,22 @@ def register_singleton_routes(
                 select(model_cls).where(getattr(model_cls, owner_field) == owner_id)
             )
             instance = result.scalar_one_or_none()
-            # req 已被 FastAPI 用 upd_schema 校验过，直接提取非 None 字段
+
+            # req 的类型注解是 upd_schema（Pydantic 模型），
+            # FastAPI 启动时读取注解后自动做 JSON 校验与反序列化。
+            # model_dump(exclude_none=True) → 只保留请求中显式传了的字段，
+            # 排除 None 字段，实现「只更新传了的字段」的语义。
             update_data = req.model_dump(exclude_none=True)  # type: ignore[attr-defined]
 
             if not instance:
+                # 没有现有记录 → 新建
                 instance = model_cls(
                     id=uuid.uuid4().hex[:22],
                     **{owner_field: owner_id},
                 )
                 if data_mode == "flat":
-                    # 新建记录：合并默认值 + 请求中的字段
+                    # 新建时如果有 default_factory，先合并默认值再写入，
+                    # 确保未传的字段也有合理的默认值。
                     if factory:
                         merged = dict(factory())
                         merged.update(update_data)
@@ -221,6 +238,7 @@ def register_singleton_routes(
                         for field, value in update_data.items():
                             setattr(instance, field, value)
                 else:
+                    # json 模式：直接将更新数据赋值给 JSON 列
                     assert json_col is not None
                     setattr(instance, json_col, update_data)
                 db.add(instance)
@@ -229,6 +247,7 @@ def register_singleton_routes(
                     for field, value in update_data.items():
                         setattr(instance, field, value)
                 else:
+                    # json 模式：读取现有 JSON 列，合并更新
                     assert json_col is not None
                     current = dict(getattr(instance, json_col) or {})
                     current.update(update_data)
@@ -238,8 +257,6 @@ def register_singleton_routes(
             await db.refresh(instance)
             logger.info("配置已更新 owner=%s prefix=%s", owner_id, prefix)
             return ApiResponse.ok(data=_build(instance), message="更新成功")
-
-        _put_route.__name__ = f"put_{_tag}"
 
     # ── POST reset ───────────────────────────────────────────
     if enable_reset and factory is not None:
@@ -253,6 +270,7 @@ def register_singleton_routes(
                 404: {"description": err_not_found, "model": ApiResponse},
             },
             tags=tags,
+            operation_id=f"reset_{_tag}",
         )
         async def _reset_route(
             db: AsyncSession = Depends(_get_db),
@@ -290,8 +308,6 @@ def register_singleton_routes(
             logger.info("配置已重置 owner=%s prefix=%s", owner_id, prefix)
             return ApiResponse.ok(data=_build(instance), message="已重置为默认值")
 
-        _reset_route.__name__ = f"reset_{_tag}"
-
     # ── DELETE ────────────────────────────────────────────────
     if enable_delete:
 
@@ -304,6 +320,7 @@ def register_singleton_routes(
                 404: {"description": err_not_found, "model": ApiResponse},
             },
             tags=tags,
+            operation_id=f"delete_{_tag}",
         )
         async def _delete_route(
             db: AsyncSession = Depends(_get_db),
@@ -317,7 +334,7 @@ def register_singleton_routes(
             if not instance:
                 raise HTTPException(status_code=404, detail=err_not_found)
 
-            # 清理外部资源（文件等）
+            # on_delete_cb：用户配置的资源清理回调（如删除头像文件、附件目录等）
             if on_delete_cb:
                 await on_delete_cb(instance, db)
 
@@ -325,8 +342,6 @@ def register_singleton_routes(
             await db.commit()
             logger.info("记录已删除 owner=%s prefix=%s", owner_id, prefix)
             return ApiResponse.ok(message="已删除")
-
-        _delete_route.__name__ = f"delete_{_tag}"
 
 
 def _make_db_dep() -> Any:
