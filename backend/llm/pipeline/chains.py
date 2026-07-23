@@ -97,7 +97,7 @@ def build_rag_chain_with_history(
     )
 
 
-def build_full_rag_chain():
+def build_full_rag_chain() -> RunnableWithMessageHistory:
     """重述 + 检索 + rerank + 生成。"""
     llm = get_llm()
 

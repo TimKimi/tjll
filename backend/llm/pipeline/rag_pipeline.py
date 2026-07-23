@@ -6,11 +6,12 @@ import json
 import logging
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableConfig
 
 from backend.llm.client.llm import get_llm
 from backend.llm.pipeline.chains import build_full_rag_chain
@@ -33,9 +34,12 @@ class RagAnswer:
     history: list[dict] = field(default_factory=list)
 
 
-def _session_config(uuid: str, section_id: str) -> dict:
+def _session_config(uuid: str, section_id: str) -> RunnableConfig:
     """构造 LangChain session_id 配置。"""
-    return {"configurable": {"session_id": make_history_session_id(uuid, section_id)}}
+    config: RunnableConfig = {
+        "configurable": {"session_id": make_history_session_id(uuid, section_id)},
+    }
+    return config
 
 
 def _sources_from_docs(docs: list[Document]) -> list[dict]:
@@ -82,7 +86,11 @@ def answer_query(query: str, section_id: str, uuid: str) -> str:
     )
     try:
         chain = build_full_rag_chain()
-        return chain.invoke({"query": query}, config=_session_config(uuid, section_id))
+        result = chain.invoke(
+            {"query": query},
+            config=_session_config(uuid, section_id),
+        )
+        return cast(str, result)
     except Exception:
         logger.exception("answer_query failed uuid=%s section_id=%s", uuid, section_id)
         raise
