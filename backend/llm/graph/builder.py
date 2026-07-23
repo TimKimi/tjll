@@ -117,3 +117,6 @@ def reset_ask_graph_cache() -> None:
     _compiled = None
     _checkpointer = None
     get_session_pool().reset()
+    from backend.llm.insight.registry import get_insight_registry
+
+    get_insight_registry().reset()

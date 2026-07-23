@@ -11,6 +11,7 @@ from backend.llm.client.llm import get_llm
 from backend.llm.graph.builder import get_ask_session, release_ask_session
 from backend.llm.graph.nodes import history_snapshot
 from backend.llm.graph.session_pool import get_session_pool
+from backend.llm.insight.registry import ensure_section_insight, ensure_user_insight
 from backend.llm.prompts.rag import RAG_PROMPT_WITH_HISTORY
 from backend.llm.schemas import (
     AskInterruptCreateRequest,
@@ -44,6 +45,46 @@ from backend.logging_setup import setup_app_logging
 
 logger = logging.getLogger("backend.llm.graph.service")
 
+_ATTACHMENT_FIELDS = ("docx", "doc", "txt", "md", "pdf", "images")
+
+
+def _iter_ask_attachment_paths(request: AskRequest) -> list[str]:
+    """从 AskRequest 六个附件字段收集非空路径。"""
+    paths: list[str] = []
+    for name in _ATTACHMENT_FIELDS:
+        value = getattr(request, name, None)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                paths.append(text)
+            continue
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                if item is None:
+                    continue
+                text = str(item).strip()
+                if text:
+                    paths.append(text)
+            continue
+        text = str(value).strip()
+        if text:
+            paths.append(text)
+    return paths
+
+
+def _mark_ask_used_filenames(request: AskRequest, section) -> list[str]:
+    """带文件的 ask：只更新 used_filenames；加载由 load_section_document 完成。
+
+    返回本轮请求体原始非空路径（供 query_filename）。
+    """
+    paths = _iter_ask_attachment_paths(request)
+    if not paths:
+        return []
+    section.add_used_filenames(paths)
+    return paths
+
 
 class AskStream:
     """流式 ask：``for x in stream`` 得到 answer 文本块；耗尽后读 ``response``。"""
@@ -75,7 +116,7 @@ def _sources_to_snippets(sources: list[dict[str, Any]] | None) -> list[RagSnippe
 
 
 def _history_to_messages(snapshot: list[dict[str, Any]]) -> list[HistoryMessage]:
-    """组对外历史：filename / insight_* / sources；不含 search_query。"""
+    """组对外历史：filename / insight_* / sources；不含 search_query / used。"""
     out: list[HistoryMessage] = []
     for h in snapshot:
         role = h.get("role") or "system"
@@ -237,10 +278,10 @@ def release_ask_sessions_by_uuid(
     *,
     uuid: str | None = None,
 ) -> ReleaseSessionsResponse:
-    """按 uuid 释放该用户在内存会话池中的全部槽位（不删 Redis 历史）。"""
+    """按 uuid 释放该用户在内存会话池中的全部槽位（刷 Redis，不删历史）。"""
     setup_app_logging()
     uuid = _parse_uuid(req, uuid=uuid)
-    discarded = get_session_pool().discard_sessions_for_uuid(uuid)
+    discarded = get_session_pool().release_sessions_for_uuid(uuid)
     section_ids = sorted(k.split("::", 1)[1] for k in discarded if "::" in k)
     logger.info(
         "release_ask_sessions_by_uuid uuid=%s released=%d",
@@ -450,7 +491,7 @@ def set_section_review(
 def load_section_document(
     req: LoadSectionDocumentRequest | dict[str, Any],
 ) -> LoadSectionDocumentResponse:
-    """加载并处理会话文档（占位：不解析、不入库）。"""
+    """加载会话文档：ensure 洞察 → load_file → 成功则删磁盘原文件。"""
     setup_app_logging()
     request = (
         req
@@ -458,18 +499,48 @@ def load_section_document(
         else LoadSectionDocumentRequest.model_validate(req)
     )
     path = (request.file_path or "").strip()
+    if not path:
+        raise ValueError("file_path is required")
+    ensure_user_insight(request.uuid)
+    section = ensure_section_insight(request.uuid, request.section_id)
+    result = section.load_file(path)
+    source_file = str(result.get("source_file") or path)
+    chunks = int(result.get("chunks") or 0)
+    errors = result.get("errors") or []
+    if not errors:
+        try:
+            from backend.rag.document.paths import resolve_repo_path
+
+            disk = resolve_repo_path(path)
+            if disk.is_file():
+                disk.unlink()
+                logger.info("load_section_document deleted source path=%s", disk)
+        except Exception:
+            logger.exception(
+                "load_section_document delete source failed path=%s",
+                path,
+            )
+    else:
+        logger.warning(
+            "load_section_document errors uuid=%s section_id=%s path=%s errors=%s",
+            request.uuid,
+            request.section_id,
+            source_file,
+            errors,
+        )
     logger.info(
-        "load_section_document placeholder uuid=%s section_id=%s path=%s",
+        "load_section_document ok uuid=%s section_id=%s file=%s chunks=%d",
         request.uuid,
         request.section_id,
-        path,
+        source_file,
+        chunks,
     )
     return LoadSectionDocumentResponse(
         uuid=request.uuid,
         section_id=request.section_id,
-        source_file=path,
-        chunks=0,
-        filenames=[],
+        source_file=source_file,
+        chunks=chunks,
+        filenames=section.filenames(),
     )
 
 
@@ -525,9 +596,9 @@ def ask(req: AskRequest | dict[str, Any]) -> AskStream:
     """流式 ask：图完成重述/检索后，流式生成 answer。
 
     - ``sources`` 由 retrieve 工具写入会话侧车，不进 State
-    - 本轮 history 写入内存后立即刷 Redis（``uuid::section_id``）
+    - 本轮 history 写入内存；会话释放 / 空闲超时 / LRU 时刷 Redis
     - 会话历史请用 ``get_ask_history``；本响应不含 history
-    - ``query_filename`` 表示本轮附件文件名，暂固定为空串
+    - 附件字段只 ``add_used_filenames``；文件加载请用 ``load_section_document``
     """
     request = req if isinstance(req, AskRequest) else AskRequest.model_validate(req)
     logger.info(
@@ -540,7 +611,14 @@ def ask(req: AskRequest | dict[str, Any]) -> AskStream:
         request.insight_use,
     )
 
+    ensure_user_insight(request.uuid)
+    section = ensure_section_insight(request.uuid, request.section_id)
     session = get_ask_session(request.uuid, request.section_id)
+    session.section_insight = section
+
+    used_paths = _mark_ask_used_filenames(request, section)
+    query_filename = ",".join(used_paths)
+
     history_before = list(session.history)
     graph = session.graph
     if graph is None:
@@ -565,7 +643,6 @@ def ask(req: AskRequest | dict[str, Any]) -> AskStream:
     search_query = str(
         final.get("search_query") or session.last_search_query or request.query
     )
-    query_filename = ""
     holder: dict[str, AskResponse | None] = {"response": None}
 
     def _chunks() -> Iterator[str]:
@@ -604,6 +681,7 @@ def ask(req: AskRequest | dict[str, Any]) -> AskStream:
             insight_create=request.insight_create,
             insight_use=request.insight_use,
             sources=sources,
+            used=False,
         )
         resp = AskResponse(
             query=request.query,

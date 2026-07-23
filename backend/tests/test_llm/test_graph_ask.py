@@ -134,7 +134,7 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
         return fake_by_key[key]
 
     monkeypatch.setattr(pool_mod, "get_history", fake_get_history)
-    pool = AskSessionPool(max_size=2)
+    pool = AskSessionPool(max_size=2, start_sweeper=False)
     s1 = pool.get_or_create("a", "s1")
     s1.append_turn(
         "q1",
@@ -144,6 +144,7 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
         insight_create=True,
         sources=[{"content": "c1", "metadata": {}}],
     )
+    assert fake_by_key.get("a::s1") is None or fake_by_key["a::s1"].added == []
     s2 = pool.get_or_create("b", "s2")
     s2.append_turn("q2", "a2", search_query="q2", filename="", sources=[])
     _s3 = pool.get_or_create("c", "s3")
@@ -153,7 +154,31 @@ def test_session_pool_lru_flushes_on_evict(monkeypatch):
     assert flushed[0].content == "q1"
     assert flushed[0].additional_kwargs["search_query"] == "q1"
     assert flushed[0].additional_kwargs["insight_create"] is True
+    assert flushed[0].additional_kwargs["used"] is False
     assert flushed[1].additional_kwargs["sources"][0]["content"] == "c1"
+    assert flushed[1].additional_kwargs["used"] is False
+
+
+def test_session_pool_idle_sweep(monkeypatch):
+    import backend.llm.graph.session_pool as pool_mod
+
+    fake_by_key: dict[str, _FakeHistory] = {}
+
+    def fake_get_history(uuid: str, section_id: str) -> _FakeHistory:
+        key = f"{uuid}::{section_id}"
+        if key not in fake_by_key:
+            fake_by_key[key] = _FakeHistory()
+        return fake_by_key[key]
+
+    monkeypatch.setattr(pool_mod, "get_history", fake_get_history)
+    pool = AskSessionPool(max_size=5, idle_seconds=10, start_sweeper=False)
+    s1 = pool.get_or_create("a", "s1")
+    s1.append_turn("q", "a", search_query="q")
+    s1.last_used = 0.0
+    released = pool.sweep_idle(now=100.0)
+    assert released == ["a::s1"]
+    assert "a::s1" not in pool._sessions
+    assert len(fake_by_key["a::s1"].added) == 2
 
 
 def test_graph_ask_stream_service(monkeypatch):
@@ -192,6 +217,23 @@ def test_graph_ask_stream_service(monkeypatch):
     )
     monkeypatch.setattr(nodes_mod, "rerank_docs", lambda q, d, top_n=None: d)
     monkeypatch.setattr(svc, "get_llm", lambda temperature=0.7: _fake_llm("适合"))
+
+    import backend.llm.insight.store as store_mod
+
+    class _EmptyRedis:
+        def get(self, key: str):
+            return None
+
+        def set(self, *a, **k):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(store_mod, "_client", lambda: _EmptyRedis())
+    from backend.llm.insight.registry import get_insight_registry
+
+    get_insight_registry().reset()
 
     mem = MemorySaver()
     graph = build_ask_graph(checkpointer=mem)
@@ -245,20 +287,22 @@ def test_graph_ask_stream_service(monkeypatch):
     assert "search_query" not in dumped
     assert "insight_create" in dumped
     assert "insight_use" in dumped
+    assert "used" not in dumped
 
-    # 每轮结束已刷 Redis
+    # ask 后仍 pending；release 才刷 Redis
+    assert len(redis_hist.added) == 0
+    session = get_ask_session("req-9", "sec-1", checkpointer=mem)
+    assert len(session.pending_turns) == 1
+
+    release_ask_session("req-9", "sec-1")
     assert len(redis_hist.added) == 2
     assert redis_hist.added[0].content == "适合约会吗"
     assert redis_hist.added[0].additional_kwargs["search_query"] == "改写后的查询"
     assert redis_hist.added[0].additional_kwargs["insight_create"] is True
     assert redis_hist.added[0].additional_kwargs["insight_use"] is False
+    assert redis_hist.added[0].additional_kwargs["used"] is False
     assert redis_hist.added[1].content == "适合"
-
-    session = get_ask_session("req-9", "sec-1", checkpointer=mem)
-    assert session.pending_turns == []
-
-    release_ask_session("req-9", "sec-1")
-    assert len(redis_hist.added) == 2
+    assert redis_hist.added[1].additional_kwargs["used"] is False
 
 
 def test_delete_ask_history_and_by_uuid(monkeypatch):
