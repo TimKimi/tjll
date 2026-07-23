@@ -12,6 +12,7 @@ from backend.llm.insight.model import UserInsight, format_attr_line
 from backend.rag.document.chunking import split_text_to_chunks
 from backend.rag.document.clean import clean_text
 from backend.rag.document.indexing import (
+    delete_section_document_from_opensearch,
     delete_section_insight_from_opensearch,
     index_section_document_chunks,
     index_section_insight_chunks,
@@ -33,32 +34,218 @@ _SEGMENT_SEP = "\n\n\n"
 _ATTR_SEP = "\n"
 
 
+def _normalize_path_list(paths: str | list[str]) -> list[str]:
+    """将单个路径或路径列表规范为仓库相对 POSIX 路径列表。"""
+    if isinstance(paths, str):
+        raw = [paths]
+    elif isinstance(paths, list):
+        raw = paths
+    else:
+        raise TypeError("paths must be str or list[str]")
+    out: list[str] = []
+    for item in raw:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        try:
+            out.append(to_repo_relative_posix(resolve_repo_path(text)))
+        except (OSError, ValueError):
+            # 无法 resolve 时仍保留原始 strip 文本（便于测试 mock）
+            out.append(text.replace("\\", "/"))
+    return out
+
+
 class SectionInsight(UserInsight):
     """按 uuid + section_id 绑定的会话洞察。
 
-    - 父类 ``_attrs`` / ``search`` / ``split_and_store``：用户级洞察（不变）
+    - 用户级 ``_attrs`` / ``search`` / ``split_and_store``：委托共享的 ``UserInsight`` 父实例
     - ``_section_attrs``：本会话独有属性（独立索引）
-    - ``_filenames`` / 文档索引：上传文件切块
+    - ``_filenames`` / ``_used_filenames`` / 文档索引：上传文件切块
     - ``_facts`` / ``_review``：仅内存
     """
 
-    def __init__(self, uuid: str, section_id: str) -> None:
-        super().__init__(uuid)
+    def __init__(
+        self,
+        uuid: str,
+        section_id: str,
+        *,
+        parent: UserInsight | None = None,
+    ) -> None:
         sid = (section_id or "").strip()
         if not sid:
             raise ValueError("section_id is required")
+        # 不调用 UserInsight.__init__：用户级状态落在共享 parent 上
+        self._parent: UserInsight = parent if parent is not None else UserInsight(uuid)
+        self.uuid = self._parent.uuid
         self.section_id = sid
         self._filenames: list[str] = []
+        self._used_filenames: list[str] = []
         self._section_attrs: dict[str, str] = {}
         self._facts: list[str] = []
         self._review: str = ""
         self.last_section_chunk_size: int = 0
         self.max_section_attr_len: int = 0
 
+    # ── 用户级洞察（共享 parent）──────────────────────────────
+
+    @property
+    def _attrs(self) -> dict[str, str]:
+        return self._parent._attrs
+
+    @_attrs.setter
+    def _attrs(self, value: dict[str, str]) -> None:
+        self._parent._attrs = value
+
+    @property
+    def last_chunk_size(self) -> int:
+        return self._parent.last_chunk_size
+
+    @last_chunk_size.setter
+    def last_chunk_size(self, value: int) -> None:
+        self._parent.last_chunk_size = value
+
+    @property
+    def max_attr_len(self) -> int:
+        return self._parent.max_attr_len
+
+    @max_attr_len.setter
+    def max_attr_len(self, value: int) -> None:
+        self._parent.max_attr_len = value
+
+    def as_dict(self) -> dict[str, str]:
+        return self._parent.as_dict()
+
+    def batch_add(self, attrs: dict[str, Any]) -> dict[str, str]:
+        return self._parent.batch_add(attrs)
+
+    def as_batch_add_tool(self) -> StructuredTool:
+        return self._parent.as_batch_add_tool()
+
+    def to_long_text(self, size: int | None = None) -> str:
+        return self._parent.to_long_text(size)
+
+    def split_and_store(self) -> int:
+        return self._parent.split_and_store()
+
+    def search(self, query: str) -> str:
+        return self._parent.search(query)
+
     # ── 文档名列表 ────────────────────────────────────────────
 
     def filenames(self) -> list[str]:
         return list(self._filenames)
+
+    def used_filenames(self) -> list[str]:
+        return list(self._used_filenames)
+
+    def add_used_filenames(self, paths: str | list[str]) -> list[str]:
+        """标记已使用的文件（仓库相对路径）；供外部脚本调用。"""
+        for source_file in _normalize_path_list(paths):
+            if source_file not in self._used_filenames:
+                self._used_filenames.append(source_file)
+        logger.info(
+            "add_used_filenames uuid=%s section_id=%s used=%d",
+            self.uuid,
+            self.section_id,
+            len(self._used_filenames),
+        )
+        return self.used_filenames()
+
+    def delete_unused_files(self) -> list[str]:
+        """删除 ``_filenames`` 有而 ``_used_filenames`` 无的文档切块。"""
+        used = set(self._used_filenames)
+        unused = [f for f in self._filenames if f not in used]
+        deleted: list[str] = []
+        for source_file in unused:
+            try:
+                delete_section_document_from_opensearch(
+                    self.uuid,
+                    self.section_id,
+                    source_file=source_file,
+                )
+            except Exception:
+                logger.exception(
+                    "delete_unused_files failed uuid=%s section_id=%s file=%s",
+                    self.uuid,
+                    self.section_id,
+                    source_file,
+                )
+                continue
+            deleted.append(source_file)
+        if deleted:
+            deleted_set = set(deleted)
+            self._filenames = [f for f in self._filenames if f not in deleted_set]
+        logger.info(
+            "delete_unused_files uuid=%s section_id=%s deleted=%d",
+            self.uuid,
+            self.section_id,
+            len(deleted),
+        )
+        return deleted
+
+    def delete_disk_files(self) -> list[str]:
+        """按 ``_filenames`` 检测磁盘：存在则删除本体（会话释放时调用）。"""
+        removed: list[str] = []
+        for source_file in list(self._filenames):
+            try:
+                path = resolve_repo_path(source_file)
+            except Exception:
+                logger.exception(
+                    "delete_disk_files resolve failed uuid=%s section_id=%s file=%s",
+                    self.uuid,
+                    self.section_id,
+                    source_file,
+                )
+                continue
+            try:
+                if path.is_file():
+                    path.unlink()
+                    removed.append(source_file)
+                    logger.info(
+                        "delete_disk_files removed uuid=%s section_id=%s path=%s",
+                        self.uuid,
+                        self.section_id,
+                        path,
+                    )
+            except Exception:
+                logger.exception(
+                    "delete_disk_files unlink failed uuid=%s section_id=%s path=%s",
+                    self.uuid,
+                    self.section_id,
+                    path,
+                )
+        return removed
+
+    def sync_filenames_with_used(self) -> None:
+        """会话结束统一字段：``_filenames`` 与 ``_used_filenames`` 一致。"""
+        self._filenames = list(self._used_filenames)
+
+    def save_to_redis(self) -> None:
+        """持久化会话洞察到 Redis（不含父类 attrs）。"""
+        from backend.llm.insight.store import save_section_insight
+
+        save_section_insight(self)
+
+    @classmethod
+    def load_from_redis(cls, uuid: str) -> UserInsight | None:
+        """不支持：请用 ``load_section_from_redis``。"""
+        raise TypeError(
+            "SectionInsight.load_from_redis is unsupported; "
+            "use load_section_from_redis(uuid, section_id, parent=...)"
+        )
+
+    @classmethod
+    def load_section_from_redis(
+        cls,
+        uuid: str,
+        section_id: str,
+        *,
+        parent: UserInsight,
+    ) -> SectionInsight | None:
+        """从 Redis 加载并挂到 parent；不存在返回 None。"""
+        from backend.llm.insight.store import load_section_insight
+
+        return load_section_insight(uuid, section_id, parent=parent)
 
     # ── 会话属性（对齐父类 _attrs）────────────────────────────
 

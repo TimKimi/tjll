@@ -166,3 +166,86 @@ def test_llm_tools_callable():
     assert s.get_facts() == ["f1"]
     s.as_set_review_tool().invoke({"text": "rv"})
     assert s.get_review() == "rv"
+
+
+def test_shared_parent_attrs_across_sections(monkeypatch):
+    from backend.llm.insight.registry import (
+        ensure_section_insight,
+        ensure_user_insight,
+        get_insight_registry,
+    )
+    import backend.llm.insight.store as store_mod
+
+    class _EmptyRedis:
+        def get(self, key: str):
+            return None
+
+        def set(self, *a, **k):
+            return None
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(store_mod, "_client", lambda: _EmptyRedis())
+    get_insight_registry().reset()
+    parent = ensure_user_insight("u-share")
+    s1 = ensure_section_insight("u-share", "sec-a")
+    s2 = ensure_section_insight("u-share", "sec-b")
+    assert s1._parent is parent
+    assert s2._parent is parent
+    s1.batch_add({"喜欢": "火锅"})
+    assert s2.as_dict()["喜欢"] == "火锅"
+    assert parent.as_dict()["喜欢"] == "火锅"
+
+
+def test_add_used_filenames_and_delete_unused(monkeypatch):
+    from backend.llm.insight import section as sec_mod
+    from backend.llm.insight.section import SectionInsight
+
+    deleted: list[str] = []
+
+    monkeypatch.setattr(
+        sec_mod,
+        "delete_section_document_from_opensearch",
+        lambda uuid, section_id, source_file=None, index_name=None: (
+            deleted.append(source_file or "") or 1
+        ),
+    )
+    monkeypatch.setattr(
+        sec_mod,
+        "to_repo_relative_posix",
+        lambda p: str(p).replace("\\", "/"),
+    )
+    monkeypatch.setattr(sec_mod, "resolve_repo_path", lambda p: p)
+
+    s = SectionInsight("u1", "sec1")
+    s._filenames = ["docs/a.md", "docs/b.md", "docs/c.md"]
+    s.add_used_filenames(["docs/a.md", "docs/c.md"])
+    assert s.used_filenames() == ["docs/a.md", "docs/c.md"]
+    out = s.delete_unused_files()
+    assert out == ["docs/b.md"]
+    assert s.filenames() == ["docs/a.md", "docs/c.md"]
+    assert deleted == ["docs/b.md"]
+
+
+def test_delete_disk_files(tmp_path, monkeypatch):
+    from backend.llm.insight import section as sec_mod
+    from backend.llm.insight.section import SectionInsight
+
+    f1 = tmp_path / "a.md"
+    f2 = tmp_path / "b.md"
+    f1.write_text("x", encoding="utf-8")
+    f2.write_text("y", encoding="utf-8")
+
+    def fake_resolve(p: str):
+        name = str(p).replace("\\", "/").rsplit("/", 1)[-1]
+        return tmp_path / name
+
+    monkeypatch.setattr(sec_mod, "resolve_repo_path", fake_resolve)
+
+    s = SectionInsight("u1", "sec1")
+    s._filenames = ["a.md", "b.md", "missing.md"]
+    removed = s.delete_disk_files()
+    assert set(removed) == {"a.md", "b.md"}
+    assert not f1.exists()
+    assert not f2.exists()
