@@ -20,6 +20,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.config import settings
+from backend.core.logger import setup_app_logging
+from backend.core.schema import auto_adapt_schema
 from backend.database import engine
 from backend.models.base import Base
 from backend.routers import admin as admin_router
@@ -36,8 +39,14 @@ from backend.routers import user as user_router
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """应用生命周期：启动时建表，关闭时释放引擎。"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # 统一初始化日志（所有 backend.* 模块日志立即可用）
+    setup_app_logging()
+
+    if settings.APP_ENV == "development":
+        await auto_adapt_schema(engine)
+    else:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     yield
     await engine.dispose()
 

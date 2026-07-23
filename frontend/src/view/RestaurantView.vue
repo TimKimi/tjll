@@ -1,278 +1,401 @@
 <template>
-    <div class="restaurant-view">
-      <!-- 顶部导航栏 -->
-      <header class="restaurant-header">
-        <button class="back-btn" @click="goBack">
-          <i class="fas fa-arrow-left"></i>
-          <span>返回</span>
+  <div class="restaurant-view">
+    <!-- 顶部导航栏 -->
+    <header class="restaurant-header">
+      <button
+        class="back-btn"
+        @click="goBack"
+      >
+        <i class="fas fa-arrow-left" />
+        <span>返回</span>
+      </button>
+      <div class="header-center">
+        <h1 class="header-title">
+          餐厅详情
+        </h1>
+      </div>
+      <div class="header-actions">
+        <button
+          class="action-btn"
+          :class="{ favorited: isFavorited }"
+          @click="toggleFavorite"
+        >
+          <i :class="isFavorited ? 'fas fa-heart' : 'far fa-heart'" />
         </button>
-        <div class="header-center">
-          <h1 class="header-title">餐厅详情</h1>
-        </div>
-        <div class="header-actions">
-          <button class="action-btn" @click="toggleFavorite" :class="{ favorited: isFavorited }">
-            <i :class="isFavorited ? 'fas fa-heart' : 'far fa-heart'"></i>
-          </button>
-          <button class="action-btn" @click="shareRestaurant">
-            <i class="fas fa-share-alt"></i>
-          </button>
-        </div>
-      </header>
+        <button
+          class="action-btn"
+          @click="shareRestaurant"
+        >
+          <i class="fas fa-share-alt" />
+        </button>
+      </div>
+    </header>
 
-      <div class="restaurant-content" ref="restaurantContent">
-        <!-- 加载状态 -->
-        <div v-if="isLoading" class="loading-state">
-          <i class="fas fa-spinner fa-spin"></i>
-          <p>加载餐厅信息...</p>
-        </div>
-
-        <!-- 餐厅信息 -->
-        <div v-else-if="restaurantData" class="restaurant-detail">
-          <!-- 图片轮播 -->
-          <div class="restaurant-gallery">
-            <div class="gallery-main" @click="openGallery(0)">
-              <img :src="restaurantData.image" :alt="restaurantData.name" />
-              <div class="gallery-badge">
-                <i class="fas fa-images"></i>
-                <span>{{ restaurantData.images?.length || 1 }} 张</span>
-              </div>
-            </div>
-            <div class="gallery-thumbs" v-if="restaurantData.images && restaurantData.images.length > 1">
-              <div
-                v-for="(img, index) in restaurantData.images.slice(1, 4)"
-                :key="index"
-                class="thumb-item"
-                @click="openGallery(index + 1)"
-              >
-                <img :src="img" :alt="restaurantData.name" />
-              </div>
-              <div v-if="restaurantData.images.length > 4" class="thumb-more" @click="openGallery(4)">
-                <span>+{{ restaurantData.images.length - 4 }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 基本信息 -->
-          <div class="restaurant-info-section">
-            <div class="info-header">
-              <div>
-                <div class="name-wrapper">
-                  <h1 class="restaurant-name">{{ restaurantData.name }}</h1>
-                  <span class="rating-emoji">{{ getRatingEmoji(restaurantData.rating) }}</span>
-                </div>
-                <div class="restaurant-meta">
-                  <span class="restaurant-rating">
-                    <i class="fas fa-star"></i>
-                    {{ restaurantData.rating }}
-                    <span class="review-count">({{ restaurantData.reviewCount }}条评价)</span>
-                  </span>
-                  <span class="restaurant-price">¥{{ restaurantData.price }}/人</span>
-                  <span class="restaurant-category">{{ restaurantData.category || '中餐' }}</span>
-                </div>
-              </div>
-              <div class="restaurant-status" :class="{ open: restaurantData.isOpen }">
-                <span class="status-dot"></span>
-                {{ restaurantData.isOpen ? '营业中' : '已休息' }}
-              </div>
-            </div>
-
-            <!-- 营业信息 -->
-            <div class="restaurant-info-grid">
-              <div class="info-item">
-                <i class="fas fa-clock"></i>
-                <div>
-                  <span class="info-label">营业时间</span>
-                  <span class="info-value">{{ restaurantData.hours }}</span>
-                </div>
-              </div>
-              <div class="info-item">
-                <i class="fas fa-map-pin"></i>
-                <div>
-                  <span class="info-label">地址</span>
-                  <span class="info-value">{{ restaurantData.address }}</span>
-                </div>
-              </div>
-              <div class="info-item">
-                <i class="fas fa-phone"></i>
-                <div>
-                  <span class="info-label">电话</span>
-                  <span class="info-value">{{ restaurantData.phone }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 操作按钮 -->
-            <div class="action-buttons">
-              <button class="action-btn-primary navigate" @click="navigateToRestaurant">
-                <i class="fas fa-directions"></i>
-                导航
-              </button>
-              <button class="action-btn-primary call" @click="callRestaurant">
-                <i class="fas fa-phone"></i>
-                打电话
-              </button>
-              <button class="action-btn-primary share" @click="shareRestaurant">
-                <i class="fas fa-share-alt"></i>
-                分享
-              </button>
-            </div>
-
-            <!-- 特色标签 -->
-            <div class="restaurant-tags-section" v-if="restaurantData.tags && restaurantData.tags.length">
-              <h3 class="section-title">
-                <i class="fas fa-tags"></i>
-                特色标签
-              </h3>
-              <div class="restaurant-tags">
-                <span v-for="tag in restaurantData.tags" :key="tag" class="tag">
-                  {{ tag }}
-                </span>
-              </div>
-            </div>
-
-            <!-- 推荐理由 -->
-            <div class="restaurant-reason" v-if="restaurantData.reason">
-              <h3 class="section-title">
-                <i class="fas fa-lightbulb"></i>
-                推荐理由
-              </h3>
-              <div
-                class="reason-content"
-                :style="{
-                  background: getReasonColor(restaurantData.rating).bg,
-                  borderLeftColor: getReasonColor(restaurantData.rating).border
-                }"
-              >
-                <i class="fas fa-quote-left" :style="{ color: getReasonColor(restaurantData.rating).icon }"></i>
-                <p :style="{ color: getReasonColor(restaurantData.rating).text }">{{ restaurantData.reason }}</p>
-              </div>
-            </div>
-
-            <!-- 用户评价摘要 -->
-            <div class="restaurant-summary-section" v-if="restaurantData.summary">
-              <h3 class="section-title">
-                <i class="fas fa-comment-dots"></i>
-                用户评价
-              </h3>
-              <div class="summary-content">
-                <i class="fas fa-quote-left"></i>
-                <p>{{ restaurantData.summary }}</p>
-              </div>
-            </div>
-
-            <!-- 评价列表 -->
-            <div class="reviews-section" v-if="restaurantData.reviews && restaurantData.reviews.length">
-              <div class="reviews-header">
-                <h3 class="section-title">
-                  <i class="fas fa-star-half-alt"></i>
-                  用户评价
-                </h3>
-                <span class="review-total">共 {{ restaurantData.reviews.length }} 条</span>
-              </div>
-              <div class="reviews-list">
-                <div
-                  v-for="review in displayedReviews"
-                  :key="review.id"
-                  class="review-item"
-                >
-                  <div class="review-user">
-                    <img :src="review.avatar || 'https://ui-avatars.com/api/?name=' + review.userName + '&background=3b82f6&color=fff'" :alt="review.userName" />
-                    <div>
-                      <span class="review-name">{{ review.userName }}</span>
-                      <span class="review-time">{{ review.time }}</span>
-                    </div>
-                  </div>
-                  <div class="review-rating">
-                    <i v-for="i in 5" :key="i" class="fas fa-star" :class="{ active: i <= review.rating }"></i>
-                  </div>
-                  <p class="review-content">{{ review.content }}</p>
-                </div>
-              </div>
-
-              <!-- 加载更多按钮 -->
-              <div v-if="hasMoreReviews" class="load-more-wrapper">
-                <button class="load-more-btn" @click="loadMoreReviews" :disabled="isLoadingMore">
-                  <span v-if="!isLoadingMore">查看更多评论 ({{ remainingReviewsCount }} 条)</span>
-                  <span v-else><i class="fas fa-spinner fa-spin"></i> 加载中...</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 空状态 -->
-        <div v-else class="empty-state">
-          <i class="fas fa-store-slash"></i>
-          <p>餐厅不存在</p>
-          <button class="empty-btn" @click="goBack">返回首页</button>
-        </div>
+    <div
+      ref="restaurantContent"
+      class="restaurant-content"
+    >
+      <!-- 加载状态 -->
+      <div
+        v-if="isLoading"
+        class="loading-state"
+      >
+        <i class="fas fa-spinner fa-spin" />
+        <p>加载餐厅信息...</p>
       </div>
 
-      <!-- 底部固定导航 -->
-      <div class="bottom-nav" v-if="restaurantData">
-        <div class="bottom-nav-content">
-          <div class="nav-info">
-            <span class="nav-price">¥{{ restaurantData.price }}/人</span>
-            <span class="nav-rating">
-              <i class="fas fa-star"></i>
-              {{ restaurantData.rating }}
-            </span>
+      <!-- 餐厅信息 -->
+      <div
+        v-else-if="restaurantData"
+        class="restaurant-detail"
+      >
+        <!-- 图片轮播 -->
+        <div class="restaurant-gallery">
+          <div
+            class="gallery-main"
+            @click="openGallery(0)"
+          >
+            <img
+              :src="restaurantData.image"
+              :alt="restaurantData.name"
+            >
+            <div class="gallery-badge">
+              <i class="fas fa-images" />
+              <span>{{ restaurantData.images?.length || 1 }} 张</span>
+            </div>
           </div>
-          <div class="nav-actions">
-            <button class="nav-btn favorite" @click="toggleFavorite" :class="{ active: isFavorited }">
-              <i :class="isFavorited ? 'fas fa-heart' : 'far fa-heart'"></i>
-              <span>{{ isFavorited ? '已收藏' : '收藏' }}</span>
-            </button>
-            <button class="nav-btn book" @click="bookTable">
-              <i class="fas fa-calendar-check"></i>
-              预约
-            </button>
-            <button class="nav-btn navigate" @click="navigateToRestaurant">
-              <i class="fas fa-directions"></i>
+          <div
+            v-if="restaurantData.images && restaurantData.images.length > 1"
+            class="gallery-thumbs"
+          >
+            <div
+              v-for="(img, index) in restaurantData.images.slice(1, 4)"
+              :key="index"
+              class="thumb-item"
+              @click="openGallery(index + 1)"
+            >
+              <img
+                :src="img"
+                :alt="restaurantData.name"
+              >
+            </div>
+            <div
+              v-if="restaurantData.images.length > 4"
+              class="thumb-more"
+              @click="openGallery(4)"
+            >
+              <span>+{{ restaurantData.images.length - 4 }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 基本信息 -->
+        <div class="restaurant-info-section">
+          <div class="info-header">
+            <div>
+              <div class="name-wrapper">
+                <h1 class="restaurant-name">
+                  {{ restaurantData.name }}
+                </h1>
+                <span class="rating-emoji">{{ getRatingEmoji(restaurantData.rating) }}</span>
+              </div>
+              <div class="restaurant-meta">
+                <span class="restaurant-rating">
+                  <i class="fas fa-star" />
+                  {{ restaurantData.rating }}
+                  <span class="review-count">({{ restaurantData.reviewCount }}条评价)</span>
+                </span>
+                <span class="restaurant-price">¥{{ restaurantData.price }}/人</span>
+                <span class="restaurant-category">{{ restaurantData.category || '中餐' }}</span>
+              </div>
+            </div>
+            <div
+              class="restaurant-status"
+              :class="{ open: restaurantData.isOpen }"
+            >
+              <span class="status-dot" />
+              {{ restaurantData.isOpen ? '营业中' : '已休息' }}
+            </div>
+          </div>
+
+          <!-- 营业信息 -->
+          <div class="restaurant-info-grid">
+            <div class="info-item">
+              <i class="fas fa-clock" />
+              <div>
+                <span class="info-label">营业时间</span>
+                <span class="info-value">{{ restaurantData.hours }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <i class="fas fa-map-pin" />
+              <div>
+                <span class="info-label">地址</span>
+                <span class="info-value">{{ restaurantData.address }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <i class="fas fa-phone" />
+              <div>
+                <span class="info-label">电话</span>
+                <span class="info-value">{{ restaurantData.phone }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="action-buttons">
+            <button
+              class="action-btn-primary navigate"
+              @click="navigateToRestaurant"
+            >
+              <i class="fas fa-directions" />
               导航
             </button>
+            <button
+              class="action-btn-primary call"
+              @click="callRestaurant"
+            >
+              <i class="fas fa-phone" />
+              打电话
+            </button>
+            <button
+              class="action-btn-primary share"
+              @click="shareRestaurant"
+            >
+              <i class="fas fa-share-alt" />
+              分享
+            </button>
+          </div>
+
+          <!-- 特色标签 -->
+          <div
+            v-if="restaurantData.tags && restaurantData.tags.length"
+            class="restaurant-tags-section"
+          >
+            <h3 class="section-title">
+              <i class="fas fa-tags" />
+              特色标签
+            </h3>
+            <div class="restaurant-tags">
+              <span
+                v-for="tag in restaurantData.tags"
+                :key="tag"
+                class="tag"
+              >
+                {{ tag }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 推荐理由 -->
+          <div
+            v-if="restaurantData.reason"
+            class="restaurant-reason"
+          >
+            <h3 class="section-title">
+              <i class="fas fa-lightbulb" />
+              推荐理由
+            </h3>
+            <div
+              class="reason-content"
+              :style="{
+                background: getReasonColor(restaurantData.rating).bg,
+                borderLeftColor: getReasonColor(restaurantData.rating).border
+              }"
+            >
+              <i
+                class="fas fa-quote-left"
+                :style="{ color: getReasonColor(restaurantData.rating).icon }"
+              />
+              <p :style="{ color: getReasonColor(restaurantData.rating).text }">
+                {{ restaurantData.reason }}
+              </p>
+            </div>
+          </div>
+
+          <!-- 用户评价摘要 -->
+          <div
+            v-if="restaurantData.summary"
+            class="restaurant-summary-section"
+          >
+            <h3 class="section-title">
+              <i class="fas fa-comment-dots" />
+              用户评价
+            </h3>
+            <div class="summary-content">
+              <i class="fas fa-quote-left" />
+              <p>{{ restaurantData.summary }}</p>
+            </div>
+          </div>
+
+          <!-- 评价列表 -->
+          <div
+            v-if="restaurantData.reviews && restaurantData.reviews.length"
+            class="reviews-section"
+          >
+            <div class="reviews-header">
+              <h3 class="section-title">
+                <i class="fas fa-star-half-alt" />
+                用户评价
+              </h3>
+              <span class="review-total">共 {{ restaurantData.reviews.length }} 条</span>
+            </div>
+            <div class="reviews-list">
+              <div
+                v-for="review in displayedReviews"
+                :key="review.id"
+                class="review-item"
+              >
+                <div class="review-user">
+                  <img
+                    :src="review.avatar || `https://picsum.photos/seed/${review.id || review.userName}/100/100`"
+                    :alt="review.userName"
+                  >
+                  <div>
+                    <span class="review-name">{{ review.userName }}</span>
+                    <span class="review-time">{{ review.time }}</span>
+                  </div>
+                </div>
+                <div class="review-rating">
+                  <i
+                    v-for="i in 5"
+                    :key="i"
+                    class="fas fa-star"
+                    :class="{ active: i <= review.rating }"
+                  />
+                </div>
+                <p class="review-content">
+                  {{ review.content }}
+                </p>
+              </div>
+            </div>
+
+            <!-- 加载更多按钮 -->
+            <div
+              v-if="hasMoreReviews"
+              class="load-more-wrapper"
+            >
+              <button
+                class="load-more-btn"
+                :disabled="isLoadingMore"
+                @click="loadMoreReviews"
+              >
+                <span v-if="!isLoadingMore">查看更多评论 ({{ remainingReviewsCount }} 条)</span>
+                <span v-else><i class="fas fa-spinner fa-spin" /> 加载中...</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- 图片预览弹窗 -->
-      <Teleport to="body">
-        <div v-if="showGalleryModal" class="gallery-modal" @click="closeGallery">
-          <div class="gallery-modal-content" @click.stop>
-            <button class="gallery-close" @click="closeGallery">
-              <i class="fas fa-times"></i>
-            </button>
-            <div class="gallery-image-wrapper">
-              <img
-                :src="restaurantData?.images?.[currentImageIndex]"
-                :alt="restaurantData?.name"
-                class="gallery-image"
-              />
-            </div>
-            <div class="gallery-counter" v-if="restaurantData?.images && restaurantData.images.length > 1">
-              {{ currentImageIndex + 1 }} / {{ restaurantData.images.length }}
-            </div>
-            <button
-              v-if="restaurantData?.images && restaurantData.images.length > 1"
-              class="gallery-nav gallery-prev"
-              @click.stop="prevImage"
-              :disabled="currentImageIndex === 0"
-            >
-              <i class="fas fa-chevron-left"></i>
-            </button>
-            <button
-              v-if="restaurantData?.images && restaurantData.images.length > 1"
-              class="gallery-nav gallery-next"
-              @click.stop="nextImage"
-              :disabled="currentImageIndex === (restaurantData?.images?.length || 0) - 1"
-            >
-              <i class="fas fa-chevron-right"></i>
-            </button>
-          </div>
-        </div>
-      </Teleport>
+      <!-- 空状态 -->
+      <div
+        v-else
+        class="empty-state"
+      >
+        <i class="fas fa-store-slash" />
+        <p>餐厅不存在</p>
+        <button
+          class="empty-btn"
+          @click="goBack"
+        >
+          返回首页
+        </button>
+      </div>
     </div>
-  </template>
+
+    <!-- 底部固定导航 -->
+    <div
+      v-if="restaurantData"
+      class="bottom-nav"
+    >
+      <div class="bottom-nav-content">
+        <div class="nav-info">
+          <span class="nav-price">¥{{ restaurantData.price }}/人</span>
+          <span class="nav-rating">
+            <i class="fas fa-star" />
+            {{ restaurantData.rating }}
+          </span>
+        </div>
+        <div class="nav-actions">
+          <button
+            class="nav-btn favorite"
+            :class="{ active: isFavorited }"
+            @click="toggleFavorite"
+          >
+            <i :class="isFavorited ? 'fas fa-heart' : 'far fa-heart'" />
+            <span>{{ isFavorited ? '已收藏' : '收藏' }}</span>
+          </button>
+          <button
+            class="nav-btn book"
+            @click="bookTable"
+          >
+            <i class="fas fa-calendar-check" />
+            预约
+          </button>
+          <button
+            class="nav-btn navigate"
+            @click="navigateToRestaurant"
+          >
+            <i class="fas fa-directions" />
+            导航
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图片预览弹窗 -->
+    <Teleport to="body">
+      <div
+        v-if="showGalleryModal"
+        class="gallery-modal"
+        @click="closeGallery"
+      >
+        <div
+          class="gallery-modal-content"
+          @click.stop
+        >
+          <button
+            class="gallery-close"
+            @click="closeGallery"
+          >
+            <i class="fas fa-times" />
+          </button>
+          <div class="gallery-image-wrapper">
+            <img
+              :src="restaurantData?.images?.[currentImageIndex]"
+              :alt="restaurantData?.name"
+              class="gallery-image"
+            >
+          </div>
+          <div
+            v-if="restaurantData?.images && restaurantData.images.length > 1"
+            class="gallery-counter"
+          >
+            {{ currentImageIndex + 1 }} / {{ restaurantData.images.length }}
+          </div>
+          <button
+            v-if="restaurantData?.images && restaurantData.images.length > 1"
+            class="gallery-nav gallery-prev"
+            :disabled="currentImageIndex === 0"
+            @click.stop="prevImage"
+          >
+            <i class="fas fa-chevron-left" />
+          </button>
+          <button
+            v-if="restaurantData?.images && restaurantData.images.length > 1"
+            class="gallery-nav gallery-next"
+            :disabled="currentImageIndex === (restaurantData?.images?.length || 0) - 1"
+            @click.stop="nextImage"
+          >
+            <i class="fas fa-chevron-right" />
+          </button>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
 
   <script setup lang="ts">
   import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
@@ -424,11 +547,13 @@ const response = await fetch(url, {
     }
 
     const result = await response.json()
-    if (result.code !== 0) {
+    if (result.code !== 200) {
       throw new Error(result.message || '获取餐厅详情失败')
     }
 
     const data = result.data
+    const mainImage = data.image_url || data.photos?.[0] || `https://picsum.photos/seed/${data.id}/400/300`;
+    const images = data.photos && data.photos.length > 0 ? data.photos : [mainImage];
 
     // 1. 判断是否永久关闭
     const isClosed = data.is_closed === true || data.is_closed === 'true'
@@ -454,8 +579,8 @@ const response = await fetch(url, {
     const mappedData: RestaurantData = {
       id: data.id,
       name: data.name,
-      image: data.image_url || data.photos?.[0] || '',
-      images: data.photos || [],
+      image: mainImage,
+      images: images,
       rating: data.rating || 0,
       reviewCount: data.review_count || 0,
       price: typeof data.price === 'string' ? parseFloat(data.price) || 0 : (data.price || 0),
@@ -623,7 +748,8 @@ const isOpenNow = (hoursData: any, timezone?: string): boolean => {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: method === 'POST' ? JSON.stringify({
-        shop_id: restaurantData.value.id   // 改为 shop_id（下划线）
+        shop_id: restaurantData.value.id,   // 改为 shop_id（下划线）
+        source: source.value   // 新增 source 字段
       }) : undefined
     })
 
@@ -706,7 +832,7 @@ const isOpenNow = (hoursData: any, timezone?: string): boolean => {
 // 接口地址: POST /api/review/list/
 // 请求头: Authorization: Bearer {token}
 // 请求体: { business_id, page, page_size, sort_by, source }
-// 响应: { code: 0, data: { items: [], total: 0 } }
+// 响应: { code: 200, data: { items: [], total: 0 } }
 // ============================================
 const loadMoreReviews = async () => {
   if (isLoadingMore.value || !hasMoreReviews.value) return
@@ -752,7 +878,7 @@ const url = `http://localhost:8000/api/review/list?${params.toString()}`
     console.log('完整响应：', result)
 console.log('items 长度：', result.data?.items?.length)
 console.log('total：', result.data?.total)
-    if (result.code !== 0) {
+    if (result.code !== 200) {
       throw new Error(result.message || '接口返回错误码')
     }
 
@@ -816,7 +942,7 @@ const remainingReviewsCount = computed(() => {
   // ============================================
   const openGallery = (index: number = 0) => {
     if (!restaurantData.value?.images || restaurantData.value.images.length === 0) {
-      alert('暂无图片')
+      toast.info('暂无图片')
       return
     }
     currentImageIndex.value = index
@@ -860,7 +986,7 @@ const remainingReviewsCount = computed(() => {
   const navigateToRestaurant = () => {
     const data = restaurantData.value
     if (!data) {
-      alert('暂无地址信息')
+      toast.warning('暂无地址信息')
       return
     }
 
@@ -929,7 +1055,7 @@ const remainingReviewsCount = computed(() => {
         }).catch(() => {})
       } else {
         navigator.clipboard.writeText(window.location.href)
-        alert('链接已复制，快去分享给朋友吧！')
+        toast.success('链接已复制，快去分享给朋友吧！')
       }
     }
   }
