@@ -7,11 +7,17 @@ from collections.abc import Iterator
 from typing import Any
 
 from backend.config import settings
-from backend.llm.client.llm import get_llm
+from backend.llm.client.llm import _message_text, get_llm
+from backend.llm.client.tool_loop import run_tool_loop
 from backend.llm.graph.builder import get_ask_session, release_ask_session
+from backend.llm.graph.history_window import filter_chat_messages
 from backend.llm.graph.nodes import history_snapshot
-from backend.llm.graph.session_pool import get_session_pool
-from backend.llm.insight.registry import ensure_section_insight, ensure_user_insight
+from backend.llm.graph.session_pool import get_session_pool, wait_section_ready
+from backend.llm.insight.registry import (
+    ensure_section_insight,
+    ensure_user_insight,
+    get_insight_registry,
+)
 from backend.llm.prompts.rag import RAG_PROMPT_WITH_HISTORY
 from backend.llm.schemas import (
     AskHistory,
@@ -28,9 +34,15 @@ from backend.llm.schemas import (
 from backend.llm.session.history import (
     clear_histories_for_uuid,
     clear_history,
+    get_history,
     list_history_session_ids_for_uuid,
 )
 from backend.logging_setup import setup_app_logging
+from backend.rag.document.indexing import (
+    delete_insight_from_opensearch,
+    delete_section_insight_from_opensearch,
+)
+from backend.rag.document.paths import normalize_backend_path, resolve_repo_path
 
 logger = logging.getLogger("backend.llm.graph.service")
 
@@ -52,36 +64,79 @@ def _require_ids(uuid: str, section_id: str) -> tuple[str, str]:
     return u, s
 
 
+def _normalize_attachment_value(value: Any) -> Any:
+    """将附件字段中的路径规范为 ./backend/...；非法则丢弃。"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        return normalize_backend_path(text)
+    if isinstance(value, (list, tuple)):
+        out: list[str] = []
+        for item in value:
+            if item is None:
+                continue
+            text = str(item).strip()
+            if not text:
+                continue
+            norm = normalize_backend_path(text)
+            if norm:
+                out.append(norm)
+        return out or None
+    text = str(value).strip()
+    if not text:
+        return None
+    return normalize_backend_path(text)
+
+
+def _normalize_ask_params_paths(params: AskParams) -> AskParams:
+    """规范化 AskParams 附件路径（就地更新副本字段）。"""
+    data = params.model_dump()
+    changed = False
+    for name in _ATTACHMENT_FIELDS:
+        raw = data.get(name)
+        norm = _normalize_attachment_value(raw)
+        if norm != raw:
+            data[name] = norm
+            changed = True
+    return AskParams.model_validate(data) if changed else params
+
+
 def _iter_ask_attachment_paths(params: AskParams) -> list[str]:
-    """从 AskParams 六个附件字段收集非空路径。"""
+    """从 AskParams 六个附件字段收集规范化后的非空路径。"""
     paths: list[str] = []
     for name in _ATTACHMENT_FIELDS:
         value = getattr(params, name, None)
         if value is None:
             continue
+        raw_items: list[Any]
         if isinstance(value, str):
-            text = value.strip()
-            if text:
-                paths.append(text)
-            continue
-        if isinstance(value, (list, tuple)):
-            for item in value:
-                if item is None:
-                    continue
-                text = str(item).strip()
-                if text:
-                    paths.append(text)
-            continue
-        text = str(value).strip()
-        if text:
-            paths.append(text)
+            raw_items = [value]
+        elif isinstance(value, (list, tuple)):
+            raw_items = list(value)
+        else:
+            raw_items = [value]
+        for item in raw_items:
+            if item is None:
+                continue
+            text = str(item).strip()
+            if not text:
+                continue
+            norm = normalize_backend_path(text)
+            if not norm:
+                logger.warning("skip invalid attachment path=%r", text)
+                continue
+            if norm not in paths:
+                paths.append(norm)
     return paths
 
 
 def _mark_ask_used_filenames(params: AskParams, section) -> list[str]:
     """带文件的 ask：只更新 used_filenames；加载由 load_section_document 完成。
 
-    返回本轮请求体原始非空路径（供 query_filename）。
+    返回本轮规范化路径（供 query_filename）。
     """
     paths = _iter_ask_attachment_paths(params)
     if not paths:
@@ -123,7 +178,9 @@ def _history_to_messages(snapshot: list[dict[str, Any]]) -> list[HistoryMessage]
     """组对外历史：filename / insight_* / sources；不含 search_query / used。"""
     out: list[HistoryMessage] = []
     for h in snapshot:
-        role = h.get("role") or "system"
+        role = h.get("role") or "user"
+        if role == "system":
+            continue
         sources_raw = h.get("sources")
         sources = (
             _sources_to_snippets(sources_raw)
@@ -134,11 +191,14 @@ def _history_to_messages(snapshot: list[dict[str, Any]]) -> list[HistoryMessage]
             bool(h.get("insight_create", False)) if role == "user" else None
         )
         insight_use = bool(h.get("insight_use", False)) if role == "user" else None
+        filename = h.get("filename") or ""
+        if role == "user" and filename:
+            filename = normalize_backend_path(str(filename)) or str(filename)
         out.append(
             HistoryMessage(
                 role=role,  # type: ignore[arg-type]
                 content=str(h.get("content") or ""),
-                filename=(h.get("filename") or "") if role == "user" else None,
+                filename=filename if role == "user" else None,
                 insight_create=insight_create,
                 insight_use=insight_use,
                 sources=sources,
@@ -177,10 +237,11 @@ def get_section_ids(uuid: str) -> list[str]:
 
 
 def get_ask_history(uuid: str, section_id: str) -> AskHistory:
-    """按 uuid + section_id 返回完整会话历史（含扩展字段）。"""
+    """按 uuid + section_id 只读 Redis 返回完整会话历史（过滤 system）。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
-    messages = get_session_pool().peek_history_messages(uuid, section_id)
+    wait_section_ready(uuid, section_id)
+    messages = filter_chat_messages(list(get_history(uuid, section_id).messages))
     history = _history_to_messages(history_snapshot(messages))
     insight_create, insight_use = _last_user_insight_flags(history)
     logger.info(
@@ -202,6 +263,7 @@ def delete_ask_history(uuid: str, section_id: str) -> bool:
     """按 uuid + section_id 删除单个会话历史（内存池 + Redis）。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
+    wait_section_ready(uuid, section_id)
     pool = get_session_pool()
     pool.discard_session(uuid, section_id)
     clear_history(uuid, section_id)
@@ -249,85 +311,135 @@ def release_ask_sessions_by_uuid(uuid: str) -> bool:
 
 
 def delete_user_insight(uuid: str) -> bool:
-    """删除用户总体洞察（占位）。"""
+    """清空用户 attrs + 删 OpenSearch；Redis key 保留（attrs 为空）。"""
     setup_app_logging()
     uuid = _require_uuid(uuid)
-    logger.info("delete_user_insight placeholder uuid=%s", uuid)
+    user = ensure_user_insight(uuid)
+    user.replace_attrs({})
+    user.last_chunk_size = 0
+    try:
+        delete_insight_from_opensearch(uuid)
+    except Exception:
+        logger.exception("delete_user_insight OS failed uuid=%s", uuid)
+    user.save_to_redis()
+    logger.info("delete_user_insight uuid=%s", uuid)
     return True
 
 
 def delete_section_insight(uuid: str, section_id: str) -> bool:
-    """删除单个会话洞察（占位）。"""
+    """清空会话 attrs + 删 OpenSearch 会话洞察切块；保留 facts/review。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
-    logger.info(
-        "delete_section_insight placeholder uuid=%s section_id=%s",
-        uuid,
-        section_id,
-    )
+    wait_section_ready(uuid, section_id)
+    section = ensure_section_insight(uuid, section_id)
+    section.replace_section_attrs({})
+    section.last_section_chunk_size = 0
+    try:
+        delete_section_insight_from_opensearch(uuid, section_id)
+    except Exception:
+        logger.exception(
+            "delete_section_insight OS failed uuid=%s section_id=%s",
+            uuid,
+            section_id,
+        )
+    # Redis 覆写：attrs 空，facts/review 等其它字段保留
+    section.save_to_redis()
+    logger.info("delete_section_insight uuid=%s section_id=%s", uuid, section_id)
     return True
 
 
 def delete_all_insights(uuid: str) -> bool:
-    """删除该用户全部洞察（含各会话）（占位）。"""
+    """清空该用户全部会话/用户 attrs + 对应 OpenSearch；Redis key 保留。"""
     setup_app_logging()
     uuid = _require_uuid(uuid)
-    logger.info("delete_all_insights placeholder uuid=%s", uuid)
+    from backend.llm.insight.store import list_section_insight_ids_for_uuid
+
+    section_ids = set(list_section_insight_ids_for_uuid(uuid))
+    reg = get_insight_registry()
+    prefix = f"{uuid}::"
+    with reg._lock:
+        section_ids.update(
+            k.split("::", 1)[1] for k in reg._sections if k.startswith(prefix)
+        )
+    for sid in sorted(section_ids):
+        delete_section_insight(uuid, sid)
+    delete_user_insight(uuid)
+    logger.info("delete_all_insights uuid=%s", uuid)
     return True
 
 
 def get_user_insight(uuid: str) -> dict[str, str]:
-    """查询用户总体洞察属性字典（占位返回空 dict）。"""
+    """查询用户总体洞察属性字典。"""
     setup_app_logging()
-    _require_uuid(uuid)
-    return {}
+    uuid = _require_uuid(uuid)
+    return ensure_user_insight(uuid).as_dict()
 
 
 def get_section_insight(uuid: str, section_id: str) -> dict[str, str]:
-    """查询会话洞察属性（占位：空 dict）。"""
+    """查询会话洞察属性字典（仅 section attrs）。"""
     setup_app_logging()
-    _require_ids(uuid, section_id)
-    return {}
+    uuid, section_id = _require_ids(uuid, section_id)
+    wait_section_ready(uuid, section_id)
+    return ensure_section_insight(uuid, section_id).section_as_dict()
 
 
 def update_user_insight_attrs(uuid: str, attrs: dict[str, Any]) -> bool:
-    """批量更新用户总体洞察属性（占位）。"""
+    """用完整字典覆写用户洞察属性（只改内存；释放时再覆写 Redis）。"""
     setup_app_logging()
     uuid = _require_uuid(uuid)
-    n = len(attrs or {})
-    logger.info("update_user_insight_attrs placeholder uuid=%s keys=%d", uuid, n)
+    user = ensure_user_insight(uuid)
+    user.replace_attrs(attrs or {})
+    try:
+        user.split_and_store()
+    except Exception:
+        logger.exception("update_user_insight_attrs split failed uuid=%s", uuid)
+    logger.info("update_user_insight_attrs uuid=%s keys=%d", uuid, len(attrs or {}))
     return True
 
 
 def update_section_insight_attrs(
     uuid: str, section_id: str, attrs: dict[str, Any]
 ) -> bool:
-    """批量更新会话洞察属性（占位）。"""
+    """用完整字典覆写会话洞察属性（只改内存；释放时再覆写 Redis）。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
-    n = len(attrs or {})
+    wait_section_ready(uuid, section_id)
+    section = ensure_section_insight(uuid, section_id)
+    section.replace_section_attrs(attrs or {})
+    try:
+        section.split_and_store_section()
+    except Exception:
+        logger.exception(
+            "update_section_insight_attrs split failed uuid=%s section_id=%s",
+            uuid,
+            section_id,
+        )
     logger.info(
-        "update_section_insight_attrs placeholder uuid=%s section_id=%s keys=%d",
+        "update_section_insight_attrs uuid=%s section_id=%s keys=%d",
         uuid,
         section_id,
-        n,
+        len(attrs or {}),
     )
     return True
 
 
 def get_section_facts(uuid: str, section_id: str) -> list[str]:
-    """读取会话 facts（占位空列表）。"""
+    """读取会话 facts。"""
     setup_app_logging()
-    _require_ids(uuid, section_id)
-    return []
+    uuid, section_id = _require_ids(uuid, section_id)
+    wait_section_ready(uuid, section_id)
+    return ensure_section_insight(uuid, section_id).get_facts()
 
 
 def update_section_facts(uuid: str, section_id: str, items: list[str]) -> bool:
-    """写入会话 facts（占位）。"""
+    """整体覆写会话 facts（只改内存；释放时再覆写 Redis）。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
+    wait_section_ready(uuid, section_id)
+    section = ensure_section_insight(uuid, section_id)
+    section.set_facts(list(items or []))
     logger.info(
-        "update_section_facts placeholder uuid=%s section_id=%s n=%d",
+        "update_section_facts uuid=%s section_id=%s n=%d",
         uuid,
         section_id,
         len(items or []),
@@ -336,22 +448,25 @@ def update_section_facts(uuid: str, section_id: str, items: list[str]) -> bool:
 
 
 def get_section_review(uuid: str, section_id: str) -> str:
-    """读取会话 review（占位空串）。"""
+    """读取会话 review；空则回落池内首条用户 query。"""
     setup_app_logging()
-    _require_ids(uuid, section_id)
-    return ""
+    uuid, section_id = _require_ids(uuid, section_id)
+    wait_section_ready(uuid, section_id)
+    return ensure_section_insight(uuid, section_id).get_review_with_fallback()
 
 
 def set_section_review(uuid: str, section_id: str, text: str) -> bool:
-    """覆盖写入会话 review（占位）。"""
+    """整体覆写会话 review（只改内存；释放时再覆写 Redis）。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
-    body = "" if text is None else str(text)
+    wait_section_ready(uuid, section_id)
+    section = ensure_section_insight(uuid, section_id)
+    section.set_review("" if text is None else str(text))
     logger.info(
-        "set_section_review placeholder uuid=%s section_id=%s len=%d",
+        "set_section_review uuid=%s section_id=%s len=%d",
         uuid,
         section_id,
-        len(body),
+        len(section.get_review()),
     )
     return True
 
@@ -360,27 +475,29 @@ def load_section_document(uuid: str, section_id: str, file_path: str) -> bool:
     """加载会话文档：ensure 洞察 → load_file → 成功则删磁盘原文件。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
+    wait_section_ready(uuid, section_id)
     path = (file_path or "").strip()
     if not path:
         raise ValueError("file_path is required")
+    norm = normalize_backend_path(path)
+    if not norm:
+        raise ValueError(f"file_path must be under ./backend/: {file_path}")
     ensure_user_insight(uuid)
     section = ensure_section_insight(uuid, section_id)
-    result = section.load_file(path)
-    source_file = str(result.get("source_file") or path)
+    result = section.load_file(norm)
+    source_file = str(result.get("source_file") or norm)
     chunks = int(result.get("chunks") or 0)
     errors = result.get("errors") or []
     if not errors:
         try:
-            from backend.rag.document.paths import resolve_repo_path
-
-            disk = resolve_repo_path(path)
+            disk = resolve_repo_path(norm)
             if disk.is_file():
                 disk.unlink()
                 logger.info("load_section_document deleted source path=%s", disk)
         except Exception:
             logger.exception(
                 "load_section_document delete source failed path=%s",
-                path,
+                norm,
             )
     else:
         logger.warning(
@@ -406,6 +523,7 @@ def create_ask_interrupt(
 ) -> AskInterruptCreateResult:
     """创建澄清问卷（占位：空 questions / 空 interrupt_id）。"""
     setup_app_logging()
+    wait_section_ready(params.uuid, params.section_id)
     logger.info(
         "create_ask_interrupt placeholder uuid=%s section_id=%s",
         params.uuid,
@@ -424,6 +542,7 @@ def submit_ask_interrupt(
 ) -> AskInterruptSubmitResult:
     """提交澄清答案（占位：accepted=False）。"""
     setup_app_logging()
+    wait_section_ready(params.uuid, params.section_id)
     logger.info(
         "submit_ask_interrupt placeholder uuid=%s section_id=%s interrupt_id=%s n=%d",
         params.uuid,
@@ -446,7 +565,10 @@ def ask(params: AskParams) -> AskStream:
     - 本轮 history 写入内存；会话释放 / 空闲超时 / LRU 时刷 Redis
     - 会话历史请用 ``get_ask_history``；本结果不含 history
     - 附件字段只 ``add_used_filenames``；文件加载请用 ``load_section_document``
+    - 每轮末尾 ``maintain()``
     """
+    params = _normalize_ask_params_paths(params)
+    wait_section_ready(params.uuid, params.section_id)
     logger.info(
         "graph ask start section_id=%s uuid=%s query_len=%d "
         "insight_create=%s insight_use=%s",
@@ -493,23 +615,45 @@ def ask(params: AskParams) -> AskStream:
     holder: dict[str, AskResult | None] = {"response": None}
 
     def _chunks() -> Iterator[str]:
-        llm = get_llm(temperature=settings.llm_generate_temperature)
         messages = RAG_PROMPT_WITH_HISTORY.format_messages(
             context=context,
             query=params.query,
             history=list(history_before),
         )
+        tools = [section.as_get_review_tool(), section.as_get_facts_tool()]
         parts: list[str] = []
         try:
-            for chunk in llm.stream(messages):
-                text = getattr(chunk, "content", None)
-                if text is None:
-                    continue
-                piece = text if isinstance(text, str) else str(text)
-                if not piece:
-                    continue
-                parts.append(piece)
-                yield piece
+            answered = False
+            try:
+                last = run_tool_loop(
+                    messages,
+                    tools,
+                    temperature=settings.llm_generate_temperature,
+                    max_rounds=4,
+                )
+                text = _message_text(last).strip()
+                if text:
+                    parts.append(text)
+                    yield text
+                    answered = True
+            except Exception:
+                logger.debug(
+                    "ask tool_loop fallback to stream uuid=%s section_id=%s",
+                    params.uuid,
+                    params.section_id,
+                    exc_info=True,
+                )
+            if not answered:
+                llm = get_llm(temperature=settings.llm_generate_temperature)
+                for chunk in llm.stream(messages):
+                    piece_raw = getattr(chunk, "content", None)
+                    if piece_raw is None:
+                        continue
+                    piece = piece_raw if isinstance(piece_raw, str) else str(piece_raw)
+                    if not piece:
+                        continue
+                    parts.append(piece)
+                    yield piece
         except Exception:
             logger.exception(
                 "graph ask stream failed section_id=%s uuid=%s",
@@ -530,6 +674,14 @@ def ask(params: AskParams) -> AskStream:
             sources=sources,
             used=False,
         )
+        try:
+            session.maintain()
+        except Exception:
+            logger.exception(
+                "ask maintain failed uuid=%s section_id=%s",
+                params.uuid,
+                params.section_id,
+            )
         result = AskResult(
             query=params.query,
             section_id=params.section_id,

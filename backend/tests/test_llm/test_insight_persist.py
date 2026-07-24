@@ -28,6 +28,21 @@ class _FakeRedis:
     def get(self, key: str) -> str | None:
         return self.data.get(key)
 
+    def delete(self, *keys: str) -> int:
+        n = 0
+        for key in keys:
+            if key in self.data:
+                del self.data[key]
+                n += 1
+        return n
+
+    def scan_iter(self, match: str | None = None, count: int = 200):
+        import fnmatch
+
+        for key in list(self.data):
+            if match is None or fnmatch.fnmatch(key, match):
+                yield key
+
     def close(self) -> None:
         return None
 
@@ -66,8 +81,8 @@ def test_user_section_redis_roundtrip(monkeypatch):
 
     section = SectionInsight("u1", "s1", parent=loaded_user)
     section.batch_add_section({"预算": "200"})
-    section._filenames = ["docs/a.md"]
-    section._used_filenames = ["docs/a.md"]
+    section._filenames = ["./backend/docs/a.md"]
+    section._used_filenames = ["./backend/docs/a.md"]
     section.add_facts(items=["f1"])
     section.set_review("rv")
     section.save_to_redis()
@@ -75,8 +90,8 @@ def test_user_section_redis_roundtrip(monkeypatch):
     loaded_sec = SectionInsight.load_section_from_redis("u1", "s1", parent=loaded_user)
     assert loaded_sec is not None
     assert loaded_sec.section_as_dict()["预算"] == "200"
-    assert loaded_sec.filenames() == ["docs/a.md"]
-    assert loaded_sec.used_filenames() == ["docs/a.md"]
+    assert loaded_sec.filenames() == ["./backend/docs/a.md"]
+    assert loaded_sec.used_filenames() == ["./backend/docs/a.md"]
     assert loaded_sec.get_facts() == ["f1"]
     assert loaded_sec.get_review() == "rv"
 
@@ -112,8 +127,12 @@ def test_load_section_document_calls_load_file_and_deletes(tmp_path, monkeypatch
     f = tmp_path / "note.md"
     f.write_text("hello", encoding="utf-8")
 
+    monkeypatch.setattr(
+        sec_mod, "normalize_backend_path", lambda p: "./backend/note.md"
+    )
+    monkeypatch.setattr(svc, "normalize_backend_path", lambda p: "./backend/note.md")
     monkeypatch.setattr(sec_mod, "resolve_repo_path", lambda p: f)
-    monkeypatch.setattr(sec_mod, "to_repo_relative_posix", lambda p: "note.md")
+    monkeypatch.setattr(svc, "resolve_repo_path", lambda p: f)
     monkeypatch.setattr(sec_mod, "load_document_as_text", lambda p: "hello")
     monkeypatch.setattr(sec_mod, "clean_text", lambda t: t)
     monkeypatch.setattr(
@@ -127,11 +146,13 @@ def test_load_section_document_calls_load_file_and_deletes(tmp_path, monkeypatch
         lambda *a, **k: (1, []),
     )
 
-    ok = svc.load_section_document(uuid="u1", section_id="s1", file_path=str(f))
+    ok = svc.load_section_document(
+        uuid="u1", section_id="s1", file_path="./backend/note.md"
+    )
     assert ok is True
     assert not f.exists()
     section = ensure_section_insight("u1", "s1")
-    assert "note.md" in section.filenames()
+    assert "./backend/note.md" in section.filenames()
     assert section.used_filenames() == []
 
 
@@ -150,6 +171,10 @@ def test_ask_marks_used_without_load_file(monkeypatch):
     redis_hist = _FakeHistory()
     monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
     monkeypatch.setattr(
+        "backend.llm.graph.history_window.get_history",
+        lambda uuid, section_id: redis_hist,
+    )
+    monkeypatch.setattr(
         nodes_mod,
         "get_retriever",
         lambda mode="hybrid", k=None: type(
@@ -158,6 +183,11 @@ def test_ask_marks_used_without_load_file(monkeypatch):
     )
     monkeypatch.setattr(nodes_mod, "rerank_docs", lambda q, d, top_n=None: d)
     monkeypatch.setattr(svc, "get_llm", lambda temperature=0.7: _fake_llm("ok"))
+    monkeypatch.setattr(
+        svc,
+        "run_tool_loop",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no tools in test")),
+    )
 
     called: list[str] = []
 
@@ -167,6 +197,13 @@ def test_ask_marks_used_without_load_file(monkeypatch):
 
     section = ensure_section_insight("u-ask", "s-ask")
     monkeypatch.setattr(section, "load_file", boom)
+    monkeypatch.setattr(
+        svc, "normalize_backend_path", lambda p: "./backend/docs/note.md"
+    )
+    monkeypatch.setattr(
+        "backend.llm.insight.section.normalize_backend_path",
+        lambda p: "./backend/docs/note.md",
+    )
 
     mem = MemorySaver()
     graph = builder_mod.build_ask_graph(checkpointer=mem)
@@ -179,13 +216,13 @@ def test_ask_marks_used_without_load_file(monkeypatch):
             query="你好",
             uuid="u-ask",
             section_id="s-ask",
-            md="docs/note.md",
+            md="./backend/docs/note.md",
         )
     )
     assert "".join(stream) == "ok"
     resp = stream.response
     assert isinstance(resp, AskResult)
-    assert resp.query_filename == "docs/note.md"
+    assert resp.query_filename == "./backend/docs/note.md"
     assert called == []
     sec = ensure_section_insight("u-ask", "s-ask")
     assert any("note.md" in p for p in sec.used_filenames())
@@ -207,6 +244,12 @@ def test_finalize_syncs_and_saves(monkeypatch):
     monkeypatch.setattr(
         "backend.llm.insight.section.delete_section_document_from_opensearch",
         lambda *a, **k: 0,
+    )
+    monkeypatch.setattr(
+        "backend.llm.insight.section.SectionInsight.total_maintain",
+        lambda self, turns, *, insight_create_turns=None, on_done=None: (
+            on_done() if callable(on_done) else None
+        ),
     )
 
     pool = AskSessionPool(max_size=5, start_sweeper=False)

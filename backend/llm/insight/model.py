@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from langchain_core.tools import StructuredTool
@@ -26,6 +27,18 @@ def format_attr_line(key: str, value: str) -> str:
     return f"用户的【{key}】是：【{value}】"
 
 
+def format_attrs_concat(attrs: dict[str, str]) -> str:
+    """属性简单拼接：``key:value,key:value...``。"""
+    if not attrs:
+        return ""
+    return ",".join(f"{k}:{v}" for k, v in attrs.items())
+
+
+def insight_os_threshold() -> int:
+    """写入 / 检索 OpenSearch 的 attrs_len 门槛（含等于）。"""
+    return max(1, int(settings.insight_chunk_size)) * 2
+
+
 class UserInsight:
     """按 uuid 绑定的用户洞察（内存数据属性 + OpenSearch chunk）。"""
 
@@ -37,10 +50,22 @@ class UserInsight:
         self._attrs: dict[str, str] = {}
         self.last_chunk_size: int = 0
         self.max_attr_len: int = 0
+        self.attrs_len: int = 0
+        # 维护占用：仅内存；副本快照不持有语义
+        self.occupied: bool = False
+        self._occupied_lock = threading.Lock()
+        self._occupied_free = threading.Event()
+        self._occupied_free.set()
 
     def as_dict(self) -> dict[str, str]:
         """数据属性视图（副本）。"""
         return dict(self._attrs)
+
+    def _attrs_concat(self) -> str:
+        return format_attrs_concat(self._attrs)
+
+    def _recompute_attrs_len(self) -> None:
+        self.attrs_len = len(self._attrs_concat())
 
     def _recompute_max_attr_len(self) -> None:
         if not self._attrs:
@@ -49,6 +74,32 @@ class UserInsight:
         self.max_attr_len = max(
             len(format_attr_line(k, v)) for k, v in self._attrs.items()
         )
+
+    def try_acquire_occupied(self) -> bool:
+        """非阻塞抢占；成功则 occupied=True。"""
+        with self._occupied_lock:
+            if self.occupied:
+                return False
+            self.occupied = True
+            self._occupied_free.clear()
+            return True
+
+    def wait_acquire_occupied(self) -> None:
+        """阻塞直到抢到 occupied。"""
+        while True:
+            with self._occupied_lock:
+                if not self.occupied:
+                    self.occupied = True
+                    self._occupied_free.clear()
+                    return
+                ev = self._occupied_free
+            ev.wait(timeout=1.0)
+
+    def release_occupied(self) -> None:
+        """释放占用并唤醒等待方。"""
+        with self._occupied_lock:
+            self.occupied = False
+            self._occupied_free.set()
 
     def batch_add(self, attrs: dict[str, Any]) -> dict[str, str]:
         """批量添加/覆盖数据属性；返回当前全部属性。"""
@@ -60,13 +111,24 @@ class UserInsight:
                 continue
             self._attrs[k] = "" if value is None else str(value)
         self._recompute_max_attr_len()
+        self._recompute_attrs_len()
         logger.info(
-            "batch_add uuid=%s attrs=%d max_attr_len=%d",
+            "batch_add uuid=%s attrs=%d max_attr_len=%d attrs_len=%d",
             self.uuid,
             len(self._attrs),
             self.max_attr_len,
+            self.attrs_len,
         )
         return self.as_dict()
+
+    def replace_attrs(self, attrs: dict[str, Any] | None) -> dict[str, str]:
+        """用新字典整体覆盖数据属性（先清空再写入）。"""
+        if attrs is None:
+            attrs = {}
+        if not isinstance(attrs, dict):
+            raise TypeError("attrs must be a dict")
+        self._attrs.clear()
+        return self.batch_add(attrs)
 
     def as_batch_add_tool(self) -> StructuredTool:
         """供 LLM ``bind_tools`` / ``invoke_with_tools`` 调用的批量添加工具。"""
@@ -132,6 +194,9 @@ class UserInsight:
 
     def split_and_store(self) -> int:
         """按配置长度拼文 → 仅按 ``\\n\\n\\n`` 切割 → 写入 OpenSearch。"""
+        if self.attrs_len < insight_os_threshold():
+            return 0
+
         text = self.to_long_text(settings.insight_chunk_size)
         if not text.strip():
             if self.last_chunk_size > 0:
@@ -163,7 +228,9 @@ class UserInsight:
         return n
 
     def search(self, query: str) -> str:
-        """混合检索 + 精排，返回本 uuid 下最优一条 chunk 的 text。"""
+        """低于门槛返回全量拼接；否则混合检索 + 精排最优一条。"""
+        if self.attrs_len < insight_os_threshold():
+            return self._attrs_concat()
         if self.last_chunk_size <= 0:
             return ""
         return search_insight_text(query, uuid=self.uuid)

@@ -16,7 +16,11 @@ from backend.llm.graph.router import (
     route_after_enrich,
     route_after_user_insight,
 )
-from backend.llm.graph.session_pool import AskSession, get_session_pool
+from backend.llm.graph.session_pool import (
+    AskSession,
+    get_session_pool,
+    wait_section_ready,
+)
 from backend.llm.graph.state import AskState
 
 logger = logging.getLogger("backend.llm.graph.builder")
@@ -115,6 +119,7 @@ def get_ask_graph(
         return graph
     if not uuid or not section_id:
         raise ValueError("uuid and section_id are both required to bind a session")
+    wait_section_ready(uuid, section_id)
     session = get_session_pool().get_or_create(uuid, section_id)
     session.graph = graph
     return session.graph
@@ -127,14 +132,14 @@ def get_ask_session(
     checkpointer: BaseCheckpointSaver | None = None,
 ) -> AskSession:
     """申请/复用会话槽（含内存 history）；uuid 与 section_id 均必填。"""
+    wait_section_ready(uuid, section_id)
     _ensure_shared_graph(checkpointer=checkpointer)
     return get_session_pool().get_or_create(uuid, section_id)
 
 
 def release_ask_session(uuid: str, section_id: str) -> bool:
-    """显式释放会话并刷 Redis 历史；uuid 与 section_id 均必填。"""
-    get_session_pool().release(uuid, section_id)
-    return True
+    """显式释放会话：立即返回；后台维护剩余轮次并刷 Redis。"""
+    return get_session_pool().release(uuid, section_id)
 
 
 def reset_ask_graph_cache() -> None:
