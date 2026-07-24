@@ -63,6 +63,13 @@ test:
 tmod module:
     uv run pytest -c pyproject.toml -n auto backend/tests/{{ module }} -v --tb=short
 
+# 生成/同步测试用例文档
+#   just synt           # 中文
+#   just synt en        # 英文（自动翻译）
+#   just synt zh -n     # 中文，跳过 LLM
+synt lang="zh" *flags:
+    uv run python sync_test.py --lang {{ lang }} {{ flags }}
+
 # 仅跑单元测试（不依赖数据库）
 tunit:
     uv run pytest -c pyproject.toml -m "not integration" -n auto -v --tb=short
