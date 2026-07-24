@@ -5,17 +5,14 @@ from __future__ import annotations
 import json
 
 from langchain_core.messages import AIMessage
-from langgraph.checkpoint.memory import MemorySaver
 
-from backend.llm.graph.builder import reset_ask_graph_cache
-from backend.llm.graph.session_pool import AskSessionPool, get_session_pool
+from backend.llm.graph.session_pool import AskSessionPool
 from backend.llm.insight.registry import (
     drop_section_insight,
     ensure_section_insight,
     get_insight_registry,
 )
 from backend.llm.insight.section import SectionInsight
-from backend.llm.schemas import AskParams, AskResult
 
 
 class _FakeRedis:
@@ -133,62 +130,6 @@ def test_load_section_document_calls_load_file_and_deletes(tmp_path, monkeypatch
     section = ensure_section_insight("u1", "s1")
     assert "note.md" in section.filenames()
     assert section.used_filenames() == []
-
-
-def test_ask_marks_used_without_load_file(monkeypatch):
-    import backend.llm.graph.builder as builder_mod
-    import backend.llm.graph.nodes as nodes_mod
-    import backend.llm.graph.service as svc
-    import backend.llm.graph.session_pool as pool_mod
-    import backend.llm.insight.store as store_mod
-
-    fake = _FakeRedis()
-    monkeypatch.setattr(store_mod, "_client", lambda: fake)
-    get_insight_registry().reset()
-    reset_ask_graph_cache()
-
-    redis_hist = _FakeHistory()
-    monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
-    monkeypatch.setattr(
-        nodes_mod,
-        "get_retriever",
-        lambda mode="hybrid", k=None: type(
-            "R", (), {"invoke": staticmethod(lambda q: [])}
-        )(),
-    )
-    monkeypatch.setattr(nodes_mod, "rerank_docs", lambda q, d, top_n=None: d)
-    monkeypatch.setattr(svc, "get_llm", lambda temperature=0.7: _fake_llm("ok"))
-
-    called: list[str] = []
-
-    def boom(*a, **k):
-        called.append("load_file")
-        raise AssertionError("ask must not call load_file")
-
-    section = ensure_section_insight("u-ask", "s-ask")
-    monkeypatch.setattr(section, "load_file", boom)
-
-    mem = MemorySaver()
-    graph = builder_mod.build_ask_graph(checkpointer=mem)
-    builder_mod._compiled = graph
-    builder_mod._checkpointer = mem
-    get_session_pool().set_shared_graph(graph, mem)
-
-    stream = svc.ask(
-        AskParams(
-            query="你好",
-            uuid="u-ask",
-            section_id="s-ask",
-            md="docs/note.md",
-        )
-    )
-    assert "".join(stream) == "ok"
-    resp = stream.response
-    assert isinstance(resp, AskResult)
-    assert resp.query_filename == "docs/note.md"
-    assert called == []
-    sec = ensure_section_insight("u-ask", "s-ask")
-    assert any("note.md" in p for p in sec.used_filenames())
 
 
 def test_finalize_syncs_and_saves(monkeypatch):

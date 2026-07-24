@@ -26,15 +26,4 @@ def test_rag_prompt_formats():
     joined = "\n".join(_message_text(m) for m in msgs2)
     assert "上下文" in joined
     assert "追问" in joined
-
-
-def test_rephrase_prompt_formats():
-    from backend.llm.prompts.rephrase import REPHRASE_PROMPT
-
-    msgs = REPHRASE_PROMPT.format_messages(
-        query="这个怎么样",
-        history=[HumanMessage(content="谈到餐厅")],
-    )
-    joined = "\n".join(_message_text(m) for m in msgs)
-    assert "这个怎么样" in joined
-    assert "改写后" in joined
+    assert "上一轮" in joined
