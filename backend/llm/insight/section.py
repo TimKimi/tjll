@@ -8,7 +8,12 @@ from typing import Any
 from langchain_core.tools import StructuredTool
 
 from backend.config import settings
-from backend.llm.insight.model import UserInsight, format_attr_line
+from backend.llm.insight.model import (
+    UserInsight,
+    format_attr_line,
+    format_attrs_concat,
+    insight_os_threshold,
+)
 from backend.rag.document.chunking import split_text_to_chunks
 from backend.rag.document.clean import clean_text
 from backend.rag.document.indexing import (
@@ -20,8 +25,8 @@ from backend.rag.document.indexing import (
 from backend.rag.document.loaders import load_document_as_text
 from backend.rag.document.paths import (
     SUPPORTED_EXTS,
+    normalize_backend_path,
     resolve_repo_path,
-    to_repo_relative_posix,
 )
 from backend.rag.retrieve.search import (
     search_section_document_texts,
@@ -35,7 +40,7 @@ _ATTR_SEP = "\n"
 
 
 def _normalize_path_list(paths: str | list[str]) -> list[str]:
-    """将单个路径或路径列表规范为仓库相对 POSIX 路径列表。"""
+    """将单个路径或路径列表规范为 ``./backend/...``。"""
     if isinstance(paths, str):
         raw = [paths]
     elif isinstance(paths, list):
@@ -47,11 +52,9 @@ def _normalize_path_list(paths: str | list[str]) -> list[str]:
         text = str(item or "").strip()
         if not text:
             continue
-        try:
-            out.append(to_repo_relative_posix(resolve_repo_path(text)))
-        except (OSError, ValueError):
-            # 无法 resolve 时仍保留原始 strip 文本（便于测试 mock）
-            out.append(text.replace("\\", "/"))
+        norm = normalize_backend_path(text)
+        if norm:
+            out.append(norm)
     return out
 
 
@@ -85,6 +88,7 @@ class SectionInsight(UserInsight):
         self._review: str = ""
         self.last_section_chunk_size: int = 0
         self.max_section_attr_len: int = 0
+        self.attrs_len: int = 0
 
     # ── 用户级洞察（共享 parent）──────────────────────────────
 
@@ -252,6 +256,12 @@ class SectionInsight(UserInsight):
     def section_as_dict(self) -> dict[str, str]:
         return dict(self._section_attrs)
 
+    def _section_attrs_concat(self) -> str:
+        return format_attrs_concat(self._section_attrs)
+
+    def _recompute_attrs_len(self) -> None:
+        self.attrs_len = len(self._section_attrs_concat())
+
     def _recompute_max_section_attr_len(self) -> None:
         if not self._section_attrs:
             self.max_section_attr_len = 0
@@ -270,13 +280,24 @@ class SectionInsight(UserInsight):
                 continue
             self._section_attrs[k] = str(value)
         self._recompute_max_section_attr_len()
+        self._recompute_attrs_len()
         logger.info(
-            "batch_add_section uuid=%s section_id=%s attrs=%d",
+            "batch_add_section uuid=%s section_id=%s attrs=%d attrs_len=%d",
             self.uuid,
             self.section_id,
             len(self._section_attrs),
+            self.attrs_len,
         )
         return self.section_as_dict()
+
+    def replace_section_attrs(self, attrs: dict[str, Any] | None) -> dict[str, str]:
+        """用新字典整体覆盖会话属性（先清空再写入）。"""
+        if attrs is None:
+            attrs = {}
+        if not isinstance(attrs, dict):
+            raise TypeError("attrs must be a dict")
+        self._section_attrs.clear()
+        return self.batch_add_section(attrs)
 
     def as_batch_add_section_tool(self) -> StructuredTool:
         def _tool(attrs: dict[str, Any]) -> dict[str, str]:
@@ -333,6 +354,9 @@ class SectionInsight(UserInsight):
 
     def split_and_store_section(self) -> int:
         """会话属性拼文 → 按 ``\\n\\n\\n`` 切割 → 写入 section_insight 索引。"""
+        if self.attrs_len < insight_os_threshold():
+            return 0
+
         text = self.to_section_long_text(settings.insight_chunk_size)
         if not text.strip():
             if self.last_section_chunk_size > 0:
@@ -363,7 +387,9 @@ class SectionInsight(UserInsight):
         return n
 
     def search_section(self, query: str) -> str:
-        """检索本会话属性切块（混合 + 精排，返回最优一条）。"""
+        """低于门槛返回全量拼接；否则检索本会话属性切块。"""
+        if self.attrs_len < insight_os_threshold():
+            return self._section_attrs_concat()
         if self.last_section_chunk_size <= 0:
             return ""
         return search_section_insight_text(
@@ -374,6 +400,21 @@ class SectionInsight(UserInsight):
 
     def get_facts(self) -> list[str]:
         return list(self._facts)
+
+    def set_facts(self, items: list[str] | None = None) -> list[str]:
+        """整体覆写 facts 列表（每条 ≤20 字）。"""
+        if items is None:
+            items = []
+        if not isinstance(items, list):
+            raise TypeError("items must be a list of strings")
+        self._facts = [str(x).strip()[:20] for x in items if str(x).strip()]
+        logger.info(
+            "set_facts uuid=%s section_id=%s total=%d",
+            self.uuid,
+            self.section_id,
+            len(self._facts),
+        )
+        return self.get_facts()
 
     def add_facts(
         self,
@@ -389,7 +430,7 @@ class SectionInsight(UserInsight):
             items = []
         if not isinstance(items, list):
             raise TypeError("items must be a list of strings")
-        cleaned = [str(x) for x in items]
+        cleaned = [str(x).strip()[:20] for x in items if str(x).strip()]
 
         if start is None:
             self._facts.extend(cleaned)
@@ -439,8 +480,20 @@ class SectionInsight(UserInsight):
     def get_review(self) -> str:
         return self._review
 
+    def get_review_with_fallback(self) -> str:
+        """review 非空原样返回；否则回落池内内存首条用户 query，找不到则 ``\"\"``。"""
+        text = (self._review or "").strip()
+        if text:
+            return self._review
+        from backend.llm.graph.session_pool import get_session_pool
+
+        return get_session_pool().first_memory_user_query(self.uuid, self.section_id)
+
     def set_review(self, text: str) -> str:
-        self._review = "" if text is None else str(text)
+        body = "" if text is None else str(text).strip()
+        if len(body) > 150:
+            body = body[:150]
+        self._review = body
         logger.info(
             "set_review uuid=%s section_id=%s len=%d",
             self.uuid,
@@ -464,11 +517,222 @@ class SectionInsight(UserInsight):
             description="设置或覆盖本会话的 review 字符串。",
         )
 
+    def as_get_review_tool(self) -> StructuredTool:
+        def _tool() -> str:
+            """读取本会话 review 摘要（空则回落首条用户 query）。"""
+            return self.get_review_with_fallback()
+
+        return StructuredTool.from_function(
+            func=_tool,
+            name="get_section_review",
+            description="读取本会话 review 摘要字符串。",
+        )
+
+    def as_get_facts_tool(self) -> StructuredTool:
+        def _tool() -> list[str]:
+            """读取本会话 facts 列表。"""
+            return self.get_facts()
+
+        return StructuredTool.from_function(
+            func=_tool,
+            name="get_section_facts",
+            description="读取本会话 facts 字符串列表。",
+        )
+
+    # ── 维护（副本上执行）──────────────────────────────────────
+
+    def clone_for_maintain(self) -> SectionInsight:
+        """深拷贝会话字段；用户 attrs 使用独立快照 parent（不持有 occupied）。"""
+        snap = UserInsight(self.uuid)
+        snap._attrs = dict(self._parent._attrs)
+        snap.last_chunk_size = int(self._parent.last_chunk_size)
+        snap.max_attr_len = int(self._parent.max_attr_len)
+        snap.attrs_len = int(self._parent.attrs_len)
+        clone = SectionInsight(self.uuid, self.section_id, parent=snap)
+        clone._filenames = list(self._filenames)
+        clone._used_filenames = list(self._used_filenames)
+        clone._section_attrs = dict(self._section_attrs)
+        clone._facts = list(self._facts)
+        clone._review = self._review
+        clone.last_section_chunk_size = int(self.last_section_chunk_size)
+        clone.max_section_attr_len = int(self.max_section_attr_len)
+        clone.attrs_len = int(self.attrs_len)
+        return clone
+
+    def merge_from_maintain_replica(self, replica: SectionInsight) -> tuple[bool, bool]:
+        """合并维护副本；返回 (section_attrs 有变, user_attrs 有变)。"""
+        section_changed = dict(replica._section_attrs) != dict(self._section_attrs)
+        user_changed = dict(replica._parent._attrs) != dict(self._parent._attrs)
+        self._facts = list(replica._facts)
+        self._review = str(replica._review or "")
+        self._section_attrs = dict(replica._section_attrs)
+        self._recompute_max_section_attr_len()
+        self._recompute_attrs_len()
+        if user_changed:
+            self._parent._attrs = dict(replica._parent._attrs)
+            self._parent._recompute_max_attr_len()
+            self._parent._recompute_attrs_len()
+        return section_changed, user_changed
+
+    @staticmethod
+    def _history_text(messages: list[Any]) -> str:
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        lines: list[str] = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                role = "user"
+            elif isinstance(msg, AIMessage):
+                role = "assistant"
+            else:
+                role = "other"
+            lines.append(f"{role}: {getattr(msg, 'content', '')}")
+        return "\n".join(lines)
+
+    def maintain_review(self, history: list[Any]) -> None:
+        """LLM + set_review；review ≤150 字。"""
+        from backend.llm.client.tool_loop import run_tool_loop
+        from backend.llm.prompts.maintain import MAINTAIN_REVIEW_PROMPT
+
+        messages = MAINTAIN_REVIEW_PROMPT.format_messages(
+            review=self.get_review() or "（空）",
+            history_text=self._history_text(history) or "（空）",
+        )
+        run_tool_loop(
+            messages,
+            [self.as_set_review_tool()],
+            temperature=settings.llm_generate_temperature,
+            max_rounds=4,
+        )
+
+    def maintain_facts(self, history: list[Any]) -> None:
+        """LLM + add_facts；单条 ≤20 字。"""
+        from backend.llm.client.tool_loop import run_tool_loop
+        from backend.llm.prompts.maintain import MAINTAIN_FACTS_PROMPT
+
+        facts = self.get_facts()
+        facts_text = "\n".join(f"{i + 1}. {x}" for i, x in enumerate(facts)) or "（空）"
+        messages = MAINTAIN_FACTS_PROMPT.format_messages(
+            facts_text=facts_text,
+            history_text=self._history_text(history) or "（空）",
+        )
+        run_tool_loop(
+            messages,
+            [self.as_add_facts_tool()],
+            temperature=settings.llm_generate_temperature,
+            max_rounds=6,
+        )
+
+    def maintain_section_attrs(
+        self,
+        history: list[Any],
+        *,
+        insight_create_turns: list[Any] | None = None,
+    ) -> None:
+        """维护会话属性；若有 insight_create 轮次则再维护用户属性。"""
+        from backend.llm.client.tool_loop import run_tool_loop
+        from backend.llm.prompts.maintain import (
+            MAINTAIN_SECTION_ATTRS_PROMPT,
+            MAINTAIN_USER_ATTRS_PROMPT,
+        )
+
+        attrs = self.section_as_dict()
+        attrs_text = (
+            "\n".join(f"{k}: {v}" for k, v in attrs.items()) if attrs else "（空）"
+        )
+        messages = MAINTAIN_SECTION_ATTRS_PROMPT.format_messages(
+            attrs_text=attrs_text,
+            history_text=self._history_text(history) or "（空）",
+        )
+        run_tool_loop(
+            messages,
+            [self.as_batch_add_section_tool()],
+            temperature=settings.llm_generate_temperature,
+            max_rounds=4,
+        )
+
+        create_turns = list(insight_create_turns or [])
+        if not create_turns:
+            return
+        create_msgs: list[Any] = []
+        for item in create_turns:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                create_msgs.extend(list(item))
+            else:
+                create_msgs.append(item)
+        user_attrs = self.as_dict()
+        user_text = (
+            "\n".join(f"{k}: {v}" for k, v in user_attrs.items())
+            if user_attrs
+            else "（空）"
+        )
+        section_text = (
+            "\n".join(f"{k}: {v}" for k, v in self.section_as_dict().items())
+            if self._section_attrs
+            else "（空）"
+        )
+        user_messages = MAINTAIN_USER_ATTRS_PROMPT.format_messages(
+            user_attrs_text=user_text,
+            section_attrs_text=section_text,
+            history_text=self._history_text(create_msgs) or "（空）",
+        )
+        run_tool_loop(
+            user_messages,
+            [self.as_batch_add_tool()],
+            temperature=settings.llm_generate_temperature,
+            max_rounds=4,
+        )
+
+    def total_maintain(
+        self,
+        turns: list[Any],
+        *,
+        insight_create_turns: list[Any] | None = None,
+        on_done: Any = None,
+    ) -> None:
+        """三小方法并行；结束仅回调 on_done（不写主对象 / 不 save）。"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        history: list[Any] = []
+        for item in turns:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                history.extend(list(item))
+            else:
+                history.append(item)
+        try:
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                futures = [
+                    pool.submit(self.maintain_review, history),
+                    pool.submit(self.maintain_facts, history),
+                    pool.submit(
+                        self.maintain_section_attrs,
+                        history,
+                        insight_create_turns=insight_create_turns,
+                    ),
+                ]
+                for fut in as_completed(futures):
+                    fut.result()
+        except Exception:
+            logger.exception(
+                "total_maintain failed uuid=%s section_id=%s",
+                self.uuid,
+                self.section_id,
+            )
+        finally:
+            if callable(on_done):
+                try:
+                    on_done()
+                except Exception:
+                    logger.exception("total_maintain on_done failed")
+
     # ── 文档加载 / 检索 ───────────────────────────────────────
 
     def load_file(self, relative_path: str) -> dict[str, Any]:
         """加载相对 tjll 的本地文件：记入文件名列表 → 解析切块 → 入库。"""
-        path = resolve_repo_path(relative_path)
+        source_file = normalize_backend_path(relative_path)
+        if not source_file:
+            raise ValueError(f"path must be under ./backend/: {relative_path}")
+        path = resolve_repo_path(source_file)
         if not path.is_file():
             raise FileNotFoundError(f"文件不存在: {path}")
 
@@ -476,7 +740,6 @@ class SectionInsight(UserInsight):
         if ext not in SUPPORTED_EXTS:
             raise ValueError(f"不支持的文件类型: {ext}")
 
-        source_file = to_repo_relative_posix(path)
         if source_file not in self._filenames:
             self._filenames.append(source_file)
 

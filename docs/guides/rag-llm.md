@@ -59,7 +59,7 @@ ok = release_ask_session(uuid=resp.uuid, section_id=resp.section_id)  # bool
 | `uuid` | 是 | 用户 ID；与 `section_id` **同时必填**，共同作为历史 Redis key（`{uuid}::{section_id}`） |
 | `section_id` | 是 | 会话/分区 ID |
 | `insight_create` / `insight_use` | 否 | 默认 `false`；写入**用户轮**历史扩展字段 |
-| `docx` / `doc` / `txt` / `md` / `pdf` / `images` | 否 | 路径 `str` 或 `list[str]`；非空则 `add_used_filenames`（**不**解析文件）。文件须先经 `load_section_document` 入库。路径约定：以 `./backend/` 开头指向最终文件 |
+| `docx` / `doc` / `txt` / `md` / `pdf` / `images` | 否 | `list[str] \| null`；默认 `null`。非空则 `add_used_filenames`（**不**解析文件）。文件须先经 `load_section_document` 入库。路径约定：以 `./backend/` 开头指向最终文件 |
 
 ### AskResult 字段
 

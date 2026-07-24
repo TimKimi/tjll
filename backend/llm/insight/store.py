@@ -11,11 +11,24 @@ from redis import Redis
 from backend.config import settings
 from backend.llm.insight.model import UserInsight
 from backend.llm.insight.section import SectionInsight
+from backend.rag.document.paths import normalize_backend_path
 
 logger = logging.getLogger("backend.llm.insight.store")
 
 _USER_KEY = "insight:user:{uuid}"
 _SECTION_KEY = "insight:section:{uuid}::{section_id}"
+_SECTION_KEY_PREFIX = "insight:section:"
+
+
+def _normalize_stored_paths(paths: list[Any]) -> list[str]:
+    out: list[str] = []
+    for item in paths:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        norm = normalize_backend_path(text)
+        out.append(norm if norm else text)
+    return out
 
 
 def _client() -> Any:
@@ -164,8 +177,12 @@ def load_section_insight(
     section_attrs = data.get("section_attrs") or {}
     if isinstance(section_attrs, dict) and section_attrs:
         section.batch_add_section(section_attrs)
-    section._filenames = [str(x) for x in (data.get("filenames") or [])]
-    section._used_filenames = [str(x) for x in (data.get("used_filenames") or [])]
+    section._filenames = _normalize_stored_paths(
+        [str(x) for x in (data.get("filenames") or [])]
+    )
+    section._used_filenames = _normalize_stored_paths(
+        [str(x) for x in (data.get("used_filenames") or [])]
+    )
     section._facts = [str(x) for x in (data.get("facts") or [])]
     section._review = str(data.get("review") or "")
     section.last_section_chunk_size = int(data.get("last_section_chunk_size") or 0)
@@ -179,3 +196,68 @@ def load_section_insight(
         len(section._used_filenames),
     )
     return section
+
+
+def delete_user_insight_redis(uuid: str) -> bool:
+    """删除用户洞察 Redis key。"""
+    key = user_insight_key(uuid)
+    try:
+        client = _client()
+        try:
+            n = int(client.delete(key) or 0)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+        logger.info("delete_user_insight_redis key=%s deleted=%d", key, n)
+        return True
+    except Exception:
+        logger.exception("delete_user_insight_redis failed key=%s", key)
+        return False
+
+
+def delete_section_insight_redis(uuid: str, section_id: str) -> bool:
+    """删除会话洞察 Redis key。"""
+    key = section_insight_key(uuid, section_id)
+    try:
+        client = _client()
+        try:
+            n = int(client.delete(key) or 0)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+        logger.info("delete_section_insight_redis key=%s deleted=%d", key, n)
+        return True
+    except Exception:
+        logger.exception("delete_section_insight_redis failed key=%s", key)
+        return False
+
+
+def list_section_insight_ids_for_uuid(uuid: str) -> list[str]:
+    """扫描 Redis，列出该 uuid 下全部 section_id。"""
+    uuid = (uuid or "").strip()
+    if not uuid:
+        return []
+    prefix = f"{_SECTION_KEY_PREFIX}{uuid}::"
+    out: set[str] = set()
+    try:
+        client = _client()
+        try:
+            for raw in client.scan_iter(match=f"{prefix}*", count=200):
+                text = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                if not text.startswith(prefix):
+                    continue
+                section_id = text[len(prefix) :]
+                if section_id:
+                    out.add(section_id)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+    except Exception:
+        logger.exception("list_section_insight_ids_for_uuid failed uuid=%s", uuid)
+    return sorted(out)

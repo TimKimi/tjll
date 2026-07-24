@@ -25,7 +25,9 @@ RAG_PROMPT_WITH_HISTORY = ChatPromptTemplate.from_messages(
             "你是一个基于给定资料回答问题的助手。\n"
             "严格根据提供的资料回答用户问题。资料里没有相关信息时，"
             '明确回答"根据现有资料无法回答"，不要编造。\n'
-            "结合历史对话理解用户意图，回答简洁、准确。",
+            "结合历史对话理解用户意图，回答简洁、准确。\n"
+            "如确有必要，可调用 get_section_review / get_section_facts "
+            "查阅会话摘要与事实；非必要不要调用。",
         ),
         MessagesPlaceholder("history"),
         (

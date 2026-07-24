@@ -71,15 +71,18 @@ class AskParams(BaseModel):
         min_length=1,
         description="用户/请求关联 ID（与 section_id 共同作为历史 key）",
     )
-    docx: list[str] = Field(
-        default_factory=list,
-        description="文件路径，上传接口返回的 url，如 /static/file/{username}/{section_id}/{name}.docx",
+    docx: list[str] | None = Field(
+        default=None,
+        description="文件路径列表；无附件为 null。路径如 ./backend/.../name.docx",
     )
-    doc: list[str] = Field(default_factory=list, description="同上")
-    txt: list[str] = Field(default_factory=list, description="同上")
-    md: list[str] = Field(default_factory=list, description="同上")
-    pdf: list[str] = Field(default_factory=list, description="同上")
-    images: list[str] = Field(default_factory=list, description="图片文件路径，同上")
+    doc: list[str] | None = Field(default=None, description="同上")
+    txt: list[str] | None = Field(default=None, description="同上")
+    md: list[str] | None = Field(default=None, description="同上")
+    pdf: list[str] | None = Field(default=None, description="同上")
+    images: list[str] | None = Field(
+        default=None,
+        description="图片路径列表；无附件为 null",
+    )
     insight_create: bool = Field(default=False, description="是否创建洞察")
     insight_use: bool = Field(default=False, description="是否使用洞察")
 

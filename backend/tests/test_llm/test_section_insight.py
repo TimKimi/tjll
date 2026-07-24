@@ -54,9 +54,11 @@ def test_batch_add_section_and_long_text():
 
 
 def test_split_and_store_section_mock(monkeypatch):
+    from backend.config import settings
     from backend.llm.insight import section as sec_mod
     from backend.llm.insight.section import SectionInsight
 
+    monkeypatch.setattr(settings, "insight_chunk_size", 1)
     calls: list[tuple] = []
 
     monkeypatch.setattr(
@@ -74,6 +76,7 @@ def test_split_and_store_section_mock(monkeypatch):
 
     s = SectionInsight("u1", "secA")
     s.batch_add_section({"k": "v"})
+    assert s.attrs_len >= 2
     n = s.split_and_store_section()
     assert n >= 1
     assert calls and calls[0][0] == "u1" and calls[0][1] == "secA"
@@ -81,9 +84,11 @@ def test_split_and_store_section_mock(monkeypatch):
 
 
 def test_search_section_and_documents_delegate(monkeypatch):
+    from backend.config import settings
     from backend.llm.insight import section as sec_mod
     from backend.llm.insight.section import SectionInsight
 
+    monkeypatch.setattr(settings, "insight_chunk_size", 1)
     monkeypatch.setattr(
         sec_mod,
         "search_section_insight_text",
@@ -98,6 +103,7 @@ def test_search_section_and_documents_delegate(monkeypatch):
     )
 
     s = SectionInsight("u1", "sec1")
+    s.batch_add_section({"k": "vv"})
     s.last_section_chunk_size = 1
     s._filenames.append("a.md")
     assert s.search_section("你好") == "attr:你好:u1:sec1"
@@ -108,9 +114,11 @@ def test_search_section_and_documents_delegate(monkeypatch):
 
 
 def test_user_search_skips_when_no_chunks(monkeypatch):
+    from backend.config import settings
     from backend.llm.insight import model as model_mod
     from backend.llm.insight.model import UserInsight
 
+    monkeypatch.setattr(settings, "insight_chunk_size", 1)
     called = {"n": 0}
 
     def boom(*a, **k):
@@ -119,6 +127,7 @@ def test_user_search_skips_when_no_chunks(monkeypatch):
 
     monkeypatch.setattr(model_mod, "search_insight_text", boom)
     u = UserInsight("u1")
+    u.batch_add({"k": "vv"})
     assert u.last_chunk_size == 0
     assert u.search("q") == ""
     assert called["n"] == 0
@@ -167,13 +176,15 @@ def test_load_file_pipeline(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(sec_mod, "resolve_repo_path", lambda p: f)
-    monkeypatch.setattr(sec_mod, "to_repo_relative_posix", lambda p: "note.md")
+    monkeypatch.setattr(
+        sec_mod, "normalize_backend_path", lambda p: "./backend/note.md"
+    )
 
     s = SectionInsight("u1", "sec1")
     out = s.load_file(str(f))
     assert out["chunks"] == 2
-    assert out["source_file"] == "note.md"
-    assert "note.md" in s.filenames()
+    assert out["source_file"] == "./backend/note.md"
+    assert "./backend/note.md" in s.filenames()
     assert indexed[0]["chunks"] == ["hello", "world"]
     _ = REPO_ROOT  # 保持导入可用（路径约定）
 
@@ -185,12 +196,16 @@ def test_llm_tools_callable():
     assert s.as_batch_add_section_tool().name == "batch_add_section_insight_attrs"
     assert s.as_add_facts_tool().name == "add_section_facts"
     assert s.as_set_review_tool().name == "set_section_review"
+    assert s.as_get_review_tool().name == "get_section_review"
+    assert s.as_get_facts_tool().name == "get_section_facts"
     s.as_batch_add_section_tool().invoke({"attrs": {"a": "1"}})
     assert s.section_as_dict()["a"] == "1"
     s.as_add_facts_tool().invoke({"items": ["f1"]})
     assert s.get_facts() == ["f1"]
     s.as_set_review_tool().invoke({"text": "rv"})
     assert s.get_review() == "rv"
+    assert s.as_get_review_tool().invoke({}) == "rv"
+    assert s.as_get_facts_tool().invoke({}) == ["f1"]
 
 
 def test_shared_parent_attrs_across_sections(monkeypatch):
@@ -238,19 +253,19 @@ def test_add_used_filenames_and_delete_unused(monkeypatch):
     )
     monkeypatch.setattr(
         sec_mod,
-        "to_repo_relative_posix",
-        lambda p: str(p).replace("\\", "/"),
+        "normalize_backend_path",
+        lambda p: p if str(p).startswith("./backend/") else f"./backend/{p}",
     )
     monkeypatch.setattr(sec_mod, "resolve_repo_path", lambda p: p)
 
     s = SectionInsight("u1", "sec1")
-    s._filenames = ["docs/a.md", "docs/b.md", "docs/c.md"]
-    s.add_used_filenames(["docs/a.md", "docs/c.md"])
-    assert s.used_filenames() == ["docs/a.md", "docs/c.md"]
+    s._filenames = ["./backend/docs/a.md", "./backend/docs/b.md", "./backend/docs/c.md"]
+    s.add_used_filenames(["./backend/docs/a.md", "./backend/docs/c.md"])
+    assert s.used_filenames() == ["./backend/docs/a.md", "./backend/docs/c.md"]
     out = s.delete_unused_files()
-    assert out == ["docs/b.md"]
-    assert s.filenames() == ["docs/a.md", "docs/c.md"]
-    assert deleted == ["docs/b.md"]
+    assert out == ["./backend/docs/b.md"]
+    assert s.filenames() == ["./backend/docs/a.md", "./backend/docs/c.md"]
+    assert deleted == ["./backend/docs/b.md"]
 
 
 def test_delete_disk_files(tmp_path, monkeypatch):

@@ -6,7 +6,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from backend.config import settings
 from backend.llm.graph.session_pool import get_session_pool, session_history
@@ -21,58 +21,37 @@ logger = logging.getLogger("backend.llm.graph.nodes")
 
 
 def history_snapshot(messages: Sequence[BaseMessage]) -> list[dict[str, Any]]:
-    """历史 → 对外快照 dict（含 search_query / filename / sources）。"""
+    """历史 → 对外快照 dict；仅 user/assistant（丢弃 system）。"""
     out: list[dict[str, Any]] = []
     for msg in messages:
         content = str(getattr(msg, "content", "") or "")
         extra = dict(getattr(msg, "additional_kwargs", None) or {})
         if isinstance(msg, HumanMessage):
-            role = "user"
-            item: dict[str, Any] = {
-                "role": role,
-                "content": content,
-                "search_query": extra.get("search_query"),
-                "filename": extra.get("filename") or "",
-                "insight_create": bool(extra.get("insight_create", False)),
-                "insight_use": bool(extra.get("insight_use", False)),
-                "used": bool(extra.get("used", False)),
-                "sources": None,
-            }
+            out.append(
+                {
+                    "role": "user",
+                    "content": content,
+                    "search_query": extra.get("search_query"),
+                    "filename": extra.get("filename") or "",
+                    "insight_create": bool(extra.get("insight_create", False)),
+                    "insight_use": bool(extra.get("insight_use", False)),
+                    "used": bool(extra.get("used", False)),
+                    "sources": None,
+                }
+            )
         elif isinstance(msg, AIMessage):
-            role = "assistant"
-            item = {
-                "role": role,
-                "content": content,
-                "search_query": None,
-                "filename": None,
-                "insight_create": None,
-                "insight_use": None,
-                "used": bool(extra.get("used", False)),
-                "sources": extra.get("sources") or [],
-            }
-        elif isinstance(msg, SystemMessage):
-            item = {
-                "role": "system",
-                "content": content,
-                "search_query": None,
-                "filename": None,
-                "insight_create": None,
-                "insight_use": None,
-                "used": bool(extra.get("used", False)),
-                "sources": None,
-            }
-        else:
-            item = {
-                "role": "system",
-                "content": content,
-                "search_query": None,
-                "filename": None,
-                "insight_create": None,
-                "insight_use": None,
-                "used": bool(extra.get("used", False)),
-                "sources": None,
-            }
-        out.append(item)
+            out.append(
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "search_query": None,
+                    "filename": None,
+                    "insight_create": None,
+                    "insight_use": None,
+                    "used": bool(extra.get("used", False)),
+                    "sources": extra.get("sources") or [],
+                }
+            )
     return out
 
 
