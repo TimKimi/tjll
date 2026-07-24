@@ -204,3 +204,77 @@ sequenceDiagram
 1. **insight_create / insight_use**：纯前端状态，不单独调 API。新建会话从总设置（`GET /api/user/settings`）取默认值；已有会话从 `AskHistory.insight_create/insight_use` 恢复
 2. **文件列表**：上传成功后前端将返回的 `url` 存入当前会话的文件列表，发送 `ask` 时按扩展名分类填入对应字段
 3. **`section_id`**：前端生成（`crypto.randomUUID()`），同一会话全程不变，上传和对话使用同一个值
+
+---
+
+## 开发计划
+
+### 第一阶段：核心对话管线（Phase 1）
+
+**目标**：跑通最基本的「提问 → 回答」链路，含历史查看和会话删除。
+
+| 步骤 | 路由 | 说明 | 涉及文件 |
+|---|---|---|---|
+| 1.1 | `POST /api/ai/ask` | AI 流式对话，对接 `backend.llm.ask` | `routers/ai.py`, `main.py` |
+| 1.2 | `GET /api/ai/history?section_id=` | 获取会话历史，对接 `get_ask_history` | `routers/ai.py` |
+| 1.3 | `DELETE /api/ai/history?section_id=` | 删除单个会话 + 清理文件 | `routers/ai.py` |
+| 1.4 | `DELETE /api/ai/histories` | 删除全部会话 + 清理文件 | `routers/ai.py` |
+
+**交付物**：前端可以发送问题、查看历史、删除会话。
+
+### 第二阶段：会话管理增强（Phase 2）
+
+**目标**：完善会话生命周期管理。
+
+| 步骤 | 路由 | 说明 | 涉及文件 |
+|---|---|---|---|
+| 2.1 | `POST /api/ai/session/refresh?section_id=` | 刷新：release + get_history 合并 | `routers/ai.py` |
+| 2.2 | `GET /api/ai/section/reviews?section_ids=` | 批量获取会话摘要，循环调 `get_section_review` | `routers/ai.py` |
+
+**交付物**：前端可以刷新会话、在左侧栏展示会话摘要。
+
+### 第三阶段：会话详情（Phase 3）
+
+**目标**：支持会话 facts 和 review 的查看与编辑。
+
+| 步骤 | 路由 | 说明 | 涉及文件 |
+|---|---|---|---|
+| 3.1 | `GET /api/ai/session/detail?section_id=` | 合并返回 facts + review + insight | `routers/ai.py` |
+| 3.2 | `PUT /api/ai/section/facts` | 更新 facts | `routers/ai.py` |
+| 3.3 | `PUT /api/ai/section/review` | 更新 review | `routers/ai.py` |
+
+**交付物**：前端可以查看和编辑会话详情弹窗。
+
+### 第四阶段：会话洞察（Phase 4）
+
+**目标**：支持会话级别的洞察 CRUD。
+
+| 步骤 | 路由 | 说明 | 涉及文件 |
+|---|---|---|---|
+| 4.1 | `GET /api/ai/insight/section?section_id=` | 获取会话洞察 | `routers/ai.py` |
+| 4.2 | `PUT /api/ai/insight/section` | 更新会话洞察 | `routers/ai.py` |
+| 4.3 | `DELETE /api/ai/insight/section?section_id=` | 删除会话洞察 | `routers/ai.py` |
+
+**交付物**：前端可以在下拉框中管理会话洞察。
+
+### 第五阶段：文件上传集成（Phase 5）
+
+**目标**：上传文件后自动触发文档处理。
+
+| 步骤 | 路由 | 说明 | 涉及文件 |
+|---|---|---|---|
+| 5.1 | `POST /api/file/upload` | 上传后自动调 `load_section_document` | `services/file.py`, `routers/file.py` |
+
+**交付物**：前端上传文件后无需额外请求即可完成文档处理。
+
+### 阶段依赖关系
+
+```mermaid
+graph LR
+    P1[Phase 1: 核心对话] --> P2[Phase 2: 会话管理]
+    P1 --> P3[Phase 3: 会话详情]
+    P1 --> P4[Phase 4: 会话洞察]
+    P2 --> P5[Phase 5: 文件上传集成]
+```
+
+Phase 1 是其余所有阶段的前置依赖。Phase 2-4 可并行开发，均依赖 Phase 1。Phase 5 依赖 Phase 2（因为文件上传后需要关联到 session）。

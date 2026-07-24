@@ -30,10 +30,44 @@ _HARD_SIZE_LIMIT = 50 * 1024 * 1024  # 50MB
 
 
 class FileService:
-    """文件上传服务。"""
+    """文件上传与清理服务。"""
 
     def __init__(self) -> None:
         self._static_dir = Path(__file__).resolve().parent.parent / "static"
+
+    @staticmethod
+    def _user_file_dir(username: str) -> Path:
+        return Path(__file__).resolve().parent.parent / "static" / "file" / username
+
+    @staticmethod
+    def delete_session_files(username: str, section_id: str) -> None:
+        """删除指定会话的上传文件目录。"""
+        if not username or not section_id:
+            return
+        dir_path = FileService._user_file_dir(username) / section_id
+        try:
+            if dir_path.exists():
+                import shutil
+
+                shutil.rmtree(dir_path)
+                logger.info("已删除会话附件: %s", dir_path)
+        except OSError as e:
+            logger.warning("删除会话附件失败: %s, %s", dir_path, e)
+
+    @staticmethod
+    def delete_all_user_files(username: str) -> None:
+        """删除该用户所有上传文件。"""
+        if not username:
+            return
+        dir_path = FileService._user_file_dir(username)
+        try:
+            if dir_path.exists():
+                import shutil
+
+                shutil.rmtree(dir_path)
+                logger.info("已删除用户全部附件: %s", dir_path)
+        except OSError as e:
+            logger.warning("删除用户附件目录失败: %s, %s", dir_path, e)
 
     async def upload(self, file: UploadFile, user: dict, section_id: str) -> dict:
         """上传文件到当前会话并返回文件信息。
