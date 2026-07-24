@@ -108,6 +108,8 @@ class TestLogin:
     @pytest.mark.asyncio
     async def test_login_success(self, mock_db):
         """正确的用户名密码应返回 token。"""
+        from unittest.mock import patch
+
         from backend.core.security import hash_password
         from backend.services.auth import AuthService
 
@@ -124,9 +126,10 @@ class TestLogin:
         mock_result.scalar_one_or_none.return_value = mock_user
         mock_db.execute.return_value = mock_result
 
-        service = AuthService(mock_db)
-        req = LoginRequest(username="test_user", password="correct_pw")
-        result = await service.login(req)
+        with patch("backend.services.auth.get_section_ids", return_value=[]):
+            service = AuthService(mock_db)
+            req = LoginRequest(username="test_user", password="correct_pw")
+            result = await service.login(req)
 
         assert result.user.username == "test_user"
         assert result.token != ""
@@ -172,6 +175,8 @@ class TestLogin:
     @pytest.mark.asyncio
     async def test_login_updates_is_online(self, mock_db):
         """登录成功后应标记用户在线。"""
+        from unittest.mock import patch
+
         from backend.core.security import hash_password
         from backend.services.auth import AuthService
 
@@ -190,9 +195,10 @@ class TestLogin:
         mock_result.scalar_one_or_none.return_value = mock_user
         mock_db.execute.return_value = mock_result
 
-        service = AuthService(mock_db)
-        req = LoginRequest(username="u", password="pw")
-        await service.login(req)
+        with patch("backend.services.auth.get_section_ids", return_value=[]):
+            service = AuthService(mock_db)
+            req = LoginRequest(username="test_user", password="pw")
+            await service.login(req)
 
         assert mock_user.is_online is True
         mock_db.commit.assert_awaited_once()

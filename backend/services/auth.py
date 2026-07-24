@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import settings
 from backend.core.email import send_email
 from backend.core.exceptions import AppError
+from backend.core.online_tracker import tracker
 from backend.core.security import create_token, hash_password, verify_password
 from backend.llm import get_section_ids, release_ask_sessions_by_uuid
 from backend.models.app_user import AppUser
@@ -85,6 +86,12 @@ class AuthService:
         await self.db.refresh(user)
 
         token = create_token({"sub": user.id, "username": user.username})
+
+        tracker.mark_online(
+            user.id,
+            expires_delta=timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
+        )
+
         logger.info("用户注册成功 id=%s username=%s", user.id, user.username)
         return TokenResponse(
             token=token,
@@ -107,6 +114,12 @@ class AuthService:
         token = create_token({"sub": user.id, "username": user.username})
         user.is_online = True
         await self.db.commit()
+
+        # 追踪 token 过期，后台线程自动同步 is_online
+        tracker.mark_online(
+            user.id,
+            expires_delta=timedelta(minutes=settings.JWT_EXPIRE_MINUTES),
+        )
 
         # 获取该用户已有的会话列表，前端用于恢复历史会话
         sections = get_section_ids(uuid=user.id)
@@ -139,6 +152,7 @@ class AuthService:
         if user:
             user.is_online = False
             await self.db.commit()
+            tracker.mark_offline(user.id)
             release_ask_sessions_by_uuid(user.id)
             logger.info("退出登录 id=%s", user_id)
 
