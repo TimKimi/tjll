@@ -36,6 +36,16 @@ class FileService:
         self._static_dir = Path(__file__).resolve().parent.parent / "static"
 
     @staticmethod
+    def _load_doc(uuid: str, section_id: str, file_path: str) -> None:
+        """上传后自动触发文档处理（静默失败）。"""
+        try:
+            from backend.llm import load_section_document
+
+            load_section_document(uuid, section_id, file_path)
+        except Exception:
+            logger.warning("load_section_document failed: %s", file_path)
+
+    @staticmethod
     def _user_file_dir(username: str) -> Path:
         return Path(__file__).resolve().parent.parent / "static" / "file" / username
 
@@ -134,6 +144,17 @@ class FileService:
         dest.write_bytes(content)
 
         file_size = len(content)
+
+        # 上传后自动触发文档处理
+        # url 使用 ./backend/static/... 格式，与 load_section_document
+        # 和 AskParams 附件字段的规范化要求一致
+        file_path = f"./backend/static/file/{username}/{section_id}/{safe_name}"
+        self._load_doc(
+            uuid=user.get("sub", ""),
+            section_id=section_id,
+            file_path=file_path,
+        )
+
         logger.info(
             "文件上传成功 user=%s section_id=%s name=%s size=%d",
             username,
@@ -144,7 +165,7 @@ class FileService:
 
         return {
             "filename": safe_name,
-            "url": f"/static/file/{username}/{section_id}/{safe_name}",
+            "url": file_path,
             "size": file_size,
             "mime_type": guessed_type or "application/octet-stream",
         }

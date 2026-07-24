@@ -21,9 +21,13 @@ from backend.llm import (
     AskInterruptResult,
     AskParams,
     AskStream,
+    AskHistory,
+    AskResult,
+    DeleteHistoryResult,
     ask as llm_ask,
     delete_ask_histories_by_uuid,
     delete_ask_history,
+    delete_section_insight,
     get_ask_history,
     get_section_facts,
     get_section_insight,
@@ -31,8 +35,13 @@ from backend.llm import (
     release_ask_session,
     set_section_review,
     update_section_facts,
+    update_section_insight_attrs,
 )
-from backend.schemas.ai import AskChatRequest
+from backend.schemas.ai import (
+    AskChatRequest,
+    SectionReviewsResponse,
+    SessionDetailResponse,
+)
 from backend.schemas.common import ApiResponse
 from backend.services.file import FileService
 
@@ -48,6 +57,7 @@ router = APIRouter(prefix="/api/ai", tags=["AI 助手"])
 @router.post(
     "/ask",
     summary="AI 流式对话",
+    response_model=ApiResponse[AskResult],
 )
 async def ai_ask(
     req: AskChatRequest,
@@ -96,6 +106,7 @@ async def ai_ask(
 @router.get(
     "/history",
     summary="获取会话历史",
+    response_model=ApiResponse[AskHistory],
 )
 async def ai_get_history(
     section_id: str = Query(..., description="会话 ID"),
@@ -117,6 +128,7 @@ async def ai_get_history(
 @router.post(
     "/session/refresh",
     summary="刷新会话（释放槽位 + 重载历史）",
+    response_model=ApiResponse[AskHistory],
 )
 async def ai_refresh_session(
     section_id: str = Query(..., description="会话 ID"),
@@ -140,6 +152,7 @@ async def ai_refresh_session(
 @router.get(
     "/section/reviews",
     summary="批量获取会话摘要",
+    response_model=ApiResponse[SectionReviewsResponse],
 )
 async def ai_section_reviews(
     section_ids: str = Query(..., description="逗号分隔的多个 section_id"),
@@ -148,14 +161,14 @@ async def ai_section_reviews(
     """批量获取左侧栏各会话的摘要预览。"""
     uuid = user["sub"]
     ids = [sid.strip() for sid in section_ids.split(",") if sid.strip()]
-    reviews: dict[str, str] = {}
+    items: list[dict[str, str]] = []
     for section_id in ids:
         try:
             review = get_section_review(uuid=uuid, section_id=section_id)
-            reviews[section_id] = review or ""
+            items.append({"section_id": section_id, "review": review or ""})
         except Exception:
-            reviews[section_id] = ""
-    return ApiResponse.ok(data={"reviews": reviews})
+            items.append({"section_id": section_id, "review": ""})
+    return ApiResponse.ok(data={"reviews": items})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -166,6 +179,7 @@ async def ai_section_reviews(
 @router.get(
     "/session/detail",
     summary="获取会话详情（facts + review + insight）",
+    response_model=ApiResponse[SessionDetailResponse],
 )
 async def ai_session_detail(
     section_id: str = Query(..., description="会话 ID"),
@@ -175,12 +189,13 @@ async def ai_session_detail(
     uuid = user["sub"]
     facts = get_section_facts(uuid=uuid, section_id=section_id)
     review = get_section_review(uuid=uuid, section_id=section_id)
-    insight = get_section_insight(uuid=uuid, section_id=section_id)
+    insight_dict = get_section_insight(uuid=uuid, section_id=section_id) or {}
+    insight_list = [{"key": k, "value": v} for k, v in insight_dict.items()]
     return ApiResponse.ok(
         data={
             "facts": facts or [],
             "review": review or "",
-            "insight": insight or {},
+            "insight": insight_list,
         }
     )
 
@@ -188,6 +203,7 @@ async def ai_session_detail(
 @router.put(
     "/section/facts",
     summary="更新会话 facts",
+    response_model=ApiResponse,
 )
 async def ai_update_facts(
     body: dict,
@@ -208,6 +224,7 @@ async def ai_update_facts(
 @router.put(
     "/section/review",
     summary="更新会话 review",
+    response_model=ApiResponse,
 )
 async def ai_update_review(
     body: dict,
@@ -226,6 +243,60 @@ async def ai_update_review(
 
 
 # ═══════════════════════════════════════════════════════════
+# 会话洞察
+# ═══════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/insight/section",
+    summary="获取会话洞察",
+    response_model=ApiResponse[dict],
+)
+async def ai_get_section_insight_route(
+    section_id: str = Query(..., description="会话 ID"),
+    user: dict = Depends(get_current_user),
+):
+    """获取指定会话的洞察属性字典 ``{key: value, ...}``。"""
+    result = get_section_insight(uuid=user["sub"], section_id=section_id)
+    return ApiResponse.ok(data=result)
+
+
+@router.put(
+    "/insight/section",
+    summary="更新会话洞察",
+    response_model=ApiResponse,
+)
+async def ai_update_section_insight_route(
+    body: dict,
+    user: dict = Depends(get_current_user),
+):
+    """更新会话洞察属性。
+
+    body 格式: ``{ "section_id": "...", "key1": "value1", ... }``
+    注意 ``section_id`` 是必填字段，其余为要更新的属性。
+    """
+    section_id = body.pop("section_id", None)
+    if not section_id:
+        raise HTTPException(status_code=400, detail="section_id is required")
+    update_section_insight_attrs(uuid=user["sub"], section_id=section_id, attrs=body)
+    return ApiResponse.ok(message="已更新")
+
+
+@router.delete(
+    "/insight/section",
+    summary="删除会话洞察",
+    response_model=ApiResponse,
+)
+async def ai_delete_section_insight_route(
+    section_id: str = Query(..., description="会话 ID"),
+    user: dict = Depends(get_current_user),
+):
+    """删除指定会话的全部洞察属性。"""
+    delete_section_insight(uuid=user["sub"], section_id=section_id)
+    return ApiResponse.ok(message="已删除")
+
+
+# ═══════════════════════════════════════════════════════════
 # 删除会话
 # ═══════════════════════════════════════════════════════════
 
@@ -233,6 +304,7 @@ async def ai_update_review(
 @router.delete(
     "/history",
     summary="删除单个会话（历史 + 文件）",
+    response_model=ApiResponse,
 )
 async def ai_delete_history(
     section_id: str = Query(..., description="会话 ID"),
@@ -259,6 +331,7 @@ async def ai_delete_history(
 @router.delete(
     "/histories",
     summary="删除全部会话（历史 + 文件）",
+    response_model=ApiResponse[DeleteHistoryResult],
 )
 async def ai_delete_histories(
     user: dict = Depends(get_current_user),
