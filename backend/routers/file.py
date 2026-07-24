@@ -19,12 +19,13 @@ router = APIRouter(prefix="/api/file", tags=["文件"])
 )
 async def upload_file(
     file: UploadFile,
+    section_id: str,
     user: dict = Depends(get_current_user),
 ) -> ApiResponse[dict]:
-    """上传文件，仅支持文本（md/txt/doc/docx）、图片（png/jpg）、PDF。"""
+    """上传文件到当前会话，仅支持文本（md/txt/doc/docx）、图片（png/jpg）、PDF。"""
     service = FileService()
     try:
-        result = await service.upload(file, user)
+        result = await service.upload(file, user, section_id)
         return ApiResponse.ok(data=result, message="上传成功")
     except AppError as e:
         raise HTTPException(status_code=e.code, detail=e.message)

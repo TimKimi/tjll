@@ -87,3 +87,7 @@ class TokenResponse(BaseModel):
 
     token: str = Field(..., min_length=1, description="JWT")
     user: UserInfo
+    sections: list[str] = Field(
+        default_factory=list,
+        description="该用户已有的会话 ID 列表，用于恢复历史会话",
+    )

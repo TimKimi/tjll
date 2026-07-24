@@ -11,6 +11,23 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+# ==========================================================================
+
+
+# 1. ai对话
+#    user，string， section——id
+#       func（user，string， section）--》stream（str）
+# ## 会话id
+#       1. 数据库
+#       2. redis  func（user）--》list（section-id）
+# 2. 历史
+#       1. func（section-id）--》list（message）
+#
+
+
+# ==============================================================================
+
+
 class RagSnippet(BaseModel):
     """单条 RAG 片段：正文 + 索引元字段（不含 embedding）。"""
 
@@ -54,12 +71,15 @@ class AskParams(BaseModel):
         min_length=1,
         description="用户/请求关联 ID（与 section_id 共同作为历史 key）",
     )
-    docx: Any | None = None
-    doc: Any | None = None
-    txt: Any | None = None
-    md: Any | None = None
-    pdf: Any | None = None
-    images: Any | None = None
+    docx: list[str] = Field(
+        default_factory=list,
+        description="文件路径，上传接口返回的 url，如 /static/file/{username}/{section_id}/{name}.docx",
+    )
+    doc: list[str] = Field(default_factory=list, description="同上")
+    txt: list[str] = Field(default_factory=list, description="同上")
+    md: list[str] = Field(default_factory=list, description="同上")
+    pdf: list[str] = Field(default_factory=list, description="同上")
+    images: list[str] = Field(default_factory=list, description="图片文件路径，同上")
     insight_create: bool = Field(default=False, description="是否创建洞察")
     insight_use: bool = Field(default=False, description="是否使用洞察")
 
