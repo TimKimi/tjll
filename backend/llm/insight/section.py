@@ -86,6 +86,8 @@ class SectionInsight(UserInsight):
         self._section_attrs: dict[str, str] = {}
         self._facts: list[str] = []
         self._review: str = ""
+        # [{question, option}] 或答案后 [{question, result}]
+        self._interrupt_qa: list[dict[str, Any]] = []
         self.last_section_chunk_size: int = 0
         self.max_section_attr_len: int = 0
         self.attrs_len: int = 0
@@ -539,6 +541,150 @@ class SectionInsight(UserInsight):
             description="读取本会话 facts 字符串列表。",
         )
 
+    # ── interrupt QA ─────────────────────────────────────────
+
+    def get_interrupt_qa(self) -> list[dict[str, Any]]:
+        """返回澄清问答列表的浅拷贝。"""
+        return [dict(x) for x in self._interrupt_qa]
+
+    def set_interrupt_questions(
+        self, questions: list[dict[str, Any]] | None
+    ) -> list[dict[str, Any]]:
+        """打断时写入问卷：每项 ``{question, option:{A:..}}``。"""
+        out: list[dict[str, Any]] = []
+        for item in questions or []:
+            if not isinstance(item, dict):
+                continue
+            q = str(item.get("question") or "").strip()
+            if not q:
+                continue
+            raw_opt = item.get("option") or {}
+            option: dict[str, str] = {}
+            if isinstance(raw_opt, dict):
+                for k, v in raw_opt.items():
+                    key = str(k).strip()
+                    val = str(v).strip()
+                    if key and val:
+                        option[key] = val
+            out.append({"question": q, "option": option})
+        self._interrupt_qa = out
+        logger.info(
+            "set_interrupt_questions uuid=%s section_id=%s n=%d",
+            self.uuid,
+            self.section_id,
+            len(out),
+        )
+        return self.get_interrupt_qa()
+
+    def apply_interrupt_answers(
+        self, answers: list[dict[str, Any]] | None
+    ) -> list[dict[str, Any]]:
+        """按 question 对齐：去掉 option，写入 result（str）。"""
+        by_q = {
+            str(a.get("question") or "").strip(): str(a.get("result") or "").strip()
+            for a in (answers or [])
+            if isinstance(a, dict)
+            and str(a.get("question") or "").strip()
+            and str(a.get("result") or "").strip()
+        }
+        updated: list[dict[str, Any]] = []
+        for item in self._interrupt_qa:
+            q = str(item.get("question") or "").strip()
+            if not q:
+                continue
+            if q in by_q:
+                updated.append({"question": q, "result": by_q[q]})
+            elif "result" in item:
+                updated.append(
+                    {
+                        "question": q,
+                        "result": str(item.get("result") or "").strip(),
+                    }
+                )
+            else:
+                # 未作答的题暂保留 option，submit 校验应已保证齐套
+                option = (
+                    item.get("option") if isinstance(item.get("option"), dict) else {}
+                )
+                updated.append({"question": q, "option": dict(option or {})})
+        self._interrupt_qa = updated
+        logger.info(
+            "apply_interrupt_answers uuid=%s section_id=%s n=%d",
+            self.uuid,
+            self.section_id,
+            len(updated),
+        )
+        return self.get_interrupt_qa()
+
+    def clear_interrupt_qa(self) -> None:
+        self._interrupt_qa = []
+        logger.info(
+            "clear_interrupt_qa uuid=%s section_id=%s",
+            self.uuid,
+            self.section_id,
+        )
+
+    def has_interrupt_answers(self) -> bool:
+        """是否已有至少一条 result（可继续改写、禁止再打断）。"""
+        return any(
+            "result" in item and str(item.get("result") or "").strip()
+            for item in self._interrupt_qa
+        )
+
+    def has_pending_interrupt_questions(self) -> bool:
+        """是否存在待答问卷（有 option、尚无 result）。"""
+        for item in self._interrupt_qa:
+            if "result" in item and str(item.get("result") or "").strip():
+                continue
+            if isinstance(item.get("option"), dict) and item.get("option"):
+                return True
+            if str(item.get("question") or "").strip():
+                return True
+        return False
+
+    def as_ask_user_interrupt_tool(self) -> StructuredTool:
+        from backend.llm.graph.interrupt import AskInterruptSignal
+
+        def _tool(questions: list[dict[str, Any]]) -> str:
+            """向用户发起一批澄清多选题并暂停本轮 ask。
+
+            Args:
+                questions: 列表，每项含 question 与 option 字典（如 A/B/C）。
+            """
+            stored = self.set_interrupt_questions(questions)
+            raise AskInterruptSignal(stored)
+
+        return StructuredTool.from_function(
+            func=_tool,
+            name="ask_user_interrupt",
+            description=(
+                "当信息不足、需要向用户澄清时调用。"
+                "传入 questions：每项 {question, option:{A:文案,...}}；"
+                "调用后本轮改写暂停，等待用户作答。"
+            ),
+        )
+
+    def as_finish_rewrite_tool(self, holder: dict[str, str]) -> StructuredTool:
+        def _tool(search_query: str, detail: str = "") -> str:
+            """提交改写结果：检索查询 + 有利于回答的补充细节。
+
+            Args:
+                search_query: 独立完整的检索用查询文本。
+                detail: 有助于最终回答但不一定进检索的补充信息。
+            """
+            holder["search_query"] = str(search_query or "").strip()
+            holder["detail"] = str(detail or "").strip()
+            return "ok"
+
+        return StructuredTool.from_function(
+            func=_tool,
+            name="finish_rewrite",
+            description=(
+                "完成改写时必须调用。"
+                "search_query 为检索查询；detail 为有利于回答的补充信息。"
+            ),
+        )
+
     # ── 维护（副本上执行）──────────────────────────────────────
 
     def clone_for_maintain(self) -> SectionInsight:
@@ -554,6 +700,7 @@ class SectionInsight(UserInsight):
         clone._section_attrs = dict(self._section_attrs)
         clone._facts = list(self._facts)
         clone._review = self._review
+        clone._interrupt_qa = [dict(x) for x in self._interrupt_qa]
         clone.last_section_chunk_size = int(self.last_section_chunk_size)
         clone.max_section_attr_len = int(self.max_section_attr_len)
         clone.attrs_len = int(self.attrs_len)
@@ -565,6 +712,7 @@ class SectionInsight(UserInsight):
         user_changed = dict(replica._parent._attrs) != dict(self._parent._attrs)
         self._facts = list(replica._facts)
         self._review = str(replica._review or "")
+        self._interrupt_qa = [dict(x) for x in replica._interrupt_qa]
         self._section_attrs = dict(replica._section_attrs)
         self._recompute_max_section_attr_len()
         self._recompute_attrs_len()

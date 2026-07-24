@@ -1,6 +1,6 @@
 """用户洞察子包。"""
 
-from backend.llm.insight.model import UserInsight, make_batch_add_tool
+from backend.llm.insight.model import UserInsight
 from backend.llm.insight.registry import (
     drop_section_insight,
     ensure_section_insight,
@@ -18,5 +18,4 @@ __all__ = [
     "ensure_section_insight",
     "ensure_user_insight",
     "get_insight_registry",
-    "make_batch_add_tool",
 ]

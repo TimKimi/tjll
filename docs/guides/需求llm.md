@@ -66,6 +66,43 @@
 
      对于响应：先用stream接受流式回答，完毕后再用AskResult接受完整响应。响应字段包含answer，sources，query_filename，query，section_id，uuid字段，sources任然是list[RagSnippet]格式，query_filename是本次请求使用到的用户文件名，依旧是“./backend/.../filename.格式 ”
 
+7. 用户发消息后，你们调 `ask(AskParams)`。返回值二选一：
+
+   **A. 需要澄清**（不是流）→ `AskInterruptResult`，原样给前端渲染：
+
+```json
+{
+  "uuid": "req-550e8400",
+  "section_id": "user-42-session-1",
+  "questions": [
+    {
+      "question": "人均预算大概多少？",
+      "option": { "A": "100 以内", "B": "100-300", "C": "其他" }
+    }
+  ]
+}
+```
+
+   前端用户选完点提交后，你们再调 `submit_ask_interrupt(AskInterruptSubmitParams)`：
+
+```json
+{
+  "uuid": "req-550e8400",
+  "section_id": "user-42-session-1",
+  "answers": [
+    { "question": "人均预算大概多少？", "result": "100-300" }
+  ]
+}
+```
+
+   返回值是 **`AskStream`**（与正常回答相同）：先 `for piece in stream` 收流式，再读 `stream.response`（`AskResult`）。
+
+   **B. 不需要澄清** → 直接是 `AskStream`，按上面第 6 点处理即可。
+
+   判断：`isinstance(out, AskInterruptResult)` 为真走 A，否则当流用。
+   `answers` 里每道题的 `question` 必须与问卷一致；`result` 填选项原文或用户自定义文本。
+   无待澄清问卷时调 `submit_ask_interrupt` 会报错。
+
 ---
 
 ## 前后端交互工作流设计

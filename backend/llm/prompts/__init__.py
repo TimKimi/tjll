@@ -1,6 +1,6 @@
 """Prompt 模板。"""
 
-from backend.llm.prompts.rag import RAG_PROMPT, RAG_PROMPT_WITH_HISTORY
+from backend.llm.prompts.rag import RAG_PROMPT_WITH_HISTORY
 from backend.llm.prompts.rephrase import REPHRASE_PROMPT
 from backend.llm.prompts.review_clean import (
     EMPTY_DELTA,
@@ -13,7 +13,6 @@ from backend.llm.prompts.review_clean import (
 )
 
 __all__ = [
-    "RAG_PROMPT",
     "RAG_PROMPT_WITH_HISTORY",
     "REPHRASE_PROMPT",
     "EXTRACT_SYSTEM",

@@ -31,6 +31,8 @@ _IDLE_SWEEP_INTERVAL = 30.0
 
 MAINTAIN_TRIGGER_TURNS = 7
 MAINTAIN_BATCH_TURNS = 4
+# 维护落 Redis 时至少留在内存的最新完整轮次数（与 select_history_window 默认一致）
+MEMORY_KEEP_TURNS = 3
 
 MaintainFlag = Literal["idle", "active", "done"]
 
@@ -79,6 +81,20 @@ def _msg_used(msg: BaseMessage) -> bool:
     return bool(extra.get("used", False))
 
 
+def _history_msg_fingerprint(msg: BaseMessage) -> tuple[Any, ...]:
+    """用于 Redis/内存历史去重的弱指纹。"""
+    extra = getattr(msg, "additional_kwargs", None) or {}
+    return (
+        type(msg).__name__,
+        str(getattr(msg, "content", "") or ""),
+        str(extra.get("search_query") or ""),
+        str(extra.get("filename") or ""),
+        bool(extra.get("insight_create")),
+        bool(extra.get("insight_use")),
+        bool(extra.get("used")),
+    )
+
+
 def _set_msg_used(msg: BaseMessage, used: bool = True) -> None:
     kwargs = dict(getattr(msg, "additional_kwargs", None) or {})
     kwargs["used"] = bool(used)
@@ -103,6 +119,9 @@ class AskSession:
     pending_turns: list[PendingTurn] = field(default_factory=list)
     last_sources: list[dict[str, Any]] = field(default_factory=list)
     last_search_query: str = ""
+    last_detail: str = ""
+    pending_ask: Any | None = None
+    pending_enrich: dict[str, Any] = field(default_factory=dict)
     last_used: float = field(default_factory=time.monotonic)
     graph: Any | None = None
     section_insight: SectionInsight | None = None
@@ -136,12 +155,14 @@ class AskSession:
         insight_use: bool = False,
         sources: list[dict[str, Any]] | None = None,
         used: bool = False,
+        detail: str = "",
     ) -> None:
         """本轮问答写入内存；不立即刷 Redis。"""
         human = HumanMessage(
             content=user,
             additional_kwargs={
                 "search_query": search_query,
+                "detail": detail or "",
                 "filename": filename or "",
                 "insight_create": bool(insight_create),
                 "insight_use": bool(insight_use),
@@ -183,82 +204,86 @@ class AskSession:
         turn.assistant.additional_kwargs = ai_kwargs
 
     def flush_to_redis(self) -> None:
-        """把尚未持久化的轮次写入 Redis（key = uuid::section_id）。"""
-        if not self.pending_turns:
+        """释放/收尾：把内存中剩余完整轮次全部追加到 Redis。"""
+        turns = iter_complete_turns(filter_chat_messages(self.history))
+        if not turns:
+            self.pending_turns.clear()
             return
-        for turn in self.pending_turns:
-            self._ensure_turn_kwargs(turn)
-
         hist = get_history(self.uuid, self.section_id)
-        for turn in self.pending_turns:
-            hist.add_message(turn.user)
-            hist.add_message(turn.assistant)
+        for human, ai in turns:
+            self._ensure_pair_kwargs(human, ai)
+            hist.add_message(human)
+            hist.add_message(ai)
         logger.info(
             "flush history key=%s turns=%d",
             self.key,
-            len(self.pending_turns),
+            len(turns),
         )
         self.pending_turns.clear()
 
-    def _flush_batch_to_redis(self, batch: list[CompleteTurn]) -> None:
-        """将 batch 持久化为 used=true；pending 内的直接 flush，已在 Redis 的改写 used。"""
-        if not batch:
-            return
-        batch_user_ids = {id(h) for h, _ in batch}
-        pending_flush: list[PendingTurn] = []
-        remaining: list[PendingTurn] = []
-        for turn in self.pending_turns:
-            if id(turn.user) in batch_user_ids:
-                pending_flush.append(turn)
-            else:
-                remaining.append(turn)
+    def _latest_keep_message_ids(self) -> set[int]:
+        """当前内存中最新 MEMORY_KEEP_TURNS 完整轮次的消息 id。"""
+        turns = iter_complete_turns(filter_chat_messages(self.history))
+        if not turns:
+            return set()
+        keep = turns[-MEMORY_KEEP_TURNS:]
+        return {id(m) for turn in keep for m in turn}
 
-        flushed_ids = {id(p.user) for p in pending_flush}
-        if pending_flush:
-            hist = get_history(self.uuid, self.section_id)
-            for turn in pending_flush:
-                self._ensure_turn_kwargs(turn)
-                hist.add_message(turn.user)
-                hist.add_message(turn.assistant)
-            self.pending_turns = remaining
+    def _flush_batch_to_redis(self, batch: list[CompleteTurn]) -> list[CompleteTurn]:
+        """维护完成后：把内存里「非最新 KEEP 轮」且已 used 的轮次按时间序追加 Redis。
+
+        不能只 flush ``batch`` 本身：加载进内存的更早 used 轮若晚于 batch 落库，
+        会造成 Redis 时间序错乱。最新 ``MEMORY_KEEP_TURNS`` 轮仍留内存，待释放再写。
+
+        ``batch`` 保留兼容调用方；落库集合按「keep 窗外 used」计算。
+        返回实际已写入并应从内存 pop 的轮次。
+        """
+        _ = batch
+        turns = iter_complete_turns(filter_chat_messages(self.history))
+        if len(turns) <= MEMORY_KEEP_TURNS:
+            return []
+        keep_ids = self._latest_keep_message_ids()
+        to_persist = [
+            (h, a)
+            for h, a in turns
+            if id(h) not in keep_ids and (_msg_used(h) or _msg_used(a))
+        ]
+        if not to_persist:
             logger.info(
-                "flush maintain batch key=%s pending_turns=%d",
+                "flush maintain skipped (no used outside keep-%d) key=%s",
+                MEMORY_KEEP_TURNS,
                 self.key,
-                len(pending_flush),
             )
+            return []
 
-        if any(uid not in flushed_ids for uid in batch_user_ids):
-            self._rewrite_redis_used_flags(batch)
-
-    def _rewrite_redis_used_flags(self, batch: list[CompleteTurn]) -> None:
-        """把 Redis 中与 batch 内容匹配的完整轮标记为 used=true。"""
-        try:
-            hist = get_history(self.uuid, self.section_id)
-            raw = filter_chat_messages(list(hist.messages))
-            turns = iter_complete_turns(raw)
-            targets = {(str(h.content), str(a.content)) for h, a in batch}
-            changed = False
-            for human, ai in turns:
-                key = (str(human.content), str(ai.content))
-                if key in targets and (not _msg_used(human) or not _msg_used(ai)):
-                    _set_msg_used(human, True)
-                    _set_msg_used(ai, True)
-                    changed = True
-            if not changed:
-                return
-            hist.clear()
-            for human, ai in turns:
+        pending_by_user = {id(t.user): t for t in self.pending_turns}
+        hist = get_history(self.uuid, self.section_id)
+        flushed: list[CompleteTurn] = []
+        for human, ai in to_persist:
+            pt = pending_by_user.get(id(human))
+            if pt is not None:
+                self._ensure_turn_kwargs(pt)
+                hist.add_message(pt.user)
+                hist.add_message(pt.assistant)
+                flushed.append((pt.user, pt.assistant))
+            else:
+                # 启动从 Redis 装入的轮次不在 pending
+                self._ensure_pair_kwargs(human, ai)
                 hist.add_message(human)
                 hist.add_message(ai)
-            # 尾巴不成对消息
-            flat = [m for t in turns for m in t]
-            flat_ids = {id(m) for m in flat}
-            for msg in raw:
-                if id(msg) not in flat_ids:
-                    hist.add_message(msg)
-            logger.info("rewrite redis used flags key=%s", self.key)
-        except Exception:
-            logger.exception("rewrite redis used flags failed key=%s", self.key)
+                flushed.append((human, ai))
+
+        flushed_ids = {id(h) for h, _ in flushed}
+        self.pending_turns = [
+            t for t in self.pending_turns if id(t.user) not in flushed_ids
+        ]
+        logger.info(
+            "flush maintain key=%s flushed_turns=%d kept_in_memory=%d",
+            self.key,
+            len(flushed),
+            min(MEMORY_KEEP_TURNS, len(turns)),
+        )
+        return flushed
 
     def _pop_batch_from_memory(self, batch: list[CompleteTurn]) -> None:
         ids = {id(m) for turn in batch for m in turn}
@@ -269,6 +294,27 @@ class AskSession:
             if id(t.user) not in ids and id(t.assistant) not in ids
         ]
 
+    def _ensure_pair_kwargs(self, human: BaseMessage, ai: BaseMessage) -> None:
+        """释放 flush 时补齐消息侧车字段。"""
+        h_kwargs = dict(getattr(human, "additional_kwargs", None) or {})
+        if "insight_create" not in h_kwargs:
+            h_kwargs["insight_create"] = False
+        if "insight_use" not in h_kwargs:
+            h_kwargs["insight_use"] = False
+        if "used" not in h_kwargs:
+            h_kwargs["used"] = False
+        if "filename" not in h_kwargs:
+            h_kwargs["filename"] = ""
+        if "search_query" not in h_kwargs:
+            h_kwargs["search_query"] = ""
+        human.additional_kwargs = h_kwargs
+        ai_kwargs = dict(getattr(ai, "additional_kwargs", None) or {})
+        if "used" not in ai_kwargs:
+            ai_kwargs["used"] = False
+        if "sources" not in ai_kwargs:
+            ai_kwargs["sources"] = []
+        ai.additional_kwargs = ai_kwargs
+
     def _on_maintain_done(self) -> None:
         """异步维护结束：只置 done。"""
         with self._maintain_lock:
@@ -277,7 +323,11 @@ class AskSession:
             logger.info("maintain done flag key=%s", self.key)
 
     def _wait_until_maintain_idle(self) -> None:
-        """等到 maintain 回到 idle（含消费中间的 done）。"""
+        """等到 maintain 回到 idle。
+
+        - ``done``：先把维护副本融合进本体（并释放 occupied）
+        - ``active``：等到结束后再融合
+        """
         while True:
             with self._maintain_lock:
                 if self.maintain_flag == "idle":
@@ -289,7 +339,7 @@ class AskSession:
             ev.wait(timeout=1.0)
 
     def _apply_maintain_done(self) -> None:
-        """阻塞：flush used 批 + pop + merge + save + 按需 split → idle。"""
+        """阻塞：flush used 批 + pop + 副本融合本体 + save/split → 释放 occupied → idle。"""
         batch = list(self._maintain_batch)
         replica = self._maintain_replica
         self._maintain_batch = []
@@ -298,8 +348,8 @@ class AskSession:
 
         try:
             try:
-                self._flush_batch_to_redis(batch)
-                self._pop_batch_from_memory(batch)
+                flushed = self._flush_batch_to_redis(batch)
+                self._pop_batch_from_memory(flushed)
             except Exception:
                 logger.exception("maintain flush/pop failed key=%s", self.key)
 
@@ -356,7 +406,11 @@ class AskSession:
         return section._parent
 
     def _maintain_remaining_for_release(self) -> None:
-        """释放收尾：无轮数门槛；剩余 unused 全部 used=true 并同步维护一次。"""
+        """释放收尾：无轮数门槛；剩余 unused 全部 used=true 并同步维护一次。
+
+        调用前应已 ``_wait_until_maintain_idle``（done 副本已融合、occupied 已释放）。
+        此处再检查 occupied：为 True（他会话占用）则等待；否则抢占后继续。
+        """
         with self._maintain_lock:
             turns = iter_complete_turns(filter_chat_messages(self.history))
             unused = [t for t in turns if not (_msg_used(t[0]) or _msg_used(t[1]))]
@@ -378,8 +432,8 @@ class AskSession:
 
             if live is None:
                 try:
-                    self._flush_batch_to_redis(unused)
-                    self._pop_batch_from_memory(unused)
+                    flushed = self._flush_batch_to_redis(unused)
+                    self._pop_batch_from_memory(flushed)
                 except Exception:
                     logger.exception(
                         "release maintain flush without section failed key=%s",
@@ -387,8 +441,14 @@ class AskSession:
                     )
                 return
 
-        # 洞察写回线：排队抢 occupied（ask 路径是跳过）
-        live._parent.wait_acquire_occupied()
+        parent = live._parent
+        # 融合后一般为 False；若仍 True 则等待空闲后再抢占（设为 True）
+        if parent.occupied:
+            logger.info(
+                "release wait occupied before remaining maintain key=%s",
+                self.key,
+            )
+        parent.wait_acquire_occupied()
         applied = False
         try:
             with self._maintain_lock:
@@ -419,7 +479,7 @@ class AskSession:
                     applied = True
         finally:
             if not applied:
-                live._parent.release_occupied()
+                parent.release_occupied()
 
     def maintain(self) -> None:
         """三态维护：done 先合并；occupied 则跳过；idle 达阈值则开批。"""
@@ -543,6 +603,33 @@ class AskSession:
         self.flush_to_redis()
 
 
+def _consume_loaded_history_from_redis(
+    uuid: str,
+    section_id: str,
+    raw: list[BaseMessage],
+    loaded: list[BaseMessage],
+) -> None:
+    """启动装入内存的消息从 Redis 删除，避免之后 flush 重复追加。
+
+    ``loaded`` 必须来自同一次 ``raw`` 读出的对象引用（按 ``id`` 匹配）。
+    """
+    if not loaded:
+        return
+    loaded_ids = {id(m) for m in loaded}
+    remaining = [m for m in raw if id(m) not in loaded_ids]
+    hist = get_history(uuid, section_id)
+    hist.clear()
+    for msg in remaining:
+        hist.add_message(msg)
+    logger.info(
+        "consume redis history uuid=%s section_id=%s loaded_msgs=%d remaining_msgs=%d",
+        uuid,
+        section_id,
+        len(loaded),
+        len(remaining),
+    )
+
+
 def make_session_key(uuid: str, section_id: str) -> str:
     return make_history_session_id(uuid, section_id)
 
@@ -633,9 +720,16 @@ class AskSessionPool:
             history: list[BaseMessage] = []
             if load_history:
                 # 走本模块 get_history，便于测试 monkeypatch
-                history = select_history_window(
-                    list(get_history(uuid, section_id).messages)
-                )
+                raw = list(get_history(uuid, section_id).messages)
+                history = select_history_window(raw)
+                # 已装入内存的从 Redis 摘除，释放时再整段写回，避免重复
+                try:
+                    _consume_loaded_history_from_redis(uuid, section_id, raw, history)
+                except Exception:
+                    logger.exception(
+                        "consume redis history failed key=%s",
+                        key,
+                    )
 
             session = AskSession(
                 uuid=uuid,
@@ -662,6 +756,27 @@ class AskSessionPool:
             if session is not None:
                 return list(session.history)
         return filter_chat_messages(list(get_history(uuid, section_id).messages))
+
+    def merged_history_messages(self, uuid: str, section_id: str) -> list[BaseMessage]:
+        """Redis 已落盘历史 + AskSession 内存历史（去重后拼接）。"""
+        uuid = _require_id("uuid", uuid)
+        section_id = _require_id("section_id", section_id)
+        redis_msgs = filter_chat_messages(list(get_history(uuid, section_id).messages))
+        key = make_session_key(uuid, section_id)
+        with self._lock:
+            session = self._sessions.get(key)
+            if session is None:
+                return list(redis_msgs)
+            mem = filter_chat_messages(list(session.history))
+        seen = {_history_msg_fingerprint(m) for m in redis_msgs}
+        out = list(redis_msgs)
+        for m in mem:
+            fp = _history_msg_fingerprint(m)
+            if fp in seen:
+                continue
+            seen.add(fp)
+            out.append(m)
+        return out
 
     def first_memory_user_query(self, uuid: str, section_id: str) -> str:
         """仅查池内内存：首条完整轮用户 content；无会话/无轮次返回 ``\"\"``。"""
@@ -793,8 +908,11 @@ class AskSessionPool:
         ).start()
 
     def _release_worker(self, session: AskSession) -> None:
+        """释放后台：done 先融合副本 → 再处理 occupied → 维护全部 unused → 落盘。"""
         try:
+            # 1) active 等到结束；done 则把副本融合进本体并释放 occupied
             session._wait_until_maintain_idle()
+            # 2) occupied 仍为 True 则等待；否则抢占后维护全部未 used 轮次
             session._maintain_remaining_for_release()
             session._cleanup_and_persist()
         except Exception:

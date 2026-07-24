@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from backend.llm.graph.session_pool import session_history
 from backend.llm.graph.state import AskState
-from backend.llm.rephrase.rewrite import needs_rewrite
 
 
 def route_after_attachment(
@@ -33,21 +31,5 @@ def route_after_user_insight(
 def route_after_enrich(
     state: AskState,
 ) -> Literal["rewrite", "retrieve_rerank"]:
-    """insight/attachment 非空或非首轮 → rewrite，否则直接检索。"""
-    uuid = (state.get("uuid") or "").strip()
-    section_id = (state.get("section_id") or "").strip()
-    history = session_history(uuid, section_id) if uuid and section_id else []
-    if needs_rewrite(
-        history,
-        insight=state.get("insight"),
-        attachment=state.get("attachment"),
-    ):
-        return "rewrite"
-    return "retrieve_rerank"
-
-
-def route_after_history(
-    state: AskState,
-) -> Literal["rewrite", "retrieve_rerank"]:
-    """兼容旧名：等同 route_after_enrich。"""
-    return route_after_enrich(state)
+    """enrich 后一律进 rewrite（可打断 / finish）；不再因首轮跳过。"""
+    return "rewrite"

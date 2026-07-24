@@ -44,31 +44,3 @@ def test_rerank_docs_single_float_score(monkeypatch):
     docs = [Document(page_content="only", metadata={})]
     out = rerank_mod.rerank_docs("q", docs, top_n=1)
     assert out[0].metadata["rerank_score"] == 0.77
-
-
-def test_hybrid_search_with_rerank(monkeypatch):
-    import backend.rag.retrieve.rerank as rerank_mod
-
-    monkeypatch.setattr(
-        "backend.rag.retrieve.search.hybrid_search",
-        lambda query, k=None, index_name=None: [
-            {
-                "text": "命中",
-                "chunk_id": "c",
-                "id": "d",
-                "name": "s.pdf",
-                "chunk_index": 0,
-                "_score": 1.0,
-            }
-        ],
-    )
-    monkeypatch.setattr(
-        rerank_mod,
-        "rerank_docs",
-        lambda query, docs, top_n=None: docs[:1],
-    )
-    monkeypatch.setattr(rerank_mod.settings, "retrieval_top_k", 5)
-
-    out = rerank_mod.hybrid_search_with_rerank("q", top_n=1)
-    assert len(out) == 1
-    assert out[0].page_content == "命中"

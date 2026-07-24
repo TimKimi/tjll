@@ -10,45 +10,56 @@
 
 **不要**直接 `import backend.rag`。检索、重排、OpenSearch 细节已封装在 LangGraph ask 管线内部。
 
-推荐写法（**流式 ask** + **专用历史接口**）：
+推荐写法（**流式 ask** + **澄清** + **历史**）：
 
 ```python
 from backend.llm import (
     ask,
+    submit_ask_interrupt,
     get_ask_history,
     get_section_ids,
     AskParams,
     AskResult,
+    AskInterruptResult,
+    AskInterruptSubmitParams,
+    AskInterruptAnswerItem,
     release_ask_session,
 )
 
-# 登录后列出该用户全部会话
 section_ids = get_section_ids(uuid="req-550e8400")
 
-stream = ask(
+out = ask(
     AskParams(
         query="这家店适合约会吗？",
         section_id="user-42-session-1",
         uuid="req-550e8400",
-        # 可选：insight_create / insight_use
-        # 附件字段仅标记 used（须先 load_section_document）：pdf / docx / ...
     )
 )
 
-for piece in stream:          # answer 文本块
+# —— 情况 A：要澄清（给前端渲染问卷，不要当流迭代）——
+if isinstance(out, AskInterruptResult):
+    # out.uuid / out.section_id / out.questions
+    # 每题：question + option（如 {"A":"…","B":"…"}）
+    # 前端提交后：
+    stream = submit_ask_interrupt(
+        AskInterruptSubmitParams(
+            uuid=out.uuid,
+            section_id=out.section_id,
+            answers=[
+                AskInterruptAnswerItem(question="…", result="…"),
+            ],
+        )
+    )
+else:
+    # —— 情况 B：直接回答 ——
+    stream = out
+
+for piece in stream:
     print(piece, end="", flush=True)
 
-resp: AskResult = stream.response  # 流结束后可读完整结果
-assert resp is not None
-print(resp.answer)
-print(resp.sources)
-print(resp.query_filename)    # 本轮附件路径（逗号拼接）
-print(resp.query, resp.section_id, resp.uuid)
-
+resp: AskResult = stream.response
 hist = get_ask_history(uuid=resp.uuid, section_id=resp.section_id)
-print(hist.history)
-
-ok = release_ask_session(uuid=resp.uuid, section_id=resp.section_id)  # bool
+release_ask_session(uuid=resp.uuid, section_id=resp.section_id)
 ```
 
 ### AskParams 字段
@@ -102,9 +113,26 @@ ok = release_ask_session(uuid=resp.uuid, section_id=resp.section_id)  # bool
 | `get_section_review` | `uuid`, `section_id` | `str` |
 | `set_section_review` | `uuid`, `section_id`, `text: str` | `bool` |
 | `load_section_document` | `uuid`, `section_id`, `file_path: str` | `bool` |
-| `ask` | `AskParams` | `AskStream`（`.response` → `AskResult`） |
+| `ask` | `AskParams` | `AskStream` 或 `AskInterruptResult` |
+| `submit_ask_interrupt` | `AskInterruptSubmitParams` | `AskStream` |
 
-写操作约定：成功 `True`，失败 `False`（调用方可不校验）。
+写操作约定：成功 `True`，失败 `False`（调用方可不校验）。无待澄清问卷时 `submit_ask_interrupt` 抛 `ValueError`。
+
+### 澄清：其他后端只调这两个
+
+| 步骤 | 你们调 | 拿到什么 | 你们做什么 |
+|------|--------|----------|------------|
+| 1 | `ask(AskParams)` | 若是 `AskInterruptResult` | 把 `uuid/section_id/questions` 原样回给前端 |
+| 2 | （前端选完）`submit_ask_interrupt(AskInterruptSubmitParams)` | `AskStream` | 当普通流式回答处理 |
+| — | `ask(AskParams)` | 若是 `AskStream` | 直接流式，无需 submit |
+
+`AskInterruptResult`：`uuid`, `section_id`, `questions: [{question, option}]`
+`option` 为 `dict[str,str]`，如 `{"A":"…","B":"…"}`（不是 list）。
+（题型嵌在 `AskInterruptResult.questions` 里，门面不单独导出题型类。）
+
+`AskInterruptSubmitParams`：`uuid`, `section_id`, `answers: [{question, result}]`
+`question` 与问卷一致；`result` 为选项文案或自定义文本。
+打断侧对外函数只有 **`submit_ask_interrupt`**（问卷由 `ask` 返回，无 create）。
 
 ### AskHistory
 
@@ -256,7 +284,7 @@ cd D:\softwareinstal\pycharm\program\SHIXUNDAXIANGMU\tjll
 
 ## 7. 自检清单
 
-- [ ] `from backend.llm import ask, AskParams` 可导入，且为流式
+- [ ] `ask` → 流或问卷；问卷用 `submit_ask_interrupt` 续跑后再当流
 - [ ] Redis Stack / OpenSearch / LLM 可达
 - [ ] `yelp_biz_v1` 已有 cleaned 入库数据
 - [ ] （可选）CUDA torch + `EMBEDDING_DEVICE=cuda`

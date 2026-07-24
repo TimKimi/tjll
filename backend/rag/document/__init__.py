@@ -6,13 +6,12 @@ from backend.rag.document.indexing import (
     delete_insight_from_opensearch,
     index_insight_chunks,
 )
-from backend.rag.document.loaders import file_to_chunks, load_document_as_text
+from backend.rag.document.loaders import load_document_as_text
 from backend.rag.document.pdf import parse_pdf_with_mineru
 
 __all__ = [
     "clean_text",
     "delete_insight_from_opensearch",
-    "file_to_chunks",
     "index_insight_chunks",
     "load_document_as_text",
     "parse_pdf_with_mineru",

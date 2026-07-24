@@ -11,7 +11,6 @@ from backend.llm.graph.builder import (
 from backend.llm.graph.service import (
     AskStream,
     ask,
-    create_ask_interrupt,
     delete_all_insights,
     delete_ask_histories_by_uuid,
     delete_ask_history,
@@ -36,7 +35,6 @@ __all__ = [
     "AskStream",
     "ask",
     "build_ask_graph",
-    "create_ask_interrupt",
     "delete_all_insights",
     "delete_ask_histories_by_uuid",
     "delete_ask_history",

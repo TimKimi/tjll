@@ -204,6 +204,152 @@ def test_maintain_state_machine_flush_pop_merge(monkeypatch):
     assert all(m.additional_kwargs.get("used") is True for m in redis_hist.added)
 
 
+def test_maintain_keeps_latest_3_unflushed(monkeypatch):
+    """batch 与最新 3 轮重叠时：重叠部分不落 Redis、留在内存。"""
+    import backend.llm.graph.session_pool as pool_mod
+    import backend.llm.insight.store as store_mod
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(store_mod, "_client", lambda: fake)
+    get_insight_registry().reset()
+
+    redis_hist = _FakeHistory()
+    monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
+
+    section = ensure_section_insight("u-keep", "s-keep")
+    session = AskSession(uuid="u-keep", section_id="s-keep", section_insight=section)
+    # 3 used + 4 unused → 触发维护；batch=4 unused；最新 3 轮落在 batch 尾部
+    for i in range(3):
+        session.append_turn(f"old{i}", f"olda{i}", search_query=f"old{i}", used=True)
+    for i in range(4):
+        session.append_turn(f"new{i}", f"newa{i}", search_query=f"new{i}", used=False)
+
+    done_event = threading.Event()
+
+    def fake_total(self, turns, *, insight_create_turns=None, on_done=None):
+        if callable(on_done):
+            on_done()
+        done_event.set()
+
+    monkeypatch.setattr(type(section), "total_maintain", fake_total)
+    monkeypatch.setattr(type(section), "split_and_store_section", lambda self: 0)
+    monkeypatch.setattr(type(section), "split_and_store", lambda self: 0)
+
+    session.maintain()
+    assert done_event.wait(timeout=2.0)
+    session.maintain()
+    assert session.maintain_flag == "idle"
+
+    # 仅最早 1 轮 unused 之外：keep 窗外全部 used（含 3 old + new0）按序落库
+    assert len(redis_hist.added) == 8
+    assert [str(m.content) for m in redis_hist.added] == [
+        "old0",
+        "olda0",
+        "old1",
+        "olda1",
+        "old2",
+        "olda2",
+        "new0",
+        "newa0",
+    ]
+    mem_turns = iter_complete_turns(session.history)
+    assert len(mem_turns) == 3
+    assert [str(h.content) for h, _ in mem_turns] == ["new1", "new2", "new3"]
+
+
+def test_get_or_create_consumes_loaded_from_redis(monkeypatch):
+    """启动装入内存窗口后，对应消息从 Redis 删除。"""
+    import backend.llm.graph.session_pool as pool_mod
+
+    msgs: list = []
+    for i in range(5):
+        h, a = _turn(i, used=True)
+        msgs.extend([h, a])
+    redis_hist = _FakeHistory(msgs)
+    monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
+
+    pool = AskSessionPool(max_size=5, start_sweeper=False)
+    session = pool.get_or_create("u-load", "s-load", load_history=True)
+    mem = iter_complete_turns(session.history)
+    assert len(mem) == 3
+    assert [str(h.content) for h, _ in mem] == ["q2", "q3", "q4"]
+
+    left = iter_complete_turns(filter_chat_messages(redis_hist.messages))
+    assert len(left) == 2
+    assert [str(h.content) for h, _ in left] == ["q0", "q1"]
+
+
+def test_flush_to_redis_writes_remaining_memory(monkeypatch):
+    """释放路径：内存剩余完整轮全部追加 Redis。"""
+    import backend.llm.graph.session_pool as pool_mod
+
+    redis_hist = _FakeHistory()
+    monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
+    session = AskSession(uuid="u-flush", section_id="s-flush")
+    for i in range(3):
+        session.append_turn(f"q{i}", f"a{i}", search_query=f"q{i}", used=True)
+    session.flush_to_redis()
+    assert len(redis_hist.added) == 6
+    assert [str(m.content) for m in redis_hist.added] == [
+        "q0",
+        "a0",
+        "q1",
+        "a1",
+        "q2",
+        "a2",
+    ]
+    assert session.pending_turns == []
+
+
+def test_flush_outside_keep_includes_history_without_pending(monkeypatch):
+    """keep 窗外 used 轮即使不在 pending（模拟 Redis 装入）也会按序落库。"""
+    import backend.llm.graph.session_pool as pool_mod
+    import backend.llm.insight.store as store_mod
+
+    monkeypatch.setattr(store_mod, "_client", lambda: _FakeRedis())
+    get_insight_registry().reset()
+    redis_hist = _FakeHistory()
+    monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
+
+    section = ensure_section_insight("u-orph", "s-orph")
+    session = AskSession(uuid="u-orph", section_id="s-orph", section_insight=section)
+    # 仅写入 history，不进 pending
+    for i in range(5):
+        h, a = _turn(i, used=True)
+        session.history.extend([h, a])
+
+    flushed = session._flush_batch_to_redis([])
+    assert len(flushed) == 2  # 5-3 keep
+    assert [str(h.content) for h, _ in flushed] == ["q0", "q1"]
+    session._pop_batch_from_memory(flushed)
+    assert [str(h.content) for h, _ in iter_complete_turns(session.history)] == [
+        "q2",
+        "q3",
+        "q4",
+    ]
+    assert [str(m.content) for m in redis_hist.added] == ["q0", "a0", "q1", "a1"]
+
+
+def test_merged_history_redis_plus_memory(monkeypatch):
+    """get_ask_history 数据源：Redis + 池内内存去重拼接。"""
+    import backend.llm.graph.session_pool as pool_mod
+
+    redis_msgs: list = []
+    for i in range(2):
+        h, a = _turn(i, used=True)
+        redis_msgs.extend([h, a])
+    redis_hist = _FakeHistory(redis_msgs)
+    monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
+
+    pool = AskSessionPool(max_size=5, start_sweeper=False)
+    session = pool.get_or_create("u-merge", "s-merge", load_history=False)
+    session.append_turn("q2", "a2", search_query="q2", used=False)
+
+    merged = pool.merged_history_messages("u-merge", "s-merge")
+    turns = iter_complete_turns(merged)
+    assert [str(h.content) for h, _ in turns] == ["q0", "q1", "q2"]
+
+
 def test_maintain_active_returns(monkeypatch):
     session = AskSession(uuid="u", section_id="s")
     session.maintain_flag = "active"

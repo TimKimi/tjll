@@ -35,12 +35,14 @@ MAINTAIN_SECTION_ATTRS_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "你维护本会话用户相关短属性（性格/偏好/预算等）。调用 batch_add_section_insight_attrs。\n"
-            "规则：键值尽量短；互斥覆盖同名键；没有把握就不加。",
+            "你维护本会话短属性（人数/偏好/预算/忌口/场景等）。必须调用 "
+            "batch_add_section_insight_attrs；对话里用户明确说过的偏好要写入。\n"
+            "规则：键值尽量短；互斥覆盖同名键；无依据才可不加。",
         ),
         (
             "human",
-            "当前会话属性：\n{attrs_text}\n\n最近对话：\n{history_text}\n\n请按需追加属性。",
+            "当前会话属性：\n{attrs_text}\n\n最近对话：\n{history_text}\n\n"
+            "请从对话提取并追加会话属性。",
         ),
     ]
 )
@@ -58,10 +60,4 @@ MAINTAIN_USER_ATTRS_PROMPT = ChatPromptTemplate.from_messages(
             "相关对话：\n{history_text}\n\n请按需追加用户属性。",
         ),
     ]
-)
-
-# 生成时可选用的说明（拼进 RAG system）
-RAG_OPTIONAL_INSIGHT_TOOLS = (
-    "如确有必要，可调用 get_section_review / get_section_facts 查阅会话摘要与事实；"
-    "非必要不要调用。"
 )

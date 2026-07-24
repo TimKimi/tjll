@@ -15,6 +15,7 @@ from backend.llm.client.llm import (
     _message_text,
     _normalize_messages,
 )
+from backend.llm.graph.interrupt import AskInterruptSignal
 
 logger = logging.getLogger("backend.llm.client.tool_loop")
 
@@ -56,6 +57,8 @@ def run_tool_loop(
                         if isinstance(out, str)
                         else json.dumps(out, ensure_ascii=False, default=str)
                     )
+                except AskInterruptSignal:
+                    raise
                 except Exception as exc:
                     logger.exception("tool %s failed", name)
                     content = f"error: {exc}"

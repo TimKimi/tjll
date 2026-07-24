@@ -131,7 +131,7 @@ class UserInsight:
         return self.batch_add(attrs)
 
     def as_batch_add_tool(self) -> StructuredTool:
-        """供 LLM ``bind_tools`` / ``invoke_with_tools`` 调用的批量添加工具。"""
+        """供 LLM ``bind_tools`` / tool_loop 调用的批量添加工具。"""
 
         def _tool(attrs: dict[str, Any]) -> dict[str, str]:
             """批量写入用户洞察数据属性。
@@ -247,8 +247,3 @@ class UserInsight:
         from backend.llm.insight.store import load_user_insight
 
         return load_user_insight(uuid)
-
-
-def make_batch_add_tool(insight: UserInsight) -> StructuredTool:
-    """模块级工厂：为指定 ``UserInsight`` 生成批量添加工具。"""
-    return insight.as_batch_add_tool()

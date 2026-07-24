@@ -37,16 +37,6 @@ def get_history(uuid: str, section_id: str) -> BaseChatMessageHistory:
     )
 
 
-def get_history_by_session_key(session_id: str) -> BaseChatMessageHistory:
-    """供 LCEL ``RunnableWithMessageHistory``：session_id 必须为 ``uuid::section_id``。"""
-    parts = (session_id or "").split("::", 1)
-    if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
-        raise ValueError(
-            "session_id must be '{uuid}::{section_id}' with both parts non-empty"
-        )
-    return get_history(parts[0].strip(), parts[1].strip())
-
-
 def clear_history(uuid: str, section_id: str) -> None:
     """删除单个会话的 Redis 聊天历史。"""
     hist = get_history(uuid, section_id)
