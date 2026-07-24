@@ -21,10 +21,12 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings
 from backend.core.logger import setup_app_logging
+from backend.core.online_tracker import tracker
 from backend.core.schema import auto_adapt_schema
 from backend.database import engine
 from backend.models.base import Base
 from backend.routers import admin as admin_router
+from backend.routers import ai as ai_router
 from backend.routers import auth as auth_router
 from backend.routers import file as file_router
 from backend.routers import business as business_router
@@ -45,7 +47,13 @@ async def lifespan(_app: FastAPI):
     else:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+    # 启动在线追踪器（后台线程同步 token 过期 → is_online）
+    tracker.start()
+
     yield
+
+    tracker.stop()
     await engine.dispose()
 
 
@@ -77,6 +85,7 @@ app.include_router(auth_router.router)
 app.include_router(user_router.router)
 app.include_router(business_router.router)
 app.include_router(review_router.router)
+app.include_router(ai_router.router)
 app.include_router(favorite_router.router)
 app.include_router(file_router.router)
 app.include_router(admin_router.router)
