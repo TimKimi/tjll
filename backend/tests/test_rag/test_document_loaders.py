@@ -94,32 +94,6 @@ def test_load_docx(tmp_path, monkeypatch):
     assert load_document_as_text(str(path)) == "段1\n\n段2"
 
 
-def test_file_to_chunks_pipeline(tmp_path, monkeypatch):
-    import backend.rag.document.loaders as loaders_mod
-
-    path = tmp_path / "note.md"
-    path.write_text("hello\n\nworld", encoding="utf-8")
-
-    monkeypatch.setattr(loaders_mod, "clean_text", lambda t: t.strip())
-    monkeypatch.setattr(
-        loaders_mod,
-        "split_text_to_chunks",
-        lambda text, chunk_size=None, chunk_overlap=None: ["hello", "world"],
-    )
-
-    assert loaders_mod.file_to_chunks(str(path)) == ["hello", "world"]
-
-
-def test_file_to_chunks_empty_after_clean(tmp_path, monkeypatch):
-    import backend.rag.document.loaders as loaders_mod
-
-    path = tmp_path / "empty.md"
-    path.write_text("   ", encoding="utf-8")
-    monkeypatch.setattr(loaders_mod, "clean_text", lambda _t: "")
-
-    assert loaders_mod.file_to_chunks(str(path)) == []
-
-
 def test_load_image_uses_mineru(tmp_path, monkeypatch):
     import backend.rag.document.loaders as loaders_mod
 

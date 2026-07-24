@@ -177,6 +177,30 @@ def hits_to_documents(hits: list[dict]) -> list[Document]:
     return docs
 
 
+def _filtered_vector_script_score(
+    query_vec: list[float],
+    filters: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """先 filter 再向量打分（OpenSearch 内完成；适配 nmslib 无 inline filter）。
+
+    使用 ``knn_score`` script：外层 bool.filter 预筛，再对候选算 cosinesimil。
+    """
+    return {
+        "script_score": {
+            "query": {"bool": {"filter": list(filters)}},
+            "script": {
+                "source": "knn_score",
+                "lang": "knn",
+                "params": {
+                    "field": "embedding",
+                    "query_value": query_vec,
+                    "space_type": "cosinesimil",
+                },
+            },
+        }
+    }
+
+
 def search_insight_text(
     query: str,
     *,
@@ -186,7 +210,7 @@ def search_insight_text(
 ) -> str:
     """洞察索引：混合检索 + 精排，只返回一条 chunk 的 text；无结果返回空串。
 
-    若传入 ``uuid``，在 BM25 / knn 两侧加 document_id 过滤。
+    若传入 ``uuid``：BM25 带 filter；向量侧为「先 filter 再 knn_score」（非 knn inline filter）。
     """
     from backend.rag.retrieve.rerank import rerank_docs
 
@@ -213,15 +237,7 @@ def search_insight_text(
                 "filter": [doc_filter],
             }
         }
-        knn_q = {
-            "knn": {
-                "embedding": {
-                    "vector": query_vec,
-                    "k": max(k * 4, k),
-                    "filter": doc_filter,
-                }
-            }
-        }
+        knn_q = _filtered_vector_script_score(query_vec, [doc_filter])
     else:
         bm25_q = {"match": {"text": {"query": query}}}
         knn_q = {
@@ -233,7 +249,7 @@ def search_insight_text(
             }
         }
 
-    body = {
+    body: dict[str, Any] = {
         "size": k,
         "query": {"hybrid": {"queries": [bm25_q, knn_q]}},
         "_source": _SOURCE_EXCLUDES,
@@ -262,7 +278,11 @@ def _hybrid_filtered_hits(
     filters: list[dict[str, Any]],
     recall_k: int,
 ) -> list[dict]:
-    """带 filter 的 hybrid 检索，返回 hits（未精排）。"""
+    """带 filter 的 hybrid 检索，返回 hits（未精排）。
+
+    nmslib 不支持 knn 内联 filter：向量支路用 script_score(knn_score)，
+    在 OpenSearch 内先 filter 再打分，中间结果不回客户端。
+    """
     client = get_opensearch_client()
     if not client.indices.exists(index=index_name):
         return []
@@ -275,16 +295,8 @@ def _hybrid_filtered_hits(
             "filter": filters,
         }
     }
-    knn_q: dict[str, Any] = {
-        "knn": {
-            "embedding": {
-                "vector": query_vec,
-                "k": max(recall_k * 4, recall_k),
-                "filter": {"bool": {"filter": filters}},
-            }
-        }
-    }
-    body = {
+    knn_q = _filtered_vector_script_score(query_vec, filters)
+    body: dict[str, Any] = {
         "size": recall_k,
         "query": {"hybrid": {"queries": [bm25_q, knn_q]}},
         "_source": _SOURCE_EXCLUDES,

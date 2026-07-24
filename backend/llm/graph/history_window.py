@@ -6,8 +6,6 @@ from collections.abc import Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from backend.llm.session.history import get_history
-
 CompleteTurn = tuple[HumanMessage, AIMessage]
 
 
@@ -66,14 +64,3 @@ def select_history_window(
         out.append(human)
         out.append(ai)
     return out
-
-
-def load_history_window_from_redis(
-    uuid: str,
-    section_id: str,
-    *,
-    min_turns: int = 3,
-) -> list[BaseMessage]:
-    """从 Redis 装内存窗口：尾部 used=false；不足 min_turns 则向上补。"""
-    raw = list(get_history(uuid, section_id).messages)
-    return select_history_window(raw, min_turns=min_turns)

@@ -34,7 +34,6 @@ from backend.llm.schemas import (
 from backend.llm.session.history import (
     clear_histories_for_uuid,
     clear_history,
-    get_history,
     list_history_session_ids_for_uuid,
 )
 from backend.logging_setup import setup_app_logging
@@ -237,11 +236,13 @@ def get_section_ids(uuid: str) -> list[str]:
 
 
 def get_ask_history(uuid: str, section_id: str) -> AskHistory:
-    """按 uuid + section_id 只读 Redis 返回完整会话历史（过滤 system）。"""
+    """按 uuid + section_id：Redis 已落盘 + AskSession 内存历史（去重拼接）。"""
     setup_app_logging()
     uuid, section_id = _require_ids(uuid, section_id)
     wait_section_ready(uuid, section_id)
-    messages = filter_chat_messages(list(get_history(uuid, section_id).messages))
+    messages = filter_chat_messages(
+        get_session_pool().merged_history_messages(uuid, section_id)
+    )
     history = _history_to_messages(history_snapshot(messages))
     insight_create, insight_use = _last_user_insight_flags(history)
     logger.info(

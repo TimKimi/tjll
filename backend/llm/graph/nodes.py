@@ -128,10 +128,11 @@ def fetch_user_insight(state: AskState) -> dict[str, Any]:
     if text:
         insight.append(text)
     logger.info(
-        "fetch_user_insight uuid=%s section_id=%s hit=%s",
+        "fetch_user_insight uuid=%s section_id=%s hit=%s text=%r",
         uuid,
         section_id,
         bool(text),
+        text[:400] if text else "",
     )
     return {"insight": insight}
 
@@ -146,10 +147,11 @@ def fetch_section_insight(state: AskState) -> dict[str, Any]:
     if text:
         insight.append(text)
     logger.info(
-        "fetch_section_insight uuid=%s section_id=%s hit=%s",
+        "fetch_section_insight uuid=%s section_id=%s hit=%s text=%r",
         uuid,
         section_id,
         bool(text),
+        text[:400] if text else "",
     )
     return {"insight": insight}
 

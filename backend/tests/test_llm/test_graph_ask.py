@@ -15,7 +15,6 @@ from backend.llm.graph.builder import (
 from backend.llm.graph.router import (
     route_after_attachment,
     route_after_enrich,
-    route_after_history,
     route_after_user_insight,
 )
 from backend.llm.graph.session_pool import AskSessionPool, get_session_pool
@@ -52,21 +51,21 @@ def _fake_llm(content: str = "图回答"):
     return _FakeStreamLLM()
 
 
-def test_route_after_history_empty(monkeypatch):
+def test_route_after_enrich_empty(monkeypatch):
     import backend.llm.graph.session_pool as pool_mod
 
     monkeypatch.setattr(
         pool_mod, "get_history", lambda uuid, section_id: _FakeHistory()
     )
     reset_ask_graph_cache()
-    assert route_after_history({}) == "retrieve_rerank"
+    assert route_after_enrich({}) == "retrieve_rerank"
     assert (
-        route_after_history({"uuid": "u-empty", "section_id": "s-empty"})
+        route_after_enrich({"uuid": "u-empty", "section_id": "s-empty"})
         == "retrieve_rerank"
     )
 
 
-def test_route_after_history_with_messages(monkeypatch):
+def test_route_after_enrich_with_messages(monkeypatch):
     import backend.llm.graph.session_pool as pool_mod
 
     monkeypatch.setattr(
@@ -75,7 +74,7 @@ def test_route_after_history_with_messages(monkeypatch):
     reset_ask_graph_cache()
     session = get_session_pool().get_or_create("u-hist", "s-hist", load_history=False)
     session.history = [HumanMessage(content="hi"), AIMessage(content="yo")]
-    assert route_after_history({"uuid": "u-hist", "section_id": "s-hist"}) == "rewrite"
+    assert route_after_enrich({"uuid": "u-hist", "section_id": "s-hist"}) == "rewrite"
 
 
 def test_route_after_attachment():
@@ -262,11 +261,6 @@ def test_graph_ask_stream_service(monkeypatch):
     reset_ask_graph_cache()
     monkeypatch.setattr(pool_mod, "get_history", lambda uuid, section_id: redis_hist)
     monkeypatch.setattr(
-        "backend.llm.graph.history_window.get_history",
-        lambda uuid, section_id: redis_hist,
-    )
-    monkeypatch.setattr(svc, "get_history", lambda uuid, section_id: redis_hist)
-    monkeypatch.setattr(
         nodes_mod, "rewrite_query", lambda q, h, **kwargs: "改写后的查询"
     )
     monkeypatch.setattr(
@@ -339,8 +333,8 @@ def test_graph_ask_stream_service(monkeypatch):
     hist = svc.get_ask_history(uuid="req-9", section_id="sec-1")
     assert hist.uuid == "req-9"
     assert hist.section_id == "sec-1"
-    # get_ask_history 只读 Redis；本轮仍 pending，尚未刷入
-    assert len(hist.history) == 2
+    # Redis 旧 2 条 + 本轮内存 pending 2 条
+    assert len(hist.history) == 4
     assert hist.history[0] == HistoryMessage(
         role="user",
         content="上次问过",
@@ -354,6 +348,12 @@ def test_graph_ask_stream_service(monkeypatch):
     assert hist.history[1].sources == [RagSnippet(content="旧资料", metadata={})]
     assert hist.history[1].insight_create is None
     assert hist.history[1].insight_use is None
+    assert hist.history[2].role == "user"
+    assert hist.history[2].content == "适合约会吗"
+    assert hist.history[2].insight_create is True
+    assert hist.history[2].insight_use is False
+    assert hist.history[3].role == "assistant"
+    assert hist.history[3].content == "适合"
     dumped = hist.history[0].model_dump()
     assert "search_query" not in dumped
     assert "insight_create" in dumped

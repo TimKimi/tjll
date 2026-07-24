@@ -44,10 +44,3 @@ def route_after_enrich(
     ):
         return "rewrite"
     return "retrieve_rerank"
-
-
-def route_after_history(
-    state: AskState,
-) -> Literal["rewrite", "retrieve_rerank"]:
-    """兼容旧名：等同 route_after_enrich。"""
-    return route_after_enrich(state)

@@ -1,12 +1,11 @@
-"""LLM 基础封装：非流式 / 流式 / 工具绑定。"""
+"""LLM 基础封装：创建实例 / 工具绑定。"""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from typing import Any, cast
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 
 from backend.config import settings
@@ -76,50 +75,6 @@ def _message_text(msg: Any) -> str:
     return str(content)
 
 
-def invoke_llm(
-    messages: Sequence[_MessageLike] | str,
-    *,
-    temperature: float = settings.llm_generate_temperature,
-    **kwargs: Any,
-) -> str:
-    """非流式调用，返回文本。"""
-    llm = get_llm(temperature=temperature)
-    result = llm.invoke(_normalize_messages(messages), **kwargs)
-    return _message_text(result)
-
-
-def stream_llm(
-    messages: Sequence[_MessageLike] | str,
-    *,
-    temperature: float = settings.llm_generate_temperature,
-    **kwargs: Any,
-) -> Iterator[str]:
-    """流式调用，逐 token 产出文本片段。"""
-    llm = get_llm(temperature=temperature)
-    for chunk in llm.stream(_normalize_messages(messages), **kwargs):
-        text = _message_text(chunk)
-        if text:
-            yield text
-
-
-def invoke_chat(
-    runnable: Any,
-    inputs: Any,
-    config: RunnableConfig | None = None,
-) -> Any:
-    """LCEL Runnable 非流式调用。"""
-    return runnable.invoke(inputs, config=config)
-
-
-def stream_chat(
-    runnable: Any,
-    inputs: Any,
-    config: RunnableConfig | None = None,
-) -> Iterator[Any]:
-    """LCEL Runnable 流式调用。"""
-    yield from runnable.stream(inputs, config=config)
-
-
 def get_llm_with_tools(
     tools: Sequence[Any],
     *,
@@ -127,30 +82,3 @@ def get_llm_with_tools(
 ) -> Any:
     """绑定工具的 LLM（``bind_tools``）；不做多步 Agent loop。"""
     return get_llm(temperature=temperature).bind_tools(list(tools))
-
-
-def invoke_with_tools(
-    messages: Sequence[_MessageLike] | str,
-    tools: Sequence[Any],
-    *,
-    temperature: float = settings.llm_generate_temperature,
-    **kwargs: Any,
-) -> AIMessage:
-    """带工具绑定的非流式调用，返回完整 AIMessage（可能含 tool_calls）。"""
-    llm = get_llm_with_tools(tools, temperature=temperature)
-    result = llm.invoke(_normalize_messages(messages), **kwargs)
-    if isinstance(result, AIMessage):
-        return result
-    return AIMessage(content=_message_text(result))
-
-
-def stream_with_tools(
-    messages: Sequence[_MessageLike] | str,
-    tools: Sequence[Any],
-    *,
-    temperature: float = settings.llm_generate_temperature,
-    **kwargs: Any,
-) -> Iterator[Any]:
-    """带工具绑定的流式调用，产出原始 chunk。"""
-    llm = get_llm_with_tools(tools, temperature=temperature)
-    yield from llm.stream(_normalize_messages(messages), **kwargs)

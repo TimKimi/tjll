@@ -198,44 +198,6 @@ def load_section_insight(
     return section
 
 
-def delete_user_insight_redis(uuid: str) -> bool:
-    """删除用户洞察 Redis key。"""
-    key = user_insight_key(uuid)
-    try:
-        client = _client()
-        try:
-            n = int(client.delete(key) or 0)
-        finally:
-            try:
-                client.close()
-            except Exception:
-                pass
-        logger.info("delete_user_insight_redis key=%s deleted=%d", key, n)
-        return True
-    except Exception:
-        logger.exception("delete_user_insight_redis failed key=%s", key)
-        return False
-
-
-def delete_section_insight_redis(uuid: str, section_id: str) -> bool:
-    """删除会话洞察 Redis key。"""
-    key = section_insight_key(uuid, section_id)
-    try:
-        client = _client()
-        try:
-            n = int(client.delete(key) or 0)
-        finally:
-            try:
-                client.close()
-            except Exception:
-                pass
-        logger.info("delete_section_insight_redis key=%s deleted=%d", key, n)
-        return True
-    except Exception:
-        logger.exception("delete_section_insight_redis failed key=%s", key)
-        return False
-
-
 def list_section_insight_ids_for_uuid(uuid: str) -> list[str]:
     """扫描 Redis，列出该 uuid 下全部 section_id。"""
     uuid = (uuid or "").strip()

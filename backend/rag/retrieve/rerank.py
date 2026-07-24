@@ -39,21 +39,3 @@ def rerank_docs(
         meta["rerank_score"] = float(score)
         out.append(Document(page_content=doc.page_content, metadata=meta))
     return out
-
-
-def hybrid_search_with_rerank(
-    query: str,
-    *,
-    recall_k: int | None = None,
-    top_n: int | None = None,
-    index_name: str | None = None,
-) -> list[Document]:
-    """hybrid（Search Pipeline）粗排 + FlagEmbedding 精排。"""
-    from backend.rag.retrieve.search import hybrid_search, hits_to_documents
-
-    hits = hybrid_search(
-        query,
-        k=recall_k or settings.retrieval_top_k,
-        index_name=index_name,
-    )
-    return rerank_docs(query, hits_to_documents(hits), top_n=top_n)
