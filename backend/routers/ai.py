@@ -16,7 +16,9 @@ from fastapi.responses import StreamingResponse
 
 from backend.core.dependencies import get_current_user
 from backend.llm import (
+    AskInterruptResult,
     AskParams,
+    AskStream,
     ask as llm_ask,
     delete_ask_histories_by_uuid,
     delete_ask_history,
@@ -61,8 +63,13 @@ async def ai_ask(
         insight_create=req.insight_create,
         insight_use=req.insight_use,
     )
-    stream = llm_ask(ask_params)
+    out = llm_ask(ask_params)
 
+    # rewrite HITL：问卷非流式 JSON 返回（与 AskStream 区分）
+    if isinstance(out, AskInterruptResult):
+        return ApiResponse.ok(data=out.model_dump())
+
+    stream: AskStream = out
     if not req.stream:
         "".join(stream)
         resp = stream.response

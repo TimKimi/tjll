@@ -14,7 +14,7 @@ from backend.llm.graph.state import AskState
 from backend.llm.graph.tools import sources_from_docs
 from backend.llm.insight.registry import ensure_section_insight
 from backend.llm.pipeline.context import format_docs
-from backend.llm.rephrase.rewrite import rewrite_query
+from backend.llm.rephrase.rewrite import rewrite_query_with_tools
 from backend.rag.retrieve import get_retriever, rerank_docs
 
 logger = logging.getLogger("backend.llm.graph.nodes")
@@ -157,16 +157,36 @@ def fetch_section_insight(state: AskState) -> dict[str, Any]:
 
 
 def rewrite(state: AskState) -> dict[str, Any]:
-    """结合历史 / insight / attachment 合成 search_query；生成仍用原 query。"""
+    """结合历史 / insight / attachment / 澄清问答；可打断；产出 search_query+detail。"""
     query = state["query"]
-    history = session_history(state["uuid"], state["section_id"])
-    search_query = rewrite_query(
+    uuid = (state.get("uuid") or "").strip()
+    section_id = (state.get("section_id") or "").strip()
+    if not uuid or not section_id:
+        raise ValueError("uuid and section_id are both required")
+    history = session_history(uuid, section_id)
+    section = ensure_section_insight(uuid, section_id)
+    session = get_session_pool().get_or_create(uuid, section_id, load_history=False)
+    session.section_insight = section
+    # 挂起 enrich，供 interrupt 后 submit 续跑
+    session.pending_enrich = {
+        "insight": list(state.get("insight") or []),
+        "attachment": list(state.get("attachment") or []),
+        "attachment_filenames": list(state.get("attachment_filenames") or []),
+        "insight_use": bool(state.get("insight_use")),
+    }
+    force = bool(state.get("resume_rewrite")) or section.has_interrupt_answers()
+    search_query, detail = rewrite_query_with_tools(
         query,
         history,
+        section=section,
         insight=state.get("insight"),
         attachment=state.get("attachment"),
+        force=force,
     )
-    return {"search_query": search_query}
+    session.last_search_query = search_query
+    session.last_detail = detail
+    session.touch()
+    return {"search_query": search_query, "detail": detail}
 
 
 def retrieve_rerank(state: AskState) -> dict[str, Any]:

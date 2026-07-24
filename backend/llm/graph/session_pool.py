@@ -119,6 +119,9 @@ class AskSession:
     pending_turns: list[PendingTurn] = field(default_factory=list)
     last_sources: list[dict[str, Any]] = field(default_factory=list)
     last_search_query: str = ""
+    last_detail: str = ""
+    pending_ask: Any | None = None
+    pending_enrich: dict[str, Any] = field(default_factory=dict)
     last_used: float = field(default_factory=time.monotonic)
     graph: Any | None = None
     section_insight: SectionInsight | None = None
@@ -152,12 +155,14 @@ class AskSession:
         insight_use: bool = False,
         sources: list[dict[str, Any]] | None = None,
         used: bool = False,
+        detail: str = "",
     ) -> None:
         """本轮问答写入内存；不立即刷 Redis。"""
         human = HumanMessage(
             content=user,
             additional_kwargs={
                 "search_query": search_query,
+                "detail": detail or "",
                 "filename": filename or "",
                 "insight_create": bool(insight_create),
                 "insight_use": bool(insight_use),

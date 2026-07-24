@@ -135,51 +135,34 @@ class DeleteHistoryResult(BaseModel):
     )
 
 
-class AskInterruptCreateParams(BaseModel):
-    """创建 ask interrupt 澄清问卷入参。"""
-
-    uuid: str = Field(..., min_length=1)
-    section_id: str = Field(..., min_length=1)
-    query: str | None = Field(default=None, description="可选上下文问题")
-
-
 class AskInterruptQuestion(BaseModel):
-    """单道澄清题：选项最后一项约定为「其他」。"""
+    """单道澄清题：option 为 A/B/… → 文案；提交答案后洞察内改为 result。"""
 
-    id: str
-    prompt: str
-    options: list[str] = Field(default_factory=list)
+    question: str = Field(..., min_length=1)
+    option: dict[str, str] = Field(
+        default_factory=dict,
+        description='选项映射，如 {"A": "…", "B": "…"}',
+    )
 
 
-class AskInterruptCreateResult(BaseModel):
-    """澄清问卷创建结果（占位可返回空 questions）。"""
+class AskInterruptResult(BaseModel):
+    """ask() 在 rewrite 打断时返回的问卷（一层封装）。"""
 
     uuid: str
     section_id: str
-    interrupt_id: str = ""
     questions: list[AskInterruptQuestion] = Field(default_factory=list)
 
 
 class AskInterruptAnswerItem(BaseModel):
-    """单题答案：answer 为选项原文或自定义文本（非序号）。"""
+    """单题答案：result 为选项原文或自定义文本。"""
 
-    question_id: str = Field(..., min_length=1)
-    answer: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=1)
+    result: str = Field(..., min_length=1)
 
 
 class AskInterruptSubmitParams(BaseModel):
-    """提交澄清问卷答案入参。"""
+    """提交澄清答案；受理后从 rewrite 续跑并返回 AskStream。"""
 
     uuid: str = Field(..., min_length=1)
     section_id: str = Field(..., min_length=1)
-    interrupt_id: str = Field(..., min_length=1)
     answers: list[AskInterruptAnswerItem] = Field(default_factory=list)
-
-
-class AskInterruptSubmitResult(BaseModel):
-    """澄清答案受理结果（占位）。"""
-
-    uuid: str
-    section_id: str
-    interrupt_id: str
-    accepted: bool = False
