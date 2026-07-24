@@ -62,17 +62,22 @@ class _OnlineTracker:
     def start(self) -> None:
         """启动后台守护线程。
 
-        首次启动时将数据库中所有用户 ``is_online`` 置为 ``false``，
-        因为服务重启意味着所有 token 已失效。
+        当 ``settings.ONLINE_TRACKER_RESET_ON_STARTUP = True`` 时，
+        启动时将数据库中所有用户 ``is_online`` 置为 ``false``。
         """
         if self._thread is not None:
             return
         self._engine = create_engine(_SYNC_DB_URL, pool_pre_ping=True)
-        self._reset_all_online()
+        if settings.ONLINE_TRACKER_RESET_ON_STARTUP:
+            self._reset_all_online()
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        logger.info("online tracker started, interval=%ds", self._interval)
+        logger.info(
+            "online tracker started, interval=%ds, reset_on_startup=%s",
+            self._interval,
+            settings.ONLINE_TRACKER_RESET_ON_STARTUP,
+        )
 
     def stop(self) -> None:
         """停止后台线程并将所有追踪用户置为离线。"""
@@ -117,18 +122,31 @@ class _OnlineTracker:
             logger.error("sync offline failed: %s", e)
 
     def _reset_all_online(self) -> None:
-        """初始化：将所有用户置为离线，清空所有追踪记录。"""
+        """初始化：将所有用户置为离线，清空所有追踪记录。
+
+        同时记录重置时间戳 ``_reset_iat``，在此时间之前签发的 JWT
+        将在 ``get_current_user`` 中被拒绝（实现 token 失效）。
+        """
         with self._lock:
             self._users.clear()
+        self._reset_iat = time.time()
         if not self._engine:
             return
         try:
             with self._engine.connect() as conn:
                 conn.execute(text("UPDATE app_users SET is_online = false"))
                 conn.commit()
-            logger.info("reset all users to offline on startup")
+            logger.info(
+                "reset all users to offline, tokens issued before %.0f invalidated",
+                self._reset_iat,
+            )
         except Exception as e:
             logger.error("reset all users offline failed: %s", e)
+
+    @property
+    def reset_iat(self) -> float:
+        """获取重置时间戳。未重置时返回 0（不进行 iat 检查）。"""
+        return getattr(self, "_reset_iat", 0.0)
 
     def _flush_all(self) -> None:
         with self._lock:

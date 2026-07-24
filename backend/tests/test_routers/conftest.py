@@ -26,6 +26,10 @@ def auto_mock_deps():
     各测试可按需调整 mock_db.execute.return_value 的返回值。
     """
     mock_db = AsyncMock()
+    # AsyncSession.add 是同步方法，AsyncMock 默认返回 coroutine
+    # 覆盖为 MagicMock 以消除 "coroutine was never awaited" 警告
+    mock_db.add = MagicMock()
+
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result

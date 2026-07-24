@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRE_DAYS: int = 7
     ONLINE_TRACKER_CHECK_INTERVAL: int = 30
     """在线追踪器后台线程检查周期（秒），检测过期 token 并同步 is_online"""
+    ONLINE_TRACKER_RESET_ON_STARTUP: bool = False
+    """服务重启时是否重置所有用户的在线离线状态（清空 token 追踪记录）。默认 False 保留。"""
     EMAIL_CHECK_DELIVERABILITY: bool = False
     """注册时是否检查邮箱域名可送达性"""
 

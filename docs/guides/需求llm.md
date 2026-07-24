@@ -26,11 +26,7 @@
 
      对于选项1，2，如果是新建的对话窗口，那其默认值是总设置里的默认值（即允许创建洞察，和使用已有的洞察优化用户体验）。如果不是新建的对话窗口其默认值应该为开启会话时查历史查到的AskHistory里面的insight_create:insight_use进行展示，均为bool类型。该二选项可以随时开启或关闭，状态改变不用单独调用接口。
 
-
-
      对于选项3，点击调用get_section_insight接口，传入uuid,section_id，得到字典类型数据，前端弹窗渲染：{key:value...}，该渲染弹窗内，允许用户修改、删除、增加内容，完成后，底部有提交按钮，点击会调用update_section_insight_attrs，传入uuid,section_id,和{key:value...}，成功返回true.
-
-
 
      对于选项4，点击会调用delete_section_insight接口，传入uuid和section_id，成功返回true。
 
@@ -118,74 +114,67 @@ sequenceDiagram
     U->>F: 登录
     F->>B: POST /api/auth/login
     B-->>F: { token, user, sections: ["conv_a", ...] }
+    Note right of F: sections 来自 Redis，新用户返回 []
 
     Note over U,LLM: ── 聊天主流程 ──
     U->>F: 进入聊天页面
     F->>B: GET /api/ai/section/reviews?section_ids=conv_a,conv_b
     Note right of F: 批量获取左侧栏各会话的摘要预览
     B->>LLM: 循环 get_section_review(uuid, section_id)
-    LLM-->>B: { section_id: review_text }
-    B-->>F: { reviews: { conv_a: "...", conv_b: "..." } }
+    LLM-->>B: review text
+    B-->>F: { reviews: [{section_id, review}, ...] }
 
     U->>F: 进入/切换会话
     F->>B: GET /api/ai/history?section_id=conv_a
     B->>LLM: get_ask_history(uuid, section_id)
     LLM-->>B: AskHistory
     B-->>F: { history: [...], insight_create, insight_use }
+    Note right of F: 恢复聊天记录和洞察开关状态
 
     Note over U,LLM: ── 上传文件 ──
     U->>F: 选取文件上传
     F->>B: POST /api/file/upload (section_id, file)
     B->>B: 保存文件 → 自动 load_section_document
-    B-->>F: { url: "/static/..." }
-    Note right of B: 上传成功后自动调用 load_section_document，前端无需额外请求
+    B-->>F: { filename, url, size, mime_type }
+    Note right of F: url 格式 ./backend/static/...<br/>按扩展名分类存入会话文件列表
 
     Note over U,LLM: ── 发送问题（流式对话） ──
     U->>F: 输入问题，点击发送
     F->>B: POST /api/ai/ask
-    Note right of F: body: { query, section_id, file_paths,<br/>         insight_create, insight_use,<br/>         docx/docs/txt/md/pdf/images }
+    Note right of F: body: { query, section_id,<br/>  docx/doc/txt/md/pdf/images,<br/>  insight_create, insight_use, stream }
     B->>LLM: ask(AskParams)
     LLM-->>B: stream + AskResult
     B-->>F: StreamingResponse (text/plain)
-    Note right of F: 流式接收完 → AskResult { answer, sources, query_filename }
+    Note right of F: 逐 chunk 读取 AI 回复<br/>流结束 → AskResult { answer, sources, query_filename }
 
-    Note over U,LLM: ── 下拉框操作 ──
+    Note over U,LLM: ── 下拉框 - 会话洞察 ──
     U->>F: 展示会话个性化数据
     F->>B: GET /api/ai/insight/section?section_id=conv_a
-    B->>LLM: get_section_insight(uuid, section_id)
-    LLM-->>B: { key: value, ... }
     B-->>F: { key: value, ... }
-    Note right of F: 弹窗渲染 → 用户可修改/删除/增加
+    Note right of F: 弹窗渲染，用户可修改
     U->>F: 点击提交
     F->>B: PUT /api/ai/insight/section
     Note right of F: body: { section_id, ...attrs }
-    B->>LLM: update_section_insight_attrs(uuid, section_id, attrs)
-    LLM-->>B: true
     B-->>F: { message: "已更新" }
 
     U->>F: 删除会话个性化数据
     F->>B: DELETE /api/ai/insight/section?section_id=conv_a
-    B->>LLM: delete_section_insight(uuid, section_id)
-    LLM-->>B: true
     B-->>F: { message: "已删除" }
 
-    Note over U,LLM: ── 会话详情 ──
+    Note over U,LLM: ── 会话详情弹窗 ──
     U->>F: 点击会话详情
     F->>B: GET /api/ai/session/detail?section_id=conv_a
     B->>LLM: get_section_facts + get_section_review + get_section_insight
-    LLM-->>B: { facts: [...], review: "...", insight: {...} }
-    B-->>F: { facts, review, insight }
+    LLM-->>B: facts + review + insight
+    B-->>F: SessionDetail { facts: [...], review, insight: [{key, value}] }
     Note right of F: 同一弹窗三个区域展示
     U->>F: 修改 facts → 提交
     F->>B: PUT /api/ai/section/facts
     Note right of F: body: { section_id, items: [...] }
-    B->>LLM: update_section_facts(uuid, section_id, items)
     B-->>F: { message: "已更新" }
-
     U->>F: 修改 review → 提交
     F->>B: PUT /api/ai/section/review
     Note right of F: body: { section_id, text }
-    B->>LLM: set_section_review(uuid, section_id, text)
     B-->>F: { message: "已更新" }
 
     Note over U,LLM: ── 刷新会话（合并操作） ──
@@ -193,125 +182,183 @@ sequenceDiagram
     F->>B: POST /api/ai/session/refresh?section_id=conv_a
     B->>LLM: release_ask_session → get_ask_history
     B-->>F: { history: [...], insight_create, insight_use }
-    Note right of B: release + reload 合并为一个请求，前端只调用一次
+    Note right of B: release + reload 合并为一个请求
 
     Note over U,LLM: ── 删除会话 ──
     U->>F: 删除单个会话
     F->>B: DELETE /api/ai/history?section_id=conv_a
     B-->>F: { message: "会话已删除" }
-
     U->>F: 删除全部会话
     F->>B: DELETE /api/ai/histories
     B-->>F: { deleted_sessions: N, section_ids: [...] }
 ```
 
-### 路由总表
+---
 
-| 方法 | 路径 | 功能 | 对应 LLM 函数 | 说明 |
-|---|---|---|---|---|
-| **会话管理** | | | | |
-| `GET` | `/api/ai/history?section_id=` | 获取会话历史 | `get_ask_history` | 进入/切换聊天窗口时调用 |
-| `POST` | `/api/ai/session/refresh?section_id=` | 刷新会话 | `release_ask_session` + `get_ask_history` | 🔀 合并：释放槽位 + 重载历史 |
-| `DELETE` | `/api/ai/history?section_id=` | 删除单个会话 | `delete_ask_history` | 同时清理历史 + 文件 |
-| `GET` | `/api/ai/section/reviews?section_ids=` | 批量获取会话摘要 | `get_section_review` (循环) | 左侧栏渲染用，逗号分隔多个 section_id |
-| `DELETE` | `/api/ai/histories` | 删除全部会话 | `delete_ask_histories_by_uuid` | 同上 |
-| **AI 对话** | | | | |
-| `POST` | `/api/ai/ask` | AI 流式对话 | `ask` | body 含 `AskParams` 所有字段 |
-| **文件上传** | | | | |
-| `POST` | `/api/file/upload?section_id=` | 上传文件 | 保存 + `load_section_document` | 🔀 合并：保存后自动调用文档处理 |
-| **会话详情** | | | | |
-| `GET` | `/api/ai/session/detail?section_id=` | 获取会话详情 | `get_section_facts` + `get_section_review` + `get_section_insight` | 🔀 合并：一次返回 facts + review + insight |
-| `PUT` | `/api/ai/section/facts` | 更新会话 facts | `update_section_facts` | body: `{ section_id, items: [...] }` |
-| `PUT` | `/api/ai/section/review` | 更新会话 review | `set_section_review` | body: `{ section_id, text }` |
-| **会话洞察** | | | | |
-| `GET` | `/api/ai/insight/section?section_id=` | 获取会话洞察 | `get_section_insight` | 返回 `{key: value, ...}` |
-| `PUT` | `/api/ai/insight/section` | 更新会话洞察 | `update_section_insight_attrs` | body: `{ section_id, ...attrs }` |
-| `DELETE` | `/api/ai/insight/section?section_id=` | 删除会话洞察 | `delete_section_insight` | |
+## 前端对接指南
 
-### 合并策略说明
+### 核心概念
 
-| 合并操作 | 原来 | 现在 | 理由 |
-|---|---|---|---|
-| 上传文件 → 文档处理 | ① POST upload ② POST document | ① POST upload（内部自动调用 load_section_document） | 用户上传文件后必然需要文档处理，拆成两步是多余动作 |
-| 刷新会话 | ① POST release ② GET history | ① POST refresh（内部依次执行 release + get_history） | 刷新目的是重载数据，两步合一减少一次网络往返 |
-| 会话详情 | ① GET facts ② GET review ③ GET insight | ① GET detail（一次返回 facts + review + insight） | 三个数据在同一弹窗展示，一次请求足够 |
+**`section_id`** —— 每个对话窗口的唯一标识，**由前端生成**（`crypto.randomUUID()`），一个对话窗口全程不变，上传、对话、查看历史都用同一个值。
 
-### 前端状态管理要点
+**`uuid`** —— 当前用户的 ID，**由后端自动从 JWT 注入**，前端永远不需要传入。
 
-1. **insight_create / insight_use**：纯前端状态，不单独调 API。新建会话从总设置（`GET /api/user/settings`）取默认值；已有会话从 `AskHistory.insight_create/insight_use` 恢复
-2. **文件列表**：上传成功后前端将返回的 `url` 存入当前会话的文件列表，发送 `ask` 时按扩展名分类填入对应字段
-3. **`section_id`**：前端生成（`crypto.randomUUID()`），同一会话全程不变，上传和对话使用同一个值
+### 数据来源总览
+
+```
+┌─ 前端自己生成 ────────────────────────┐
+│  section_id: crypto.randomUUID()    │ 每个新对话生成一次
+│  insight_create: bool               │ 本地状态（新建取设置，已有从历史恢复）
+│  insight_use: bool                  │ 同上
+└─────────────────────────────────────┘
+
+┌─ 用户操作产生 ────────────────────────┐
+│  query: string                      │ 用户输入的问题
+│  file: File                         │ 用户选取的文件
+└─────────────────────────────────────┘
+
+┌─ 后端返回 ───────────────────────────┐
+│  登录 → token, user, sections       │ sections: 该用户已有的会话 ID 列表
+│  上传 → { filename, url, ... }      │ url 格式: ./backend/static/...
+│  历史 → AskHistory                  │ 含聊天记录和 insight 开关状态
+│  对话 → stream / AskResult          │ 含 answer 和参考来源 sources
+└─────────────────────────────────────┘
+```
+
+### 接口一览（按使用场景）
+
+#### 场景：用户登录
+
+`POST /api/auth/login`
+
+| 传入 | 来源 |
+|---|---|
+| `username`, `password` | 用户输入 |
+
+| 返回 | 用途 |
+|---|---|
+| `token` | 后续请求的 Authorization header |
+| `sections: ["conv_a", ...]` | 该用户已有的会话 ID，用于渲染左侧栏 |
+
+#### 场景：进入聊天页 / 切换会话
+
+**批量获取会话摘要（左侧栏渲染）**
+
+`GET /api/ai/section/reviews?section_ids=conv_a,conv_b`
+
+| 参数 | 来源 |
+|---|---|
+| `section_ids` | 登录响应 `sections`，逗号分隔 |
+
+返回 `{ reviews: [{section_id, review}, ...] }`
+
+**获取单个会话历史**
+
+`GET /api/ai/history?section_id=conv_a`
+
+| 参数 | 来源 |
+|---|---|
+| `section_id` | 前端生成或从登录响应取 |
+
+返回 `AskHistory`（含 `history`、`insight_create`、`insight_use`）
+
+#### 场景：上传文件
+
+`POST /api/file/upload`（form-data）
+
+| 字段 | 来源 |
+|---|---|
+| `section_id` | 当前会话 ID |
+| `file` | 用户选取的文件 |
+
+返回 `{ filename, url, size, mime_type }`
+
+> 保存返回的 `url`，按扩展名分类存入 `docx`/`doc`/`txt`/`md`/`pdf`/`images`，后续发送 `ask` 时传入。
+
+#### 场景：发送问题（AI 对话）
+
+`POST /api/ai/ask`
+
+| body 字段 | 来源 |
+|---|---|
+| `query` | 用户输入 |
+| `section_id` | 当前会话 ID |
+| `docx/doc/txt/md/pdf/images` | 上传返回的 `url`，按扩展名分类 |
+| `insight_create`, `insight_use` | 下拉框当前值 |
+| `stream` | 建议固定 `true` |
+
+`stream: true` 返回 `text/plain` 流式响应；`stream: false` 返回 `AskResult` JSON。
+
+#### 场景：下拉框操作
+
+| 操作 | 接口 |
+|---|---|
+| 获取会话洞察 | `GET /api/ai/insight/section?section_id=` |
+| 更新会话洞察 | `PUT /api/ai/insight/section` body: `{ section_id, ...attrs }` |
+| 删除会话洞察 | `DELETE /api/ai/insight/section?section_id=` |
+
+#### 场景：会话详情
+
+| 操作 | 接口 |
+|---|---|
+| 获取详情（facts + review + insight） | `GET /api/ai/session/detail?section_id=` |
+| 更新 facts | `PUT /api/ai/section/facts` body: `{ section_id, items: [...] }` |
+| 更新 review | `PUT /api/ai/section/review` body: `{ section_id, text }` |
+
+#### 场景：刷新会话
+
+`POST /api/ai/session/refresh?section_id=conv_a`
+
+返回 `AskHistory`（同 `GET /api/ai/history`）
+
+#### 场景：删除会话
+
+| 操作 | 接口 |
+|---|---|
+| 删除单个 | `DELETE /api/ai/history?section_id=` |
+| 删除全部 | `DELETE /api/ai/histories` |
 
 ---
 
-## 开发计划
+### 数据字段参考
 
-### 第一阶段：核心对话管线（Phase 1）
+**`AskHistory`（会话历史）**
 
-**目标**：跑通最基本的「提问 → 回答」链路，含历史查看和会话删除。
-
-| 步骤 | 路由 | 说明 | 涉及文件 |
-|---|---|---|---|
-| 1.1 | `POST /api/ai/ask` | AI 流式对话，对接 `backend.llm.ask` | `routers/ai.py`, `main.py` |
-| 1.2 | `GET /api/ai/history?section_id=` | 获取会话历史，对接 `get_ask_history` | `routers/ai.py` |
-| 1.3 | `DELETE /api/ai/history?section_id=` | 删除单个会话 + 清理文件 | `routers/ai.py` |
-| 1.4 | `DELETE /api/ai/histories` | 删除全部会话 + 清理文件 | `routers/ai.py` |
-
-**交付物**：前端可以发送问题、查看历史、删除会话。
-
-### 第二阶段：会话管理增强（Phase 2）
-
-**目标**：完善会话生命周期管理。
-
-| 步骤 | 路由 | 说明 | 涉及文件 |
-|---|---|---|---|
-| 2.1 | `POST /api/ai/session/refresh?section_id=` | 刷新：release + get_history 合并 | `routers/ai.py` |
-| 2.2 | `GET /api/ai/section/reviews?section_ids=` | 批量获取会话摘要，循环调 `get_section_review` | `routers/ai.py` |
-
-**交付物**：前端可以刷新会话、在左侧栏展示会话摘要。
-
-### 第三阶段：会话详情（Phase 3）
-
-**目标**：支持会话 facts 和 review 的查看与编辑。
-
-| 步骤 | 路由 | 说明 | 涉及文件 |
-|---|---|---|---|
-| 3.1 | `GET /api/ai/session/detail?section_id=` | 合并返回 facts + review + insight | `routers/ai.py` |
-| 3.2 | `PUT /api/ai/section/facts` | 更新 facts | `routers/ai.py` |
-| 3.3 | `PUT /api/ai/section/review` | 更新 review | `routers/ai.py` |
-
-**交付物**：前端可以查看和编辑会话详情弹窗。
-
-### 第四阶段：会话洞察（Phase 4）
-
-**目标**：支持会话级别的洞察 CRUD。
-
-| 步骤 | 路由 | 说明 | 涉及文件 |
-|---|---|---|---|
-| 4.1 | `GET /api/ai/insight/section?section_id=` | 获取会话洞察 | `routers/ai.py` |
-| 4.2 | `PUT /api/ai/insight/section` | 更新会话洞察 | `routers/ai.py` |
-| 4.3 | `DELETE /api/ai/insight/section?section_id=` | 删除会话洞察 | `routers/ai.py` |
-
-**交付物**：前端可以在下拉框中管理会话洞察。
-
-### 第五阶段：文件上传集成（Phase 5）
-
-**目标**：上传文件后自动触发文档处理。
-
-| 步骤 | 路由 | 说明 | 涉及文件 |
-|---|---|---|---|
-| 5.1 | `POST /api/file/upload` | 上传后自动调 `load_section_document` | `services/file.py`, `routers/file.py` |
-
-**交付物**：前端上传文件后无需额外请求即可完成文档处理。
-
-### 阶段依赖关系
-
-```mermaid
-graph LR
-    P1[Phase 1: 核心对话] --> P2[Phase 2: 会话管理]
-    P1 --> P3[Phase 3: 会话详情]
-    P1 --> P4[Phase 4: 会话洞察]
-    P2 --> P5[Phase 5: 文件上传集成]
+```json
+{
+  "uuid": "u_abc",
+  "section_id": "conv_a",
+  "history": [
+    {
+      "role": "user" | "assistant",
+      "content": "消息内容",
+      "filename": null | "./backend/static/...",
+      "sources": null | [{ "content": "...", "metadata": {...} }]
+    }
+  ],
+  "insight_create": false,
+  "insight_use": false
+}
 ```
 
-Phase 1 是其余所有阶段的前置依赖。Phase 2-4 可并行开发，均依赖 Phase 1。Phase 5 依赖 Phase 2（因为文件上传后需要关联到 session）。
+`history[]` 中：`filename` 仅用户消息有，`sources` 仅 AI 回复有。
+
+**`AskResult`（AI 回答结果）**
+
+```json
+{
+  "query": "用户问题",
+  "section_id": "conv_a",
+  "answer": "AI 回复",
+  "sources": [{ "content": "...", "metadata": { "score": 0.95 } }],
+  "query_filename": "./backend/static/..."
+}
+```
+
+**`RagSnippet`（sources 中每一项）**
+
+```json
+{ "content": "片段正文", "metadata": { "score": 0.95, "source": "文档名" } }
+```
+
+`metadata` 字段动态，可能含 score、rerank_score 等，前端可用 `content` 展示可信度参考。

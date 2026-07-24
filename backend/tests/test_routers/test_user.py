@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -289,3 +289,53 @@ class TestCleanupUserResources:
                 side_effect=OSError("permission denied"),
             ):
                 await self._call()  # 不应抛异常
+
+
+class TestUserInsightRoutes:
+    """测试用户画像路由。"""
+
+    @patch("backend.routers.user.get_user_insight")
+    def test_get_insight(self, mock_get, client):
+        """获取用户画像成功。"""
+        mock_get.return_value = {"喜好": "川菜", "口味": "偏辣"}
+        response = client.get(
+            "/api/user/insight",
+            headers={"Authorization": "Bearer test.token"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["喜好"] == "川菜"
+
+    @patch("backend.routers.user.update_user_insight_attrs")
+    def test_update_insight(self, mock_update, client):
+        """更新用户画像成功。"""
+        mock_update.return_value = True
+        response = client.put(
+            "/api/user/insight",
+            json={"喜好": "粤菜"},
+            headers={"Authorization": "Bearer test.token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "画像已更新"
+
+    @patch("backend.routers.user.delete_user_insight")
+    def test_delete_insight(self, mock_delete, client):
+        """删除用户画像成功。"""
+        mock_delete.return_value = True
+        response = client.delete(
+            "/api/user/insight",
+            headers={"Authorization": "Bearer test.token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "画像已删除"
+
+    @patch("backend.routers.user.delete_all_insights")
+    def test_delete_all_insights(self, mock_delete, client):
+        """删除所有画像成功。"""
+        mock_delete.return_value = True
+        response = client.delete(
+            "/api/user/insights",
+            headers={"Authorization": "Bearer test.token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["message"] == "所有画像已删除"
