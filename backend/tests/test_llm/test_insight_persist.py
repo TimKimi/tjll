@@ -108,9 +108,11 @@ def test_load_section_document_calls_load_file_and_deletes(tmp_path, monkeypatch
 
     f = tmp_path / "note.md"
     f.write_text("hello", encoding="utf-8")
+    rel = "./backend/data/uploads/note.md"
 
+    monkeypatch.setattr(svc, "normalize_backend_path", lambda p: rel)
+    monkeypatch.setattr(svc, "resolve_repo_path", lambda p: f)
     monkeypatch.setattr(sec_mod, "resolve_repo_path", lambda p: f)
-    monkeypatch.setattr(sec_mod, "to_repo_relative_posix", lambda p: "note.md")
     monkeypatch.setattr(sec_mod, "load_document_as_text", lambda p: "hello")
     monkeypatch.setattr(sec_mod, "clean_text", lambda t: t)
     monkeypatch.setattr(
@@ -124,11 +126,11 @@ def test_load_section_document_calls_load_file_and_deletes(tmp_path, monkeypatch
         lambda *a, **k: (1, []),
     )
 
-    ok = svc.load_section_document(uuid="u1", section_id="s1", file_path=str(f))
+    ok = svc.load_section_document(uuid="u1", section_id="s1", file_path=rel)
     assert ok is True
     assert not f.exists()
     section = ensure_section_insight("u1", "s1")
-    assert "note.md" in section.filenames()
+    assert rel in section.filenames()
     assert section.used_filenames() == []
 
 
