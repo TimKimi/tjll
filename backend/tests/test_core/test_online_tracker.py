@@ -55,9 +55,11 @@ class TestOnlineTracker:
         self.tracker._check_expired()
         mock_sync.assert_called_once_with(["u_expired"])
 
+    @patch("backend.core.online_tracker.settings")
     @patch("backend.core.online_tracker.create_engine")
-    def test_start_creates_engine_and_resets(self, mock_create_engine):
+    def test_start_creates_engine_and_resets(self, mock_create_engine, mock_settings):
         """start() 应创建引擎并重置所有用户离线。"""
+        mock_settings.ONLINE_TRACKER_RESET_ON_STARTUP = True
         mock_engine = MagicMock()
         mock_create_engine.return_value = mock_engine
         with patch.object(self.tracker, "_reset_all_online") as mock_reset:
@@ -66,8 +68,10 @@ class TestOnlineTracker:
             mock_reset.assert_called_once()
             self.tracker.stop()
 
-    def test_double_start_ignored(self):
+    @patch("backend.core.online_tracker.settings")
+    def test_double_start_ignored(self, mock_settings):
         """重复 start() 应被忽略。"""
+        mock_settings.ONLINE_TRACKER_RESET_ON_STARTUP = True
         with patch.object(self.tracker, "_reset_all_online") as mock_reset:
             self.tracker.start()
             self.tracker.start()

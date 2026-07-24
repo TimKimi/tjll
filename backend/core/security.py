@@ -49,10 +49,14 @@ def create_token(
         编码后的 JWT 字符串。
     """
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+    now = datetime.now(timezone.utc)
+    expire = now + (expires_delta or timedelta(minutes=settings.JWT_EXPIRE_MINUTES))
+    to_encode.update(
+        {
+            "exp": expire,
+            "iat": now,  # 签发时间，用于服务重启时 token 失效判定
+        }
     )
-    to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 

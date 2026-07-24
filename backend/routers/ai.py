@@ -1,7 +1,8 @@
 """AI 路由：流式对话 + 会话管理。
 
 对外暴露：
-  - POST   /api/ai/ask                          AI 流式对话
+  - POST   /api/ai/ask                          AI 流式对话（可能返回需澄清问卷）
+  - POST   /api/ai/ask/interrupt                提交澄清答案，继续流式回答
   - GET    /api/ai/history?section_id=          获取会话历史
   - POST   /api/ai/session/refresh?section_id=  刷新会话（释放槽位 + 重载历史）
   - GET    /api/ai/section/reviews?section_ids= 批量获取会话摘要
@@ -18,11 +19,10 @@ from fastapi.responses import StreamingResponse
 
 from backend.core.dependencies import get_current_user
 from backend.llm import (
-    AskInterruptResult,
-    AskParams,
-    AskStream,
     AskHistory,
-    AskResult,
+    AskInterruptResult,
+    AskInterruptSubmitParams,
+    AskParams,
     DeleteHistoryResult,
     ask as llm_ask,
     delete_ask_histories_by_uuid,
@@ -34,6 +34,7 @@ from backend.llm import (
     get_section_review,
     release_ask_session,
     set_section_review,
+    submit_ask_interrupt,
     update_section_facts,
     update_section_insight_attrs,
 )
@@ -56,8 +57,7 @@ router = APIRouter(prefix="/api/ai", tags=["AI 助手"])
 
 @router.post(
     "/ask",
-    summary="AI 流式对话",
-    response_model=ApiResponse[AskResult],
+    summary="AI 流式对话，可能返回需澄清问卷",
 )
 async def ai_ask(
     req: AskChatRequest,
@@ -65,8 +65,11 @@ async def ai_ask(
 ):
     """与 AI 对话。
 
-    流式返回 ``text/plain``，非流式返回 JSON。
-    ``uuid`` 由后端从 JWT 自动注入，前端无需传入。
+    两种情况：
+    - 返回 ``AskInterruptResult``（JSON）：表示 AI 需澄清，前端渲染问卷后调 ``/ask/interrupt``
+    - 返回流式 ``text/plain``：直接回答
+
+    ``uuid`` 由后端从 JWT 自动注入。
     """
     ask_params = AskParams(
         query=req.query,
@@ -81,13 +84,14 @@ async def ai_ask(
         insight_create=req.insight_create,
         insight_use=req.insight_use,
     )
-    out = llm_ask(ask_params)
+    result = llm_ask(ask_params)
 
-    # rewrite HITL：问卷非流式 JSON 返回（与 AskStream 区分）
-    if isinstance(out, AskInterruptResult):
-        return ApiResponse.ok(data=out.model_dump())
+    # 情况 A：需要澄清
+    if isinstance(result, AskInterruptResult):
+        return ApiResponse.ok(data=result.model_dump())
 
-    stream: AskStream = out
+    # 情况 B：直接回答
+    stream = result
     if not req.stream:
         "".join(stream)
         resp = stream.response
@@ -101,6 +105,24 @@ async def ai_ask(
 # ═══════════════════════════════════════════════════════════
 # 会话历史
 # ═══════════════════════════════════════════════════════════
+
+
+# ═══════════════════════════════════════════════════════════
+# 澄清问卷
+# ═══════════════════════════════════════════════════════════
+
+
+@router.post(
+    "/ask/interrupt",
+    summary="提交澄清答案，继续流式回答",
+)
+async def ai_ask_interrupt(
+    body: AskInterruptSubmitParams,
+    user: dict = Depends(get_current_user),
+):
+    """提交澄清问卷答案，从 rewrite 续跑并返回流式回答。"""
+    stream = submit_ask_interrupt(body)
+    return StreamingResponse(stream, media_type="text/plain")
 
 
 @router.get(
