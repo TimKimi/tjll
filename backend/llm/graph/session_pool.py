@@ -101,6 +101,54 @@ def _set_msg_used(msg: BaseMessage, used: bool = True) -> None:
     msg.additional_kwargs = kwargs
 
 
+def _strip_interrupt_qa_kwargs(msg: BaseMessage) -> BaseMessage:
+    """落库用：去掉 HumanMessage 上的 interrupt_qa（不改原对象）。"""
+    if not isinstance(msg, HumanMessage):
+        return msg
+    kwargs = dict(getattr(msg, "additional_kwargs", None) or {})
+    if "interrupt_qa" not in kwargs:
+        return msg
+    kwargs = {k: v for k, v in kwargs.items() if k != "interrupt_qa"}
+    return HumanMessage(content=msg.content, additional_kwargs=kwargs)
+
+
+def _format_interrupt_qa_for_maintain(items: list[dict[str, Any]] | None) -> str:
+    """已答追问 → 「问题：结果」列表，分号连接。"""
+    parts: list[str] = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        q = str(item.get("question") or "").strip()
+        if not q:
+            continue
+        if "result" not in item:
+            continue
+        result = str(item.get("result") or "").strip()
+        if not result:
+            continue
+        parts.append(f"{q}：{result}")
+    return "；".join(parts)
+
+
+def _turns_for_maintain(turns: list[CompleteTurn]) -> list[CompleteTurn]:
+    """维护入参临时副本：有 interrupt_qa 则拼接 content，不改 session.history。"""
+    out: list[CompleteTurn] = []
+    for human, ai in turns:
+        kwargs = dict(getattr(human, "additional_kwargs", None) or {})
+        qa = kwargs.get("interrupt_qa")
+        formatted = _format_interrupt_qa_for_maintain(
+            qa if isinstance(qa, list) else None
+        )
+        if formatted:
+            base = str(getattr(human, "content", "") or "")
+            human = HumanMessage(
+                content=f"{base}。追问结果：【{formatted}】",
+                additional_kwargs=kwargs,
+            )
+        out.append((human, ai))
+    return out
+
+
 @dataclass
 class PendingTurn:
     """尚未刷入 Redis 的一轮问答（含扩展字段）。"""
@@ -156,18 +204,23 @@ class AskSession:
         sources: list[dict[str, Any]] | None = None,
         used: bool = False,
         detail: str = "",
+        interrupt_qa: list[dict[str, Any]] | None = None,
     ) -> None:
         """本轮问答写入内存；不立即刷 Redis。"""
+        qa = [dict(x) for x in (interrupt_qa or []) if isinstance(x, dict)]
+        human_kwargs: dict[str, Any] = {
+            "search_query": search_query,
+            "detail": detail or "",
+            "filename": filename or "",
+            "insight_create": bool(insight_create),
+            "insight_use": bool(insight_use),
+            "used": bool(used),
+        }
+        if qa:
+            human_kwargs["interrupt_qa"] = qa
         human = HumanMessage(
             content=user,
-            additional_kwargs={
-                "search_query": search_query,
-                "detail": detail or "",
-                "filename": filename or "",
-                "insight_create": bool(insight_create),
-                "insight_use": bool(insight_use),
-                "used": bool(used),
-            },
+            additional_kwargs=human_kwargs,
         )
         ai = AIMessage(
             content=assistant,
@@ -212,7 +265,7 @@ class AskSession:
         hist = get_history(self.uuid, self.section_id)
         for human, ai in turns:
             self._ensure_pair_kwargs(human, ai)
-            hist.add_message(human)
+            hist.add_message(_strip_interrupt_qa_kwargs(human))
             hist.add_message(ai)
         logger.info(
             "flush history key=%s turns=%d",
@@ -263,13 +316,13 @@ class AskSession:
             pt = pending_by_user.get(id(human))
             if pt is not None:
                 self._ensure_turn_kwargs(pt)
-                hist.add_message(pt.user)
+                hist.add_message(_strip_interrupt_qa_kwargs(pt.user))
                 hist.add_message(pt.assistant)
                 flushed.append((pt.user, pt.assistant))
             else:
                 # 启动从 Redis 装入的轮次不在 pending
                 self._ensure_pair_kwargs(human, ai)
-                hist.add_message(human)
+                hist.add_message(_strip_interrupt_qa_kwargs(human))
                 hist.add_message(ai)
                 flushed.append((human, ai))
 
@@ -453,9 +506,10 @@ class AskSession:
         try:
             with self._maintain_lock:
                 replica = live.clone_for_maintain()
+                maintain_turns = _turns_for_maintain(unused)
                 insight_create_turns = [
                     t
-                    for t in unused
+                    for t in maintain_turns
                     if bool((t[0].additional_kwargs or {}).get("insight_create"))
                 ]
                 self._maintain_replica = replica
@@ -465,7 +519,7 @@ class AskSession:
 
             try:
                 replica.total_maintain(
-                    unused,
+                    maintain_turns,
                     insight_create_turns=insight_create_turns,
                     on_done=self._on_maintain_done,
                 )
@@ -520,9 +574,10 @@ class AskSession:
                     _set_msg_used(ai, True)
 
                 replica = live.clone_for_maintain()
+                maintain_turns = _turns_for_maintain(batch)
                 insight_create_turns = [
                     t
-                    for t in batch
+                    for t in maintain_turns
                     if bool((t[0].additional_kwargs or {}).get("insight_create"))
                 ]
                 self._maintain_replica = replica
@@ -532,7 +587,7 @@ class AskSession:
 
                 def _run(
                     rep: SectionInsight = replica,
-                    turns_batch: list[CompleteTurn] = batch,
+                    turns_batch: list[CompleteTurn] = maintain_turns,
                     create_turns: list[CompleteTurn] = insight_create_turns,
                     done: Callable[[], None] = self._on_maintain_done,
                 ) -> None:

@@ -159,6 +159,24 @@ class AskStream:
         return self._holder.get("response")
 
 
+def _discard_abandoned_interrupt(session, section) -> None:
+    """新 ask 开始时：若有未 submit 的挂起，视为未发生，先清空。"""
+    had_pending = bool(session.pending_ask) or bool(session.pending_enrich)
+    had_qa = bool(section.get_interrupt_qa())
+    if not had_pending and not had_qa:
+        return
+    session.pending_ask = None
+    session.pending_enrich = {}
+    section.clear_interrupt_qa()
+    logger.info(
+        "discard abandoned interrupt uuid=%s section_id=%s had_pending=%s had_qa=%s",
+        section.uuid,
+        section.section_id,
+        had_pending,
+        had_qa,
+    )
+
+
 def _sources_to_snippets(sources: list[dict[str, Any]] | None) -> list[RagSnippet]:
     return [
         RagSnippet(
@@ -614,6 +632,7 @@ def _stream_ask_answer(
 
         answer = "".join(parts)
         sources = list(session.last_sources)
+        interrupt_qa = section.get_interrupt_qa()
         session.append_turn(
             params.query,
             answer,
@@ -624,6 +643,7 @@ def _stream_ask_answer(
             insight_use=params.insight_use,
             sources=sources,
             used=False,
+            interrupt_qa=interrupt_qa,
         )
         section.clear_interrupt_qa()
         session.pending_ask = None
@@ -752,6 +772,7 @@ def ask(params: AskParams) -> AskStream | AskInterruptResult:
     - 会话历史请用 ``get_ask_history``；本结果不含 history
     - 附件字段只 ``add_used_filenames``；文件加载请用 ``load_section_document``
     - 每轮末尾 ``maintain()``
+    - 若有未 submit 的 interrupt 挂起，先丢弃再开新一轮
     """
     params = _normalize_ask_params_paths(params)
     wait_section_ready(params.uuid, params.section_id)
@@ -768,11 +789,12 @@ def ask(params: AskParams) -> AskStream | AskInterruptResult:
     ensure_user_insight(params.uuid)
     section = ensure_section_insight(params.uuid, params.section_id)
     session = get_ask_session(params.uuid, params.section_id)
-    session.section_insight = section
-    session.pending_ask = params
+    session.section_insight = section  # 绑定，保证每个asksession关联一个洞察
+    _discard_abandoned_interrupt(session, section)
+    session.pending_ask = params  # 提前存储打断时的入参
 
-    used_paths = _mark_ask_used_filenames(params, section)
-    query_filename = ",".join(used_paths)
+    used_paths = _mark_ask_used_filenames(params, section)  # 存使用过的文件
+    query_filename = ",".join(used_paths)  # 存state里的格式
 
     history_before = list(session.history)
     graph = session.graph

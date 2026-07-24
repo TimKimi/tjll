@@ -167,7 +167,7 @@ def rewrite(state: AskState) -> dict[str, Any]:
     section = ensure_section_insight(uuid, section_id)
     session = get_session_pool().get_or_create(uuid, section_id, load_history=False)
     session.section_insight = section
-    # 挂起 enrich，供 interrupt 后 submit 续跑
+    # 挂起 enrich，供 interrupt 后 submit 续跑（仅内存，不落 Redis）
     session.pending_enrich = {
         "insight": list(state.get("insight") or []),
         "attachment": list(state.get("attachment") or []),

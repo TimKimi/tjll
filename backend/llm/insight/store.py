@@ -119,7 +119,6 @@ def save_section_insight(section: SectionInsight) -> None:
         "used_filenames": used_filenames,
         "facts": section.get_facts(),
         "review": section.get_review(),
-        "interrupt_qa": section.get_interrupt_qa(),
         "last_section_chunk_size": int(section.last_section_chunk_size),
         "max_section_attr_len": int(section.max_section_attr_len),
     }
@@ -186,8 +185,8 @@ def load_section_insight(
     )
     section._facts = [str(x) for x in (data.get("facts") or [])]
     section._review = str(data.get("review") or "")
-    raw_qa = data.get("interrupt_qa") or []
-    section._interrupt_qa = [dict(x) for x in raw_qa if isinstance(x, dict)]
+    # interrupt_qa 仅内存；不从 Redis 恢复
+    section._interrupt_qa = []
     section.last_section_chunk_size = int(data.get("last_section_chunk_size") or 0)
     section.max_section_attr_len = int(
         data.get("max_section_attr_len") or section.max_section_attr_len
