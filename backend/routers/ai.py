@@ -1,10 +1,12 @@
 """AI 路由：流式对话 + 会话管理。
 
 对外暴露：
-  - POST   /api/ai/ask                     AI 流式对话
-  - GET    /api/ai/history?section_id=     获取会话历史
-  - DELETE /api/ai/history?section_id=     删除单个会话（历史 + 文件）
-  - DELETE /api/ai/histories               删除全部会话（历史 + 文件）
+  - POST   /api/ai/ask                          AI 流式对话
+  - GET    /api/ai/history?section_id=          获取会话历史
+  - POST   /api/ai/session/refresh?section_id=  刷新会话（释放槽位 + 重载历史）
+  - GET    /api/ai/section/reviews?section_ids= 批量获取会话摘要
+  - DELETE /api/ai/history?section_id=          删除单个会话（历史 + 文件）
+  - DELETE /api/ai/histories                    删除全部会话（历史 + 文件）
 """
 
 from __future__ import annotations
@@ -23,6 +25,12 @@ from backend.llm import (
     delete_ask_histories_by_uuid,
     delete_ask_history,
     get_ask_history,
+    get_section_facts,
+    get_section_insight,
+    get_section_review,
+    release_ask_session,
+    set_section_review,
+    update_section_facts,
 )
 from backend.schemas.ai import AskChatRequest
 from backend.schemas.common import ApiResponse
@@ -102,6 +110,122 @@ async def ai_get_history(
 
 
 # ═══════════════════════════════════════════════════════════
+# 刷新会话（合并操作）
+# ═══════════════════════════════════════════════════════════
+
+
+@router.post(
+    "/session/refresh",
+    summary="刷新会话（释放槽位 + 重载历史）",
+)
+async def ai_refresh_session(
+    section_id: str = Query(..., description="会话 ID"),
+    user: dict = Depends(get_current_user),
+):
+    """刷新会话：先释放内存会话槽，再重新加载历史。"""
+    uuid = user["sub"]
+    try:
+        release_ask_session(uuid=uuid, section_id=section_id)
+        history = get_ask_history(uuid=uuid, section_id=section_id)
+        return ApiResponse.ok(data=history.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════
+# 批量获取会话摘要
+# ═══════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/section/reviews",
+    summary="批量获取会话摘要",
+)
+async def ai_section_reviews(
+    section_ids: str = Query(..., description="逗号分隔的多个 section_id"),
+    user: dict = Depends(get_current_user),
+):
+    """批量获取左侧栏各会话的摘要预览。"""
+    uuid = user["sub"]
+    ids = [sid.strip() for sid in section_ids.split(",") if sid.strip()]
+    reviews: dict[str, str] = {}
+    for section_id in ids:
+        try:
+            review = get_section_review(uuid=uuid, section_id=section_id)
+            reviews[section_id] = review or ""
+        except Exception:
+            reviews[section_id] = ""
+    return ApiResponse.ok(data={"reviews": reviews})
+
+
+# ═══════════════════════════════════════════════════════════
+# 会话详情
+# ═══════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/session/detail",
+    summary="获取会话详情（facts + review + insight）",
+)
+async def ai_session_detail(
+    section_id: str = Query(..., description="会话 ID"),
+    user: dict = Depends(get_current_user),
+):
+    """合并返回会话的 facts、review 和 insight，用于详情弹窗展示。"""
+    uuid = user["sub"]
+    facts = get_section_facts(uuid=uuid, section_id=section_id)
+    review = get_section_review(uuid=uuid, section_id=section_id)
+    insight = get_section_insight(uuid=uuid, section_id=section_id)
+    return ApiResponse.ok(
+        data={
+            "facts": facts or [],
+            "review": review or "",
+            "insight": insight or {},
+        }
+    )
+
+
+@router.put(
+    "/section/facts",
+    summary="更新会话 facts",
+)
+async def ai_update_facts(
+    body: dict,
+    user: dict = Depends(get_current_user),
+):
+    """更新会话 facts 列表。
+
+    body 格式: ``{ "section_id": "...", "items": ["fact1", "fact2", ...] }``
+    """
+    section_id = body.get("section_id")
+    items = body.get("items", [])
+    if not section_id:
+        raise HTTPException(status_code=400, detail="section_id is required")
+    update_section_facts(uuid=user["sub"], section_id=section_id, items=items)
+    return ApiResponse.ok(message="已更新")
+
+
+@router.put(
+    "/section/review",
+    summary="更新会话 review",
+)
+async def ai_update_review(
+    body: dict,
+    user: dict = Depends(get_current_user),
+):
+    """更新会话 review 文本。
+
+    body 格式: ``{ "section_id": "...", "text": "..." }``
+    """
+    section_id = body.get("section_id")
+    text = body.get("text", "")
+    if not section_id:
+        raise HTTPException(status_code=400, detail="section_id is required")
+    set_section_review(uuid=user["sub"], section_id=section_id, text=text)
+    return ApiResponse.ok(message="已更新")
+
+
+# ═══════════════════════════════════════════════════════════
 # 删除会话
 # ═══════════════════════════════════════════════════════════
 
@@ -120,10 +244,8 @@ async def ai_delete_history(
     """
     uuid = user["sub"]
     try:
-        # 清 Redis 历史
         delete_ask_history(uuid=uuid, section_id=section_id)
 
-        # 删除附件文件
         FileService.delete_session_files(
             username=user.get("username", ""),
             section_id=section_id,
@@ -148,7 +270,6 @@ async def ai_delete_histories(
     uuid = user["sub"]
     result = delete_ask_histories_by_uuid(uuid=uuid)
 
-    # 删除所有附件
     FileService.delete_all_user_files(username=user.get("username", ""))
 
     return ApiResponse.ok(
