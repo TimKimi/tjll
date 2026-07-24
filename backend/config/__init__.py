@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 1440
     """Token 过期时间（分钟），默认 24 小时"""
     JWT_REFRESH_EXPIRE_DAYS: int = 7
+    ONLINE_TRACKER_CHECK_INTERVAL: int = 30
+    """在线追踪器后台线程检查周期（秒），检测过期 token 并同步 is_online"""
     EMAIL_CHECK_DELIVERABILITY: bool = False
     """注册时是否检查邮箱域名可送达性"""
 

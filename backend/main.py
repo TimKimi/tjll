@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import settings
 from backend.core.logger import setup_app_logging
+from backend.core.online_tracker import tracker
 from backend.core.schema import auto_adapt_schema
 from backend.database import engine
 from backend.models.base import Base
@@ -46,7 +47,13 @@ async def lifespan(_app: FastAPI):
     else:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+    # 启动在线追踪器（后台线程同步 token 过期 → is_online）
+    tracker.start()
+
     yield
+
+    tracker.stop()
     await engine.dispose()
 
 
